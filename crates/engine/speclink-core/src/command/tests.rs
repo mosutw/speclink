@@ -225,7 +225,7 @@ fn validate_item_with_specs_flag_is_rejected() {
 #[test]
 fn single_change_queries_on_corrupt_meta_are_invalid_config_with_path_and_reason() {
     // spec「單一 change 查詢對壞 metadata fail closed」＋「穩定錯誤碼註冊表」
-    // Example 新行：.openspec.yaml 存在但解析失敗 → invalid_config，訊息
+    // Example 新行：.meta.yaml 存在但解析失敗 → invalid_config，訊息
     // 沿 ConfigError 形式指出 workspace 相對路徑與解析原因。
     let store = TestStore::with_meta("demo", BAD_META);
     store.put_artifact("demo", "tasks.md", "- [ ] 1.1 a\n");
@@ -265,12 +265,12 @@ fn single_change_queries_on_corrupt_meta_are_invalid_config_with_path_and_reason
             err.message
         );
         assert!(
-            err.message.starts_with("invalid openspec/changes/demo/.openspec.yaml: "),
+            err.message.starts_with("invalid speclink/changes/demo/.meta.yaml: "),
             "{verb} message must name path then reason: {}",
             err.message
         );
         assert!(
-            err.message.len() > "invalid openspec/changes/demo/.openspec.yaml: ".len(),
+            err.message.len() > "invalid speclink/changes/demo/.meta.yaml: ".len(),
             "{verb} message must carry the parse reason"
         );
     }
@@ -300,13 +300,13 @@ fn list_on_corrupt_meta_flags_the_item_and_keeps_valid_items_intact() {
 
 // --- 壞 change metadata 的生命週期寫入 fail closed（spec change-lifecycle）---
 
-/// `.openspec.yaml` 存在但 YAML 解析失敗的固定樣本（與 store_fs 測試同款）。
+/// `.meta.yaml` 存在但 YAML 解析失敗的固定樣本（與 store_fs 測試同款）。
 const BAD_META: &str = ": : :\n\t bad yaml [unclosed\n";
 
 #[test]
 fn task_flip_on_corrupt_meta_refuses_and_leaves_files_untouched() {
     // spec「task done 因蘊含開工標記而拒絕」：done 與 undone 皆拒，
-    // tasks.md 與 .openspec.yaml 逐位元不變。
+    // tasks.md 與 .meta.yaml 逐位元不變。
     const TASKS: &str = "- [ ] 1.1 a\n- [x] 1.2 b\n";
     let store = TestStore::with_meta("demo", BAD_META);
     store.put_artifact("demo", "tasks.md", TASKS);
@@ -317,7 +317,7 @@ fn task_flip_on_corrupt_meta_refuses_and_leaves_files_untouched() {
     )
     .expect_err("task done on corrupt meta must refuse");
     assert!(
-        err.message.contains("openspec/changes/demo/.openspec.yaml"),
+        err.message.contains("speclink/changes/demo/.meta.yaml"),
         "error must name the metadata file: {}",
         err.message
     );
@@ -327,7 +327,7 @@ fn task_flip_on_corrupt_meta_refuses_and_leaves_files_untouched() {
         Command::TaskUndone { task_id: "2".to_string(), change: Some("demo".to_string()) },
     )
     .expect_err("task undone on corrupt meta must refuse");
-    assert!(err.message.contains("openspec/changes/demo/.openspec.yaml"));
+    assert!(err.message.contains("speclink/changes/demo/.meta.yaml"));
     assert_eq!(
         store.artifacts.borrow().get(&("demo".to_string(), "tasks.md".to_string())).unwrap(),
         TASKS,
@@ -344,7 +344,7 @@ fn claim_on_corrupt_meta_refuses_naming_the_file() {
     let err = execute(&store, &ExecutionContext::default(), Command::Claim { name: "demo".to_string() })
         .expect_err("claim on corrupt meta must refuse");
     assert!(
-        err.message.contains("openspec/changes/demo/.openspec.yaml"),
+        err.message.contains("speclink/changes/demo/.meta.yaml"),
         "error must name the metadata file: {}",
         err.message
     );
@@ -406,7 +406,7 @@ fn archive_on_corrupt_meta_refuses_without_moving_or_merging() {
         )
         .expect_err("archive on corrupt meta must refuse");
         assert!(
-            err.message.contains("openspec/changes/demo/.openspec.yaml"),
+            err.message.contains("speclink/changes/demo/.meta.yaml"),
             "error must name the metadata file (mark={mark}): {}",
             err.message
         );
@@ -440,7 +440,7 @@ fn new_artifact_on_corrupt_meta_refuses_without_default_schema_fallback() {
     )
     .expect_err("new artifact on corrupt meta must refuse");
     assert!(
-        err.message.contains("openspec/changes/demo/.openspec.yaml"),
+        err.message.contains("speclink/changes/demo/.meta.yaml"),
         "error must name the metadata file: {}",
         err.message
     );
@@ -1199,6 +1199,13 @@ fn first_claim_on_a_team_store_stamps_the_owner_and_reports_change_claimed() {
 }
 
 #[test]
+fn claim_writes_claimed_at_as_an_offset_stamp() {
+    let store = TestStore::team_with_meta("demo", CLAIM_META);
+    claim(&store, "Alice <a@example.com>").expect("first claim succeeds");
+    crate::util::offset_stamp_line(&store.meta("demo"), "claimed_at");
+}
+
+#[test]
 fn repeat_claim_by_the_same_actor_is_idempotent_with_no_write_and_no_event() {
     let store = TestStore::team_with_meta("demo", CLAIM_META);
     claim(&store, "Alice <a@example.com>").expect("first claim succeeds");
@@ -1288,7 +1295,7 @@ fn claim_on_a_team_store_with_corrupt_meta_fails_closed_without_writing() {
     let err = claim(&store, "Alice <a@example.com>").expect_err("corrupt meta refuses");
     assert_eq!(err.code, ErrorCode::InvalidConfig);
     assert!(
-        err.message.contains("openspec/changes/demo/.openspec.yaml"),
+        err.message.contains("speclink/changes/demo/.meta.yaml"),
         "the error must name the metadata file: {}",
         err.message
     );
@@ -1464,6 +1471,66 @@ fn change_depends_guards_are_refused_and_unknown_target_is_not_found() {
     )
     .expect_err("an unknown target must error");
     assert_eq!(err.code, ErrorCode::NotFound);
+    assert_eq!(*store.meta_writes.borrow(), 0);
+}
+
+// --- change schema：切換 schema 的 outcome、事件與錯誤分類（change-schema-verb design D1）---
+
+#[test]
+fn change_schema_reports_change_schema_changed() {
+    let store = TestStore::with_meta("demo", META);
+    let (outcome, events) =
+        ok(&store, Command::ChangeSchema { name: "demo".to_string(), schema: "no-spec-change".to_string() });
+    match outcome {
+        CommandOutcome::ChangeSchema(o) => {
+            assert_eq!(
+                (o.change.as_str(), o.schema.as_str(), o.previous.as_str()),
+                ("demo", "no-spec-change", "spec-driven")
+            );
+            assert!(o.changed && !o.verify_stamp_cleared);
+        }
+        other => panic!("expected a change-schema outcome, got {other:?}"),
+    }
+    assert_eq!(kinds(&events), ["change-schema-changed"]);
+    match &events[0] {
+        DomainEvent::ChangeSchemaChanged { change, schema, .. } => {
+            assert_eq!((change.as_str(), schema.as_str()), ("demo", "no-spec-change"));
+        }
+        other => panic!("unexpected event {other:?}"),
+    }
+    assert_eq!(store.meta("demo"), "schema: no-spec-change\n");
+}
+
+#[test]
+fn change_schema_same_value_reports_no_event() {
+    let store = TestStore::with_meta("demo", META);
+    let (outcome, events) =
+        ok(&store, Command::ChangeSchema { name: "demo".to_string(), schema: "spec-driven".to_string() });
+    match outcome {
+        CommandOutcome::ChangeSchema(o) => assert!(!o.changed, "nothing changed"),
+        other => panic!("expected a change-schema outcome, got {other:?}"),
+    }
+    assert!(events.is_empty(), "the same schema mutates nothing — no event");
+    assert_eq!(*store.meta_writes.borrow(), 0);
+}
+
+#[test]
+fn change_schema_guards_are_refused_and_unknown_change_is_not_found() {
+    let store = TestStore::with_meta("demo", META);
+    let run = |name: &str, schema: &str| {
+        execute(
+            &store,
+            &ExecutionContext::default(),
+            Command::ChangeSchema { name: name.to_string(), schema: schema.to_string() },
+        )
+        .expect_err("must error")
+    };
+    let err = run("demo", "no-such-flow");
+    assert_eq!(err.code, ErrorCode::Refused);
+    assert_eq!(err.message, crate::schema::not_found_msg("no-such-flow"));
+    let err = run("ghost", "spec-driven");
+    assert_eq!(err.code, ErrorCode::NotFound);
+    assert_eq!(err.message, "Change 'ghost' not found.");
     assert_eq!(*store.meta_writes.borrow(), 0);
 }
 
@@ -1926,6 +1993,10 @@ fn event_kind_table_matches_the_spec_coverage_table() {
             "change-depends-changed",
         ),
         (
+            DomainEvent::ChangeSchemaChanged { change: s("c"), schema: s("no-spec-change"), occurred_at: at },
+            "change-schema-changed",
+        ),
+        (
             DomainEvent::ChangeArchived { change: s("c"), dated_name: s("2026-07-12-c"), occurred_at: at },
             "change-archived",
         ),
@@ -1973,7 +2044,7 @@ fn event_kind_table_matches_the_spec_coverage_table() {
         (DomainEvent::VerifyStamped { change: s("c"), occurred_at: at }, "verify-stamped"),
         (DomainEvent::VerifyDiscarded { change: s("c"), occurred_at: at }, "verify-discarded"),
     ];
-    assert_eq!(table.len(), 25, "the coverage table has 25 mutating verbs");
+    assert_eq!(table.len(), 26, "the coverage table has 26 mutating verbs");
     for (event, kind) in &table {
         assert_eq!(event.kind(), *kind, "for {event:?}");
     }
@@ -2018,6 +2089,7 @@ fn command_inputs_carry_no_actor_or_policy_fields() {
         Command::InProgressAdd { name: _ } => {}
         Command::InProgressRemove { name: _ } => {}
         Command::ChangeDepends { name: _, on: _, remove: _ } => {}
+        Command::ChangeSchema { name: _, schema: _ } => {}
         Command::Archive { change: _, skip_specs: _, no_validate: _, mark_tasks_complete: _, carry_review: _, carry_verify: _ } => {}
         Command::Discard { change: _, force: _ } => {}
         Command::DiscussNew { topic: _, slug: _, kind: _ } => {}

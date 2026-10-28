@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -98,7 +98,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -218,7 +218,7 @@ Run `speclink analyze <change-name> --json` to check cross-artifact consistency 
 
 When the change has been dormant for more than 5 days AND the change directory has had zero commits in the past 3 days, surface a drift report before tasks begin — the change is likely out-of-sync with the current codebase.
 
-Detect dormancy from `.openspec.yaml` `created` and `git log -1 --format=%at -- openspec/changes/<name>/`:
+Detect dormancy from `.meta.yaml` `created` and `git log -1 --format=%at -- speclink/changes/<name>/`:
 
 - **Both conditions met** → run `speclink drift <change-name>`, display the report, then use the **AskUserQuestion tool**:
   - **Continue with apply** — proceed to tasks (recommended for Light drift)
@@ -447,7 +447,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -538,7 +538,7 @@ Completed review/verify/security history always remains in the active proposal a
 
 4. **Assess delta spec completeness**
 
-   Check for delta specs at `openspec/changes/<name>/specs/`. If none exist, skip this step.
+   Check for delta specs at `speclink/changes/<name>/specs/`. If none exist, skip this step.
 
    Background: the merge engine is fail-closed. It validates every capability's delta
    against the canonical spec first and writes nothing until all of them pass, so a stale
@@ -564,7 +564,7 @@ Completed review/verify/security history always remains in the active proposal a
    A delta for a capability being created may also carry a `## Purpose` section; it becomes
    the new canonical spec's Purpose (without one, a TBD placeholder is written).
 
-   **For each delta spec, compare against `openspec/specs/<capability>/spec.md`:**
+   **For each delta spec, compare against `speclink/specs/<capability>/spec.md`:**
    - MODIFIED requirements: does the canonical requirement contain scenarios or content the delta omits but that should survive?
    - ADDED requirements: does the requirement already exist in the canonical spec (e.g., from an earlier mid-flight sync)?
 
@@ -610,7 +610,7 @@ Completed review/verify/security history always remains in the active proposal a
    `--skip-specs` skips spec application entirely.
 
    **The zero-evidence note.** A change accumulates completion evidence in
-   `openspec/changes/<name>/.evidence.json` as `speclink task done` records which code
+   `speclink/changes/<name>/.evidence.json` as `speclink task done` records which code
    files each task touched. When a change carries none, the archive still succeeds and
    stderr gains one line:
 
@@ -640,7 +640,7 @@ Completed review/verify/security history always remains in the active proposal a
 
 **Change:** <change-name>
 **Schema:** <schema-name>
-**Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
+**Archived to:** speclink/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs
 
 All artifacts complete. All tasks complete.
@@ -653,7 +653,7 @@ All artifacts complete. All tasks complete.
 
 **Change:** <change-name>
 **Schema:** <schema-name>
-**Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
+**Archived to:** speclink/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** No delta specs
 
 All artifacts complete. All tasks complete.
@@ -666,7 +666,7 @@ All artifacts complete. All tasks complete.
 
 **Change:** <change-name>
 **Schema:** <schema-name>
-**Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
+**Archived to:** speclink/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** Sync skipped (user chose to skip)
 
 **Warnings:**
@@ -683,7 +683,7 @@ Review the archive if this was not intentional.
 ## Archive Failed
 
 **Change:** <change-name>
-**Target:** openspec/changes/archive/YYYY-MM-DD-<name>/
+**Target:** speclink/changes/archive/YYYY-MM-DD-<name>/
 
 Target archive directory already exists.
 
@@ -701,7 +701,7 @@ Check these before you show the summary:
 - [ ] Completion was checked with the artifact graph (`speclink status --json`, step 2); warnings were reported and confirmed, not treated as blockers (steps 2–3).
 - [ ] When delta specs exist, the completeness assessment ran, and a prompt appeared only when a fix was needed (step 4).
 - [ ] Only delta files were edited — never the main specs; delta application is the archive CLI's job, and the merge gate was not worked around (steps 4–5).
-- [ ] `.openspec.yaml` moved with the change directory, and the summary says clearly what happened (step 6).
+- [ ] `.meta.yaml` moved with the change directory, and the summary says clearly what happened (step 6).
 
 
 ## RENAMED is actually executed (speclink-specific)
@@ -764,7 +764,7 @@ with a plain git commit — the change-scoped `speclink commit` flow does not ap
 after the archive (its file selection reads the change directory that has just moved).
 This is a reminder only — never run the commit yourself.
 
-When the workspace has a `openspec/manual/` directory, add one more line to that
+When the workspace has a `speclink/manual/` directory, add one more line to that
 reminder: the manual may be stale now, and `speclink manual` will report which pages
 this archive's spec changes outdated. The condition is the directory's existence only —
 do not work out which specs this archive touched, and do not judge whether the manual
@@ -802,7 +802,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -1065,7 +1065,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -1079,7 +1079,7 @@ This harness executes speclink verbs as shell commands: run `speclink <verb> [ar
 
 Establish the baseline for an existing codebase: generate the initial canonical specs from current behavior, so later changes have a spec baseline to build on.
 
-**The baseline documents what the system does TODAY — not what it should do.** Specs written here describe observed behavior with evidence. Aspirations, fixes, and improvements belong in a change (`speclink propose`) after the baseline is written. Because nothing is changing, baseline writes directly to `openspec/specs/` — no change folder is involved, and no code is changed: do not refactor while writing the baseline.
+**The baseline documents what the system does TODAY — not what it should do.** Specs written here describe observed behavior with evidence. Aspirations, fixes, and improvements belong in a change (`speclink propose`) after the baseline is written. Because nothing is changing, baseline writes directly to `speclink/specs/` — no change folder is involved, and no code is changed: do not refactor while writing the baseline.
 
 **Input**: Optionally a scope hint after `speclink baseline` (e.g., "auth and billing only"). If omitted, baseline the whole codebase.
 
@@ -1096,7 +1096,7 @@ speclink workflow-config languages --json
 - **No specs yet** → full baseline pass; continue below.
 - **Some specs exist** → gap-filling mode: inventory what is not yet covered and scope the rest of this flow to those areas. Never rewrite an existing spec here — modifications go through a change (`speclink propose`).
 
-The `workflow-config show --json` payload is the canonical workflow config for this workspace — the values `openspec/config.yaml` holds (the store's config document in remote mode), in the same shape either way. Environment overrides (`SPECLINK_*`) are not applied; that is the same reading the file itself gives. Read these fields from it:
+The `workflow-config show --json` payload is the canonical workflow config for this workspace — the values `speclink/config.yaml` holds (the store's config document in remote mode), in the same shape either way. Environment overrides (`SPECLINK_*`) are not applied; that is the same reading the file itself gives. Read these fields from it:
 
 - `context` — the project context; carry it as background for the inventory and for every spec you write.
 - `specLocale` — the JSON name of `spec_locale`: the language for spec prose. `null` means the operating-system language of the machine running Speclink (Chinese → `tw`, Japanese → `ja`, other or unavailable languages → `en`), `auto` means use the payload's `locale` (also system language when `locale` is null), any other value is the locale code to write in. Structural markers and SHALL/MUST keywords stay in English regardless.
@@ -1104,7 +1104,7 @@ The `workflow-config show --json` payload is the canonical workflow config for t
 
 Use the `specLocale` code from `workflow-config languages --json` as the concrete prose language. This read-only query resolves the canonical language settings above with OS defaults, without `SPECLINK_*` overrides and without creating a change or writing config. In remote mode it returns the server's language, never the client's language. Do not infer it from the UI, conversation, or local shell language.
 
-If either workflow-config query exits non-zero (a config that does not parse fails closed; a remote store that is offline, rejects the credentials, or is too old to supply language metadata does the same), report the error and STOP — never fall back to reading `openspec/config.yaml` by hand, and never parse the YAML yourself or guess the server's language. An older server must be upgraded first.
+If either workflow-config query exits non-zero (a config that does not parse fails closed; a remote store that is offline, rejects the credentials, or is too old to supply language metadata does the same), report the error and STOP — never fall back to reading `speclink/config.yaml` by hand, and never parse the YAML yourself or guess the server's language. An older server must be upgraded first.
 
 ## Step 2: Inventory the codebase
 
@@ -1139,7 +1139,7 @@ Specs rules applied this run: none (no rules.specs configured)
 
 ## Step 4: Write the specs
 
-For each confirmed capability, create `openspec/specs/<capability>/spec.md`:
+For each confirmed capability, create `speclink/specs/<capability>/spec.md`:
 
 ```markdown
 # <capability> Specification
@@ -1179,11 +1179,11 @@ Fix structural findings, then report: capabilities created (with requirement/sce
 Check these before you report:
 
 - [ ] Every requirement traces to code or tests you read; unverified inferences are flagged or omitted (Step 4).
-- [ ] No code was changed and no change folder was created — only `openspec/specs/` was written.
+- [ ] No code was changed and no change folder was created — only `speclink/specs/` was written.
 - [ ] No existing spec was rewritten (Step 1).
 - [ ] The capability map was confirmed before any spec was written (Step 3).
 - [ ] The `Specs rules applied this run` block appeared in the map confirmation and in the final report (Steps 3 and 5).
-- [ ] The workflow config came from `speclink workflow-config show --json`, never from reading `openspec/config.yaml` (Step 1).
+- [ ] The workflow config came from `speclink workflow-config show --json`, never from reading `speclink/config.yaml` (Step 1).
 
 ## Next steps
 
@@ -1200,7 +1200,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -1235,7 +1235,7 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
 
 2. **Read the evidence record**
 
-   Check for `openspec/changes/<change-name>/.evidence.json` — the change's completion
+   Check for `speclink/changes/<change-name>/.evidence.json` — the change's completion
    evidence, written by `speclink task done`. If it exists, parse it to get source files
    grouped by task.
 
@@ -1260,7 +1260,7 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
 
 3. **Collect artifact files**
 
-   Run `git status --porcelain` and filter the output to files under `openspec/changes/<name>/`. These are the change's artifact files (proposal, design, tasks, specs, etc.) — including `.evidence.json` itself, which is version-controlled and belongs to this change's commit.
+   Run `git status --porcelain` and filter the output to files under `speclink/changes/<name>/`. These are the change's artifact files (proposal, design, tasks, specs, etc.) — including `.evidence.json` itself, which is version-controlled and belongs to this change's commit.
 
 4. **Identify unrelated dirty files**
 
@@ -1293,8 +1293,8 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
    ## Commit Plan: <change-name>
 
    ### Change Artifacts
-   - M  openspec/changes/<name>/proposal.md
-   - M  openspec/changes/<name>/tasks.md
+   - M  speclink/changes/<name>/proposal.md
+   - M  speclink/changes/<name>/tasks.md
 
    ### Source Files
    **Task 1: <task description>**
@@ -1358,10 +1358,10 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
 
     **7a-ii. Delta spec completeness check**
 
-    Check whether delta specs exist at `openspec/changes/<name>/specs/`.
+    Check whether delta specs exist at `speclink/changes/<name>/specs/`.
 
     - If **no delta specs exist** (directory is empty or absent): skip to 7a-ii-b.
-    - If **delta specs exist**: compare each delta against `openspec/specs/<capability>/spec.md`. The archive merge engine is fail-closed: a MODIFIED requirement wholesale-replaces the canonical block, and the engine refuses the whole archive with zero file effect when an ADDED requirement already exists in the canon, a MODIFIED/REMOVED/RENAMED target is missing, or a MODIFIED block drops a canonical scenario without a `<!-- REMOVED-SCENARIO: <name> -->` declaration.
+    - If **delta specs exist**: compare each delta against `speclink/specs/<capability>/spec.md`. The archive merge engine is fail-closed: a MODIFIED requirement wholesale-replaces the canonical block, and the engine refuses the whole archive with zero file effect when an ADDED requirement already exists in the canon, a MODIFIED/REMOVED/RENAMED target is missing, or a MODIFIED block drops a canonical scenario without a `<!-- REMOVED-SCENARIO: <name> -->` declaration.
       - If every delta is complete final-state and no ADDED requirement pre-exists: skip to 7a-ii-b.
       - Otherwise use the **AskUserQuestion tool** to ask: "Delta specs would be refused by the archive merge gate. Fix them before archiving?"
         - **Yes**: rewrite the delta files in place — merge the omitted canonical content into MODIFIED requirements (or declare deliberate drops with `<!-- REMOVED-SCENARIO: … -->`), drop or retarget pre-existing ADDED requirements — then proceed. Do NOT edit main specs.
@@ -1400,7 +1400,7 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
 
     After archive completes successfully:
 
-    1. Re-run `git status --porcelain` to capture all file changes produced by the archive (deletions from `openspec/changes/<name>/`, additions in `openspec/changes/archive/`)
+    1. Re-run `git status --porcelain` to capture all file changes produced by the archive (deletions from `speclink/changes/<name>/`, additions in `speclink/changes/archive/`)
     2. Add these archive-related file changes to the commit set
     3. Regenerate the commit message with an `Archived: yes` line appended to the body
     4. Display an **updated commit plan and message** as one visible message, showing all sections:
@@ -1409,20 +1409,20 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
     ## Updated Commit Plan: <change-name> (with archive)
 
     ### Change Artifacts (archived)
-    - D  openspec/changes/<name>/proposal.md
-    - D  openspec/changes/<name>/tasks.md
+    - D  speclink/changes/<name>/proposal.md
+    - D  speclink/changes/<name>/tasks.md
     - ...
 
     ### Archived Files
-    - A  openspec/changes/archive/<name>/proposal.md
-    - A  openspec/changes/archive/<name>/tasks.md
+    - A  speclink/changes/archive/<name>/proposal.md
+    - A  speclink/changes/archive/<name>/tasks.md
     - ...
 
     ### Source Files
     (same as before)
 
     ### Main Spec Updates (from archive's delta application)
-    - M  openspec/specs/<spec-name>/spec.md
+    - M  speclink/specs/<spec-name>/spec.md
     - ...
 
     ### Commit Message
@@ -1437,7 +1437,7 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
 
     6. Close the sub-flow with the reminders below. Print them once, wherever the flow ends: after the step 10 result, or right where the user stops at the re-confirmation above — the archive has already run either way, and after a stop its file moves are still uncommitted, so also remind the user to commit them with a plain git commit:
 
-       - When the workspace has a `openspec/manual/` directory, add one line: the manual may be stale now, and `speclink manual` will report which pages this archive's spec changes outdated. The condition is the directory's existence only — do not work out which specs this archive touched, and do not judge whether the manual is actually stale; that is the manual skill's report. This is a reminder only — never run `speclink manual` yourself.
+       - When the workspace has a `speclink/manual/` directory, add one line: the manual may be stale now, and `speclink manual` will report which pages this archive's spec changes outdated. The condition is the directory's existence only — do not work out which specs this archive touched, and do not judge whether the manual is actually stale; that is the manual skill's report. This is a reminder only — never run `speclink manual` yourself.
        - When the plan order hint noted changes that list `<name>` in their `archiveAfter`, add one more line:
 
          > <那些 change 的名稱> 要在 <name> 之後封存，並動到同名的 requirement：先重讀它們對同名 requirement 的 MODIFIED／REMOVED／RENAMED 區塊、對照正式規格重寫（走 `speclink ingest`），再封存它們。
@@ -1517,7 +1517,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -1780,7 +1780,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -1811,7 +1811,7 @@ Have a focused discussion about a topic and reach a conclusion. Every discussion
 
 ## The discussion record
 
-Every speclink discussion is persisted to a document (`openspec/discussions/<slug>.md`), so the conversation keeps its thread across turns and sessions, and a later `speclink propose --from-discussion <slug>` can seed a proposal directly from it. Drive the record through the `speclink discuss` verbs — NEVER hand-write or edit the file.
+Every speclink discussion is persisted to a document (`speclink/discussions/<slug>.md`), so the conversation keeps its thread across turns and sessions, and a later `speclink propose --from-discussion <slug>` can seed a proposal directly from it. Drive the record through the `speclink discuss` verbs — NEVER hand-write or edit the file.
 
 Every record has the same fixed skeleton:
 
@@ -2169,9 +2169,9 @@ Where to capture:
 | Design decision made       | `design.md`                  |
 | Scope changed              | `proposal.md`                |
 | New work identified        | `tasks.md`                   |
-| Vocabulary drift           | `openspec/LANGUAGE.md`    |
+| Vocabulary drift           | `speclink/LANGUAGE.md`    |
 
-**Vocabulary drift** means the discussion surfaced a recurring concept that is missing, ambiguous, or pulling away from the shared vocabulary loaded in Step 0. Examples: the topic uses a term that the vocabulary lists as an `avoid` synonym, or the discussion repeatedly names a concept that has no entry yet. When this happens, name it as vocabulary drift in the conclusion summary and direct the capture to `openspec/LANGUAGE.md`. The conclusion summary preserves this contract — do not silently rewrite the term in the artifacts without recording the drift.
+**Vocabulary drift** means the discussion surfaced a recurring concept that is missing, ambiguous, or pulling away from the shared vocabulary loaded in Step 0. Examples: the topic uses a term that the vocabulary lists as an `avoid` synonym, or the discussion repeatedly names a concept that has no entry yet. When this happens, name it as vocabulary drift in the conclusion summary and direct the capture to `speclink/LANGUAGE.md`. The conclusion summary preserves this contract — do not silently rewrite the term in the artifacts without recording the drift.
 
 Present the summary and say something like "I'll capture this to design.md unless you'd rather not." Default to capturing — the user can decline.
 
@@ -2238,7 +2238,7 @@ Never require a conclusion before a mid-discussion promote, and never conclude t
 
 **Staged cuts — `--hold`.** When the conclusion plans further changes to spin out from this same record later (cut A now, cut B once A lands, cut C after that), run `conclude` with `--hold` **once** — an ordinary spin-out never clears the flag, so the single call covers the whole series. The record stays live past its conclusion and past every middle cut's archive. The **last cut is spun out with `--last`** (`speclink propose --from-discussion <slug>` decides this from the conclusion's cut list and the record's `promoted_to`; on the raw verbs it is `speclink discuss promote <slug> --last`, `speclink new change <name> --from-discussion <slug> --last`, or `speclink discuss seal <slug> <change> --last`): that spin-out drops the flag in the same write, and when the last spun-out change is archived the record is co-archived automatically — there is nothing to close by hand. Besides `--last`, only a `conclude` without `--hold` or a manual `speclink discuss archive <slug>` releases the flag. Forgot `--last`? The record simply stays live (the board labels it "promoted · on hold"); run `speclink discuss archive <slug>` once to close the series. Without `--hold` the record is archived along with the last of its changes, and any later cut needs a new discussion.
 
-**Archived by mistake?** (For example, `--last` went on a cut that was not the last one, and the record was co-archived with it.) Move the record file from `openspec/discussions/archive/` back to `openspec/discussions/` and drop the `<date>-` prefix from its name — it is live again and every verb works on it. The engine's error for spinning out from an archived record points at the same path.
+**Archived by mistake?** (For example, `--last` went on a cut that was not the last one, and the record was co-archived with it.) Move the record file from `speclink/discussions/archive/` back to `speclink/discussions/` and drop the `<date>-` prefix from its name — it is live again and every verb works on it. The engine's error for spinning out from an archived record points at the same path.
 
 ---
 
@@ -2272,7 +2272,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -2385,7 +2385,7 @@ Detect drift between a Speclink change and the current codebase state. Reports t
 
 **Passive Trigger**
 
-When `speclink apply` is invoked on a change whose `.openspec.yaml created` date is more than 5 days ago AND no commits have touched the change directory in the past 3 days, the apply skill SHOULD run drift analysis first and surface findings before tasks begin. The trigger is guidance only and does not block apply from proceeding.
+When `speclink apply` is invoked on a change whose `.meta.yaml created` date is more than 5 days ago AND no commits have touched the change directory in the past 3 days, the apply skill SHOULD run drift analysis first and surface findings before tasks begin. The trigger is guidance only and does not block apply from proceeding.
 
 (Threshold reasoning: AI-assisted commits are daily-cadence, not weekly. A change sitting ≥5 days with ≥3 days of no commits is almost always genuine stagnation rather than normal pacing.)
 
@@ -2412,7 +2412,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -2475,7 +2475,7 @@ Never blind-scan the whole repository. Candidates from unrelated corners are not
 
   **Weight recent churn more heavily.** The payoff of deepening is that future changes get easier, so the code that keeps changing is where that payoff lands.
 
-  **Local supplement**: cross-check the archived changes' touched records (`.evidence.json` under `openspec/changes/archive/<dated-name>/`, the same records `speclink commit` uses). Where a bare `git log` says "these files changed together", the touched records say *which intent* moved *which files* — a stronger signal for what belongs to one seam.
+  **Local supplement**: cross-check the archived changes' touched records (`.evidence.json` under `speclink/changes/archive/<dated-name>/`, the same records `speclink commit` uses). Where a bare `git log` says "these files changed together", the touched records say *which intent* moved *which files* — a stronger signal for what belongs to one seam.
 - **The hotspots are diffuse** — no clear focus, churn spread evenly → **widen the net** instead of forcing one. Take a larger area (a whole crate, a whole layer) and scan it as one scope rather than picking an arbitrary hot file.
 
 Announce the scope you settled on and why, in one or two sentences, before scanning.
@@ -2615,7 +2615,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -2730,6 +2730,17 @@ Update an existing Speclink change — from a plan file or conversation context.
 
 5. **Update artifacts**
 
+   **Check the schema first.** Read `schemaName` from `speclink status --change "<name>" --json`. When it is `no-spec-change` and the new requirement adds, modifies or removes behavior a canonical spec promises, switch the change back before you touch any artifact:
+
+   ```bash
+   speclink change schema "<name>" spec-driven
+   ```
+
+   - The switch succeeds → add a Capabilities section to the proposal, write the delta spec with `speclink new artifact spec <capability> --change "<name>"`, then update design and tasks for the new requirement. The summary says that the schema was switched, and why.
+   - The switch is refused (for example, the change has an open verify ticket) → report the stderr reason, with the `speclink verify discard <name>` hint it carries, and stop. Do not write a delta around the refusal.
+
+   A new requirement that changes no promised behavior keeps the schema as it is. Never switch a `spec-driven` change to `no-spec-change` on your own: do that only when the user asks for it and the change has no delta spec.
+
    For each artifact, get instructions first:
 
    ```bash
@@ -2738,7 +2749,7 @@ Update an existing Speclink change — from a plan file or conversation context.
 
    Use the `template` from instructions as the output structure. Apply `context` and `rules` as constraints but do not copy them into the file.
 
-   The instructions JSON includes `locale` — the language to write artifacts in. If present, write the artifact content in that language. Spec files (specs/\*/\*.md) default to the operating-system language of the machine running Speclink — unless the project sets `spec_locale` in `openspec/config.yaml` (a locale code, or `auto` to follow `locale`), in which case write spec prose in that language. Structural markers (`### Requirement:`, `#### Scenario:`, `- **WHEN**`/`- **THEN**`) and normative keywords (SHALL/MUST) always stay in English.
+   The instructions JSON includes `locale` — the language to write artifacts in. If present, write the artifact content in that language. Spec files (specs/\*/\*.md) default to the operating-system language of the machine running Speclink — unless the project sets `spec_locale` in `speclink/config.yaml` (a locale code, or `auto` to follow `locale`), in which case write spec prose in that language. Structural markers (`### Requirement:`, `#### Scenario:`, `- **WHEN**`/`- **THEN**`) and normative keywords (SHALL/MUST) always stay in English.
 
    **Plan-to-Artifact Mapping** (when using a plan file):
 
@@ -2929,12 +2940,12 @@ Suggestions only. This skill NEVER invokes any of them — report where things s
 === .wad/skills/speclink-manual/SKILL.md ===
 ---
 name: speclink-manual
-description: "Use when a human-readable operating manual is needed, or when someone wants to be walked through how to operate the system — generates a wiki-style Markdown manual under openspec/manual/ from the canonical specs, or gives an in-conversation tour with every answer sourced."
+description: "Use when a human-readable operating manual is needed, or when someone wants to be walked through how to operate the system — generates a wiki-style Markdown manual under speclink/manual/ from the canonical specs, or gives an in-conversation tour with every answer sourced."
 license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -2946,19 +2957,19 @@ This harness executes speclink verbs as shell commands: run `speclink <verb> [ar
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
 
-Generate a human-readable operating manual from the canonical specs, or walk the user through the system in conversation. The manual is a wiki-style set of Markdown pages under `openspec/manual/`, written for someone who joined today and only wants to know how to operate the system.
+Generate a human-readable operating manual from the canonical specs, or walk the user through the system in conversation. The manual is a wiki-style set of Markdown pages under `speclink/manual/`, written for someone who joined today and only wants to know how to operate the system.
 
 **Input**: Optional arguments after `speclink manual`. They pick the mode:
 
 | Arguments | Mode |
 | --- | --- |
-| none | **Generation** (the default) — read the specs, write `openspec/manual/*.md` |
+| none | **Generation** (the default) — read the specs, write `speclink/manual/*.md` |
 | contain `導覽` or `tour` | **Tour** — no file is written; guide the user through the system in conversation |
 | anything else | **Generation with a scope hint** — e.g. one section, one page, or "全部重生"; restate the scope you understood at the top of the summary |
 
 **Prerequisites**: This skill requires the `speclink` CLI. If any `speclink` command fails with "command not found" or similar, report the error and STOP.
 
-**The one-source rule**: the manual's content comes from the canonical specs under `openspec/specs/` and nothing else. Never read README files, a `docs/` directory, or source code as a content source — not to fill a gap, not to "confirm" wording, not for screenshots. Where the specs are silent, the manual is silent or says so. Every page cites the capabilities it was written from.
+**The one-source rule**: the manual's content comes from the canonical specs under `speclink/specs/` and nothing else. Never read README files, a `docs/` directory, or source code as a content source — not to fill a gap, not to "confirm" wording, not for screenshots. Where the specs are silent, the manual is silent or says so. Every page cites the capabilities it was written from.
 
 ---
 
@@ -2976,7 +2987,7 @@ and STOP. Zero files are written. Tour mode is unaffected by this check.
 
 ### Step 1: Read the existing manual
 
-If `openspec/manual/` exists, read the frontmatter of every `.md` page in it before anything else. Keep, per page: filename, `title`, `section`, `order`, `sources`, `generated`. This index drives the staleness report (Step 3) and the order-preservation rule (Step 5).
+If `speclink/manual/` exists, read the frontmatter of every `.md` page in it before anything else. Keep, per page: filename, `title`, `section`, `order`, `sources`, `generated`. This index drives the staleness report (Step 3) and the order-preservation rule (Step 5).
 
 A page whose frontmatter cannot be parsed is listed in the report and skipped — never overwritten.
 
@@ -3003,7 +3014,7 @@ Compute, from the Step 1 index and the specs:
 | --- | --- |
 | **stale page** | any item of the page's `sources` is stale. An item is judged on its own (see **Source anchors**): a bare item looks at every `@trace updated` stamp in that canonical spec; an anchored item looks only at the stamps inside its requirement section (heading text, trimmed, equal to the anchor). An anchored item whose heading no longer exists, or whose spec is gone, is stale — a renamed or removed requirement must be visible, never silently widened to the whole spec. A stamp is *after* the page's `generated` by format: when both are RFC 3339 timestamps, the spec stamp must be strictly later than the page stamp (same second is not after); when either side is a plain `YYYY-MM-DD` date, compare calendar days and a same-day tie counts (an archive on the day of generation must not slip through — a timestamp's day is the day in its own offset). A value that is neither format is ignored |
 | **unlisted capability** | a user-facing capability that appears in no page's `sources` (capability names per **Source anchors**) |
-| **orphan page** | a page with a non-empty `sources` whose capabilities have all disappeared from `openspec/specs/` — reported, NEVER deleted |
+| **orphan page** | a page with a non-empty `sources` whose capabilities have all disappeared from `speclink/specs/` — reported, NEVER deleted |
 
 `index.md` and `about.md` (empty `sources`) are derived pages: never stale, never orphan, never "unlisted" — they are rewritten whenever any other page is added, regenerated or stamp-only (Step 5), keeping their `section` and `order`. The `@trace updated` stamps are read from every `<!-- @trace … updated: … -->` block inside the canonical spec file — newer archives write an RFC 3339 timestamp with offset (`2026-09-05T23:17:28+08:00`), older ones a plain date; the **stale page** rule above decides, stamp by stamp, whether any of them is after the page's `generated`.
 
@@ -3028,7 +3039,7 @@ When 1–3 applies, the about page names the specs the journeys were transcribed
 
 This is the `manual-pages` contract. Every reader — the desktop manual page, a static-site generator, a person — relies on it, so follow it exactly.
 
-**Location and filename**: every page is a file directly under `openspec/manual/` (create the directory when missing). Filenames are kebab-case ASCII ending in `.md` — `first-login.md`; never spaces, capitals, or non-ASCII. Nothing is written anywhere else.
+**Location and filename**: every page is a file directly under `speclink/manual/` (create the directory when missing). Filenames are kebab-case ASCII ending in `.md` — `first-login.md`; never spaces, capitals, or non-ASCII. Nothing is written anywhere else.
 
 **Frontmatter** — YAML, exactly these fields and no others:
 
@@ -3086,7 +3097,7 @@ Before writing, check the value matches `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|
 **Two required pages**:
 
 - `index.md` — `title` is the manual's name, `section` is the first section, `order` is the smallest in the manual. Body: one sentence positioning the system, at most three core concepts, and entry links grouped by role.
-- `about.md` — `title` is `本手冊的來源`, `order` is the largest in the manual. Body states: the source scope is `openspec/specs/`; the journey backbone (transcribed from which specs, or rebuilt); the list of contradictions found between newer and older descriptions inside the specs (write `未發現` when there are none); known limits (no screenshots — the running product wins); and the compilation date.
+- `about.md` — `title` is `本手冊的來源`, `order` is the largest in the manual. Body states: the source scope is `speclink/specs/`; the journey backbone (transcribed from which specs, or rebuilt); the list of contradictions found between newer and older descriptions inside the specs (write `未發現` when there are none); known limits (no screenshots — the running product wins); and the compilation date.
 
 When no capability is user-facing, still write both pages: `about.md` says `尚無可入冊的使用者面向能力` and no other page exists.
 
@@ -3125,7 +3136,7 @@ When a scope hint was given, restate the scope you understood first. When nothin
 
 Tour mode writes NOTHING — no manual pages, no notes, no scratch files. It is a conversation.
 
-1. **Manual exists** (`openspec/manual/` present): read every page's frontmatter as the index.
+1. **Manual exists** (`speclink/manual/` present): read every page's frontmatter as the index.
    - Ask exactly one question first: which role the user has (e.g. developer running SDD through an agent, product owner, someone who joined today), so you can pick the entry from the index page's role links.
    - Then walk the journey in `section` / `order` order, one station at a time, reading the page body as you go; answer questions as they come.
    - Every answer names its source: the capability (from the page's `sources`, per **Source anchors**) or the page's filename.
@@ -3141,7 +3152,7 @@ When the tour ends you may suggest running generation mode (`speclink manual`) t
 Check these before you report:
 
 - [ ] Content came from the canonical specs only — no README, docs or code ("The one-source rule"), in both modes.
-- [ ] Generation wrote only under `openspec/manual/` (Step 5); tour mode wrote nothing; a remote-bound project got no generation (Step 0).
+- [ ] Generation wrote only under `speclink/manual/` (Step 5); tour mode wrote nothing; a remote-bound project got no generation (Step 0).
 - [ ] No page was deleted or renumbered, and no page with unparseable frontmatter was overwritten (Steps 1, 3 and 5).
 - [ ] Every page has exactly the six frontmatter fields, the `**出處**：` line, and a `generated` value that matches the format check (Step 5).
 - [ ] Contradictions inside the specs are listed on the about page, never silently resolved (Step 5).
@@ -3155,7 +3166,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -3181,7 +3192,7 @@ If no argument is provided, the workflow extracts requirements from conversation
 
 **Asking the user**: ask with the **AskUserQuestion tool**; when that tool is not available, ask the same question with the same options as plain text and wait for the user's response.
 
-**This workflow writes artifacts, not code.** Never write application code or implement features during this workflow, never skip the artifact workflow to write code directly, and never reinterpret requirements by ignoring the proposal file. The workflow ends after step 11 and its landscape check — it NEVER invokes `speclink apply`; the user decides when implementation starts.
+**This workflow writes artifacts, not code.** Never write application code or implement features during this workflow, never skip the artifact workflow to write code directly, and never reinterpret requirements by ignoring the proposal file. The workflow ends after step 12 and its landscape check — it NEVER invokes `speclink apply`; the user decides when implementation starts.
 
 **Steps**
 
@@ -3242,7 +3253,7 @@ If no argument is provided, the workflow extracts requirements from conversation
    From the resolved description, derive a kebab-case change name (e.g., "add dark mode" → `add-dark-mode`).
    Do not keep archive-style date prefixes in active change names. If the source name starts with `YYYY-MM-DD-`, strip that date prefix before running `speclink new change`; archived change names and directories are historical references, not active names to reuse.
 
-   Do not continue past this step until you know what the user wants to build. This is the one point where a missing requirement stops the workflow; from step 2 on, prefer reasonable decisions over questions (step 7c).
+   Do not continue past this step until you know what the user wants to build. This is the one point where a missing requirement stops the workflow; from step 2 on, prefer reasonable decisions over questions (step 8c).
 
 2. **Classify the change type**
 
@@ -3254,7 +3265,7 @@ If no argument is provided, the workflow extracts requirements from conversation
    | Bug Fix  | Fixing existing behavior, resolving errors                          |
    | Refactor | Architecture improvements, performance optimization, UI adjustments |
 
-   This determines the proposal template format in step 5.
+   This determines the proposal template format in step 6.
 
 3. **Scan existing specs for relevance**
 
@@ -3264,20 +3275,31 @@ If no argument is provided, the workflow extracts requirements from conversation
    3. For each candidate (max 3), run `speclink show <spec-id>` and read the Purpose section at the top of the output
    4. Related specs found → display them as an informational summary, then continue to the next step — do not stop or ask for confirmation
    5. No related specs found → proceed without pausing
-   6. Either way, leave a trace of the scan result in the proposal: name the related specs you found (or state that none matched) — the "why no existing spec covers this" sentence required for each New Capability in step 5 builds on this trace
+   6. Either way, leave a trace of the scan result in the proposal: name the related specs you found (or state that none matched) — the "why no existing spec covers this" sentence required for each New Capability in step 6 builds on this trace
 
-4. **Create the change directory**
+4. **Choose the schema**
+
+   Every change is created with a schema. `spec-driven` carries delta specs; `no-spec-change` has no specs artifact and is for changes that alter no behavior the canonical specs promise. Take the first rule that holds:
+
+   1. **The user named a schema** in the request or the arguments → use that schema.
+   2. **The project default is a custom schema** — `speclink workflow-config show --json` returns a `schema` other than `null`, `spec-driven` and `no-spec-change` → use the project default and skip the judgement below.
+   3. **The requirement comes from a discussion** (`--from-discussion`) → judge by its conclusion. It says the change alters no behavior the canonical specs promise, or it names `no-spec-change` → `no-spec-change`. It adds, modifies or removes behavior → `spec-driven`.
+   4. **Otherwise** → judge from the requirement and the step 3 scan: will this change alter behavior the canonical specs promise? No → `no-spec-change`; yes → `spec-driven`. A bug fix defaults to `spec-driven`, because a delta usually pins the corrected behavior. Choose `no-spec-change` for a bug fix only when you can say that no canonical spec promise changes.
+
+   When rule 3 or 4 cannot decide, do not guess: use the **AskUserQuestion tool** with two options, `spec-driven` and `no-spec-change`, the recommended one first with its reason. Create the change only after the user answers.
+
+5. **Create the change directory**
 
    ```bash
-   speclink new change "<name>" --agent wad-harness
+   speclink new change "<name>" --schema <chosen> --agent wad-harness
    ```
 
-   If a change with that name already exists, suggest continuing the existing change instead of creating a new one.
+   `<chosen>` is the schema step 4 chose. If a change with that name already exists, suggest continuing the existing change instead of creating a new one.
 
    When the proposal is sourced from a discussion document (path (c) in step 1), pass the link so the change records its origin and the discussion is marked `promoted` (it will be archived together with the change later):
 
    ```bash
-   speclink new change "<name>" --agent wad-harness --from-discussion <slug>
+   speclink new change "<name>" --schema <chosen> --agent wad-harness --from-discussion <slug>
    ```
 
    **Is this the last cut the conclusion planned? Then add `--last`.** A discussion whose conclusion stages several cuts (cut A now, cut B once A lands, …) was concluded with `--hold`, and the engine has no way to tell the final cut from a middle one — you do. Before running the command, read the record's `## Conclusion` **Decision** for the list of planned cuts (刀一／刀二／…, cut A／cut B, or any similar enumeration) and the frontmatter's `promoted_to` for the cuts already spun out, then decide:
@@ -3285,15 +3307,15 @@ If no argument is provided, the workflow extracts requirements from conversation
    - The change you are creating is the **final cut the conclusion planned** → pass `--last`:
 
      ```bash
-     speclink new change "<name>" --agent wad-harness --from-discussion <slug> --last
+     speclink new change "<name>" --schema <chosen> --agent wad-harness --from-discussion <slug> --last
      ```
 
    - You are **splitting one planned cut into several changes** at propose time → only the last piece of the split gets `--last`; every earlier piece is spun out without it.
    - The conclusion planned **no staged cuts** (a single change) → do not pass it. (The record carries no hold, so the flag would be a harmless no-op — but "not passed" is the rule.)
 
-   What `--last` does: the engine drops the record's `hold: true` line in the same write that accumulates `promoted_to`, so when the last spun-out change is archived, the discussion is co-archived automatically — nobody has to remember to close the series. Passing it on a cut that was **not** the last is the one mistake to avoid: the record would be co-archived when the last in-flight change is archived, and spinning out the next cut then needs the record moved back from `openspec/discussions/archive/` to `openspec/discussions/` (drop the `<date>-` prefix) — the engine's error message points at that path. Forgetting it is cheap: the record stays live, the board shows it as "promoted · on hold", and one `speclink discuss archive <slug>` closes the series by hand.
+   What `--last` does: the engine drops the record's `hold: true` line in the same write that accumulates `promoted_to`, so when the last spun-out change is archived, the discussion is co-archived automatically — nobody has to remember to close the series. Passing it on a cut that was **not** the last is the one mistake to avoid: the record would be co-archived when the last in-flight change is archived, and spinning out the next cut then needs the record moved back from `speclink/discussions/archive/` to `speclink/discussions/` (drop the `<date>-` prefix) — the engine's error message points at that path. Forgetting it is cheap: the record stays live, the board shows it as "promoted · on hold", and one `speclink discuss archive <slug>` closes the series by hand.
 
-5. **Write the proposal**
+6. **Write the proposal**
 
    **File path rules for the `## Impact` section:**
    - All file paths are written relative to the project root (e.g., `src/lib/foo.ts`, `src-tauri/crates/core/src/bar.rs`, `docs/specs/specs/auth/spec.md`).
@@ -3316,6 +3338,8 @@ If no argument is provided, the workflow extracts requirements from conversation
    ```
 
    If the command fails with a validation error, fix the content and retry.
+
+   **Schema `no-spec-change`** → skip the change-type formats below. Write the proposal from the `template` and `instruction` that `speclink instructions proposal` returns: Why, What Changes, Non-Goals (optional) and Impact, with no Capabilities section. In Why, say why the change alters no behavior the canonical specs promise, and list the canonical specs you checked in step 3.
 
    Use the following format based on change type:
 
@@ -3416,7 +3440,7 @@ If no argument is provided, the workflow extracts requirements from conversation
      - Removed: <paths to be deleted>
    ```
 
-6. **Get the artifact build order**
+7. **Get the artifact build order**
 
    ```bash
    speclink status --change "<name>" --json
@@ -3426,7 +3450,7 @@ If no argument is provided, the workflow extracts requirements from conversation
    - `applyRequires`: array of artifact IDs needed before implementation
    - `artifacts`: list of all artifacts with their status and dependencies
 
-7. **Create remaining artifacts in sequence**
+8. **Create remaining artifacts in sequence**
 
    Loop through artifacts in dependency order (skip proposal since it's already done):
 
@@ -3443,7 +3467,7 @@ If no argument is provided, the workflow extracts requirements from conversation
      - `instruction`: Schema-specific guidance
      - `outputPath`: Where to write the artifact
      - `dependencies`: Completed artifacts to read for context
-     - `locale`: The language to write the artifact in (e.g., "Japanese (日本語)"). If present, write the artifact content in this language. Spec files (specs/\*_/_.md) default to the operating-system language of the machine running Speclink — unless the project sets `spec_locale` in `openspec/config.yaml` (a locale code, or `auto` to follow `locale`), in which case write spec prose in that language. Structural markers (`### Requirement:`, `#### Scenario:`, `- **WHEN**`/`- **THEN**`) and normative keywords (SHALL/MUST) always stay in English.
+     - `locale`: The language to write the artifact in (e.g., "Japanese (日本語)"). If present, write the artifact content in this language. Spec files (specs/\*_/_.md) default to the operating-system language of the machine running Speclink — unless the project sets `spec_locale` in `speclink/config.yaml` (a locale code, or `auto` to follow `locale`), in which case write spec prose in that language. Structural markers (`### Requirement:`, `#### Scenario:`, `- **WHEN**`/`- **THEN**`) and normative keywords (SHALL/MUST) always stay in English.
    - Read each completed dependency for context via `speclink artifact cat <artifact-id> --change "<name>"` before you write the new artifact (never open artifact files by path — the documents may live in a remote store)
    - Follow the `instruction` field and use `template` as the structure for your output file — fill in its sections
    - `context` and `rules` are constraints for you, not content for the file: apply them, but never copy `<context>`, `<rules>`, or `<project_context>` blocks into the artifact
@@ -3489,7 +3513,7 @@ If no argument is provided, the workflow extracts requirements from conversation
 
    c. **An artifact needs input you do not have** → prefer a reasonable decision that keeps the momentum; only when the context is critically unclear, use the **AskUserQuestion tool** to clarify, then continue with creation.
 
-8. **Inline Self-Review** (before CLI analysis)
+9. **Inline Self-Review** (before CLI analysis)
 
    After creating all artifacts, scan them manually. Fix issues inline, then proceed to the CLI analyzer.
 
@@ -3529,7 +3553,7 @@ If no argument is provided, the workflow extracts requirements from conversation
 
    Fix every failure inline using the existing context before running the CLI analyzer. If a failure cannot be fixed without new input from the user, surface it explicitly rather than papering over it.
 
-9. **Analyze-Fix Loop** (max 2 iterations)
+10. **Analyze-Fix Loop** (max 2 iterations)
    1. Run `speclink analyze <change-name> --json`
    2. Filter findings to **Critical and Warning only** (ignore Suggestion)
    3. No Critical/Warning findings → show "Artifacts look consistent ✓" and proceed
@@ -3540,7 +3564,7 @@ If no argument is provided, the workflow extracts requirements from conversation
       d. Repeat up to 2 total iterations
    5. Findings remain after 2 attempts → show them as a summary and proceed normally (do not block)
 
-10. **Validation**
+11. **Validation**
 
     ```bash
     speclink validate "<name>"
@@ -3548,10 +3572,11 @@ If no argument is provided, the workflow extracts requirements from conversation
 
     If validation fails, fix errors and re-validate.
 
-11. **End the workflow**
+12. **End the workflow**
 
     Show summary:
     - Change name and location
+    - The chosen schema — show `no-spec-change` as 「不改規格（no-spec-change）」
     - List of artifacts created
     - Validation result
 
@@ -3601,10 +3626,11 @@ Run this check after the summary, right before presenting the Next steps below.
 
 Check these before you present the Next steps:
 
-- [ ] Every artifact in the `applyRequires` chain exists and `speclink status` shows it done; optional artifacts were skipped only when their criteria did not apply (step 7).
-- [ ] No application code was written, and `speclink apply` was not invoked (step 11).
-- [ ] Every manual task carries `[M]` right after the checkbox, before the task number (step 7).
-- [ ] `speclink validate` passed (step 10).
+- [ ] Every artifact in the `applyRequires` chain exists and `speclink status` shows it done; optional artifacts were skipped only when their criteria did not apply (step 8).
+- [ ] No application code was written, and `speclink apply` was not invoked (step 12).
+- [ ] Every manual task carries `[M]` right after the checkbox, before the task number (step 8).
+- [ ] The change was created with the schema step 4 chose, and a case the rules could not decide was asked, not guessed (step 4).
+- [ ] `speclink validate` passed (step 11).
 - [ ] The landscape check ran when two or more changes are active, and each prerequisite it found was recorded with `speclink change depends`.
 
 ## Next steps
@@ -3632,7 +3658,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -3654,7 +3680,7 @@ Run both quality stations over one change as a single pass that pauses after eve
 
 **What this skill owns**
 
-The ORDER of the two stations, the moment their sub-agents go out, and the pause that ends every round — nothing else. What each station checks, how it freezes its scope, what its briefs say, how it records its ticket, how it triages findings and what its stamp means all belong to `speclink review` and `speclink verify` — this document never restates them, and when it appears to disagree with a station's own instructions, the station wins. Follow each station's skill as written; this skill only decides when each step of a station runs, when the sub-agents are sent, which exit a station takes, and when to hand the decision back to the user.
+The ORDER of the two stations, the moment their sub-agents go out, the pause that ends every round, and the main-branch comparison before the first round (step 1) — nothing else. What each station checks, how it freezes its scope, what its briefs say, how it records its ticket, how it triages findings and what its stamp means all belong to `speclink review` and `speclink verify` — this document never restates them, and when it appears to disagree with a station's own instructions, the station wins. Follow each station's skill as written; this skill only decides when each step of a station runs, when the sub-agents are sent, which exit a station takes, and when to hand the decision back to the user.
 
 **Why the order matters**
 
@@ -3670,7 +3696,19 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
 
 1. **Prepare both stations**
 
-   For the same change, walk `speclink review` steps 1–4 (choose the change, the code-task gate and the project review rules, the ticket check and the frozen scope, the artifacts), then `speclink verify` steps 1–5 (choose the change, the status, the artifacts and task progress, the branch on the call, the frozen scope), each exactly as its skill writes them. When a station stops during its preparation — a refusal, a mid-flight check-in, `needsInput`, a scope failure — relay its outcome verbatim and follow what that station says; send no sub-agent for either station — a round checks both stations or neither, and the resume rule for an empty validation patch is the one exception.
+   **Compare with the main branch first — first round only.** Skip this on later rounds, and when either station already has a ticket (`speclink review show "<change-name>" --json` or `speclink verify show "<change-name>" --json` shows one): an open ticket's snapshot is bound to the current starting point. Otherwise run it before the first round freezes any scope: a rebase after the stamps turns them stale (see **Why the order matters**), at the cost **Changed your mind after a stamp** describes.
+
+   - Find the main branch. Inside a linked worktree, it is the branch the main checkout is on: the first entry of `git worktree list --porcelain`, then `git -C <main-checkout> branch --show-current`; a `speclink/*` branch or empty output counts as no main branch. Elsewhere, it is the branch that `git symbolic-ref --short refs/remotes/origin/HEAD` names, without its `origin/` prefix, or else a local `main` or `master`. Compare against the local branch of that name; the comparison reads local refs only and does not fetch.
+   - The current branch (`git branch --show-current`) is the main branch, or no main branch can be found → continue without a pause.
+   - Otherwise find the fork point with `git merge-base HEAD <main>`, then make two lists: the files the main branch changed since it (`git diff --name-only --no-renames -z <fork-point> <main>`), and the files this branch changed since it — committed and uncommitted changes to tracked files (`git diff --name-only --no-renames -z <fork-point>`) plus new files that git does not track yet (`git ls-files --others --exclude-standard -z`).
+   - Read these outputs as NUL-separated paths, not lines or quoted shell words. Compare full paths exactly, preserving spaces and Unicode; normalize platform separators before comparing.
+   - The two lists share no file → continue without a pause.
+   - They share files → pause before any station runs: list the shared files, say that a rebase after the stamps would turn them stale and that a new stamp re-runs both stations from a first round, and recommend rebasing onto the main branch (or merging it in) first, with the change's files committed beforehand (new files included). Wait for the user's answer (see **Asking the user**) before you continue.
+   - The user rebased or merged → before you run `speclink review prepare`, make sure the change's files, new files included, are committed: it records every uncommitted file as dirty at start, and the first round would then stop with `needsInput` on the change's own files. Files still uncommitted → ask the user to commit them, or commit them on the user's say-so. Then find the new fork point with `git merge-base HEAD <the-branch-rebased-onto-or-merged>` and move the stations' starting point to it with `speclink review prepare "<change-name>" --base "<new-fork-point>"` — otherwise the first round counts the main branch's own changes as this change's. If it fails, report its error and the fork point, and run that line again once the cause is cleared, before any station runs.
+
+   This skill compares and recommends: it never rebases, merges or pushes on its own. After the user rebases or merges, its only follow-ups are the commit check and the starting-point reset above.
+
+   Then, for the same change, walk `speclink review` steps 1–4 (choose the change, the code-task gate and the project review rules, the ticket check and the frozen scope, the artifacts), then `speclink verify` steps 1–5 (choose the change, the status, the artifacts and task progress, the branch on the call, the frozen scope), each exactly as its skill writes them. When a station stops during its preparation — a refusal, a mid-flight check-in, `needsInput`, a scope failure — relay its outcome verbatim and follow what that station says; send no sub-agent for either station — a round checks both stations or neither, and the resume rule for an empty validation patch is the one exception.
 
 2. **Send the three checks in one message**
 
@@ -3680,7 +3718,7 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
 
    Once all three have reported, finish `speclink review` steps 6–9 (present, triage, record the round), then `speclink verify` steps 10–13 (report, triage, record the round): the review ticket is written first, the verify ticket second. At each station's closing question, take the **stop without stamping** exit — the tickets and their frozen snapshots stay for the rounds that follow. A clean pass takes the same exit; each station's own quality-timeline exception covers it.
 
-   Do not ask the user anything between the two stations: this skill's only pause is step 4, and it takes priority over the stations' own closing questions.
+   Do not ask the user anything between the two stations: apart from step 1's main-branch comparison, which runs before any station starts, this skill's only pause is step 4, and it takes priority over the stations' own closing questions.
 
 4. **Stop and ask — the round's pause**
 
@@ -3691,7 +3729,7 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
    - **Fix everything** — every finding from both stations.
    - **Fix a selection** — the user names which ones; the rest stay in the tickets, unfixed.
    - **Fix nothing and stop** — end the pass right here. Both stations already left through their **stop without stamping** exit, so both tickets and their frozen snapshots stay on disk, no stamp lands, and nothing is archived.
-   - **Go to the closing stamps** — offer this option ONLY when both stations' must-fix sets are empty. While any must-fix is outstanding it is not on the menu: must-fix-cleared-before-the-stamp is the stations' rule and this skill does not route around it. When must-fix findings the user passed on still sit in a ticket, the option must say so up front: that station's stamp lands **with reservations** (the station's `--accept`), and choosing the option here IS the explicit say-so the stations require — never presume it from anything less. Leftover SUGGESTION-level findings are not reservations: a station whose ticket carries only SUGGESTIONs stamps clean, no authorization needed.
+   - **Go to the closing stamps** — offer this option ONLY when both stations' must-fix sets are empty. While any must-fix is outstanding it is not on the menu: must-fix-cleared-before-the-stamp is the stations' rule and this skill does not route around it. When must-fix findings the user passed on still sit in a ticket, the option must say so up front: that station's stamp lands **with reservations** (the station's `--accept`), and choosing the option here IS the explicit say-so the stations require — never presume it from anything less. Leftover SUGGESTION-level findings are not reservations: a station whose ticket carries only SUGGESTIONs stamps clean, no authorization needed. When the repository has CI configuration (for example, workflow files under `.github/workflows/`, a `.gitlab-ci.yml` file or a `.circleci/` folder), the option's description adds: "Recommended: commit and push first, then confirm that CI passed on every platform for that commit — a fix for CI after the stamps turns them stale." This adds no question and no option, and the skill neither pushes nor checks CI status itself.
 
    Options with nothing to act on simply do not appear — a round where both stations found nothing offers the last two.
 
@@ -3720,7 +3758,7 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
 A session closed in the middle of a fix round resumes by running `speclink quality` again. The tickets live in the change folder and the frozen snapshots in `.speclink/review-scopes/<change>/`, so each station's scope sees its open ticket and freezes a validation patch that holds every fix landed before the close. A resumed run adds three rules to the steps above:
 
 - Pass both stations' **Verification gate** before step 1 — the earlier session's test state is unknown, and a fix the gate still needs must land before the scopes freeze.
-- A station whose validation patch has no files while its last round still carries must-fix findings may still have an artifact fix to judge, because the patch leaves the spec directory out. List the change folder's uncommitted and untracked files with `git status --porcelain -- "openspec/changes/<change-name>/"`, the two tickets left out. Git cannot tell whether those edits came before or after the last round, so:
+- A station whose validation patch has no files while its last round still carries must-fix findings may still have an artifact fix to judge, because the patch leaves the spec directory out. List the change folder's uncommitted and untracked files with `git status --porcelain -- "speclink/changes/<change-name>/"`, the two tickets left out. Git cannot tell whether those edits came before or after the last round, so:
   - Nothing listed → that station sends no sub-agent and records no round this time: a round with nothing to judge would count as "no progress" and fail. The summary says that station had no fix to judge. When both stations are in that state, go straight to step 4 with the last rounds' findings.
   - Files listed → show the list and ask the user (see **Asking the user**) whether the earlier session fixed findings by editing those artifacts. A yes runs the station's validation pass, its brief carrying the edited passages verbatim as the gate's artifact case says; a no takes the nothing-listed path above.
 - Tell the user not to commit fixes between the close and the resume: a validation patch picks up fixes by content movement and the dirty state, and a commit can drop a new file the snapshots never captured out of it.
@@ -3762,7 +3800,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -3971,7 +4009,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
 
    **Validation rounds**: every unresolved original finding is carried into the new round verbatim — never reworded; a reworded line fakes the shrinking the loop rule depends on. Regressions the remediation patch directly introduced enter as new findings lines. Every accepted, still-unfixed **must-fix** finding is appended verbatim ending with the structural token `(accepted)` — the token stays English like the severity labels. Unfixed SUGGESTIONs carry forward as plain unresolved lines without the token (the step 7 boundary). The last round must reflect all outstanding reservations — that is what keeps an `--accept` stamp honest.
 
-   NEVER hand-write or edit `openspec/changes/<name>/review.md` — the ticket is verb-owned; a malformed round, or a finding path with a `:line` suffix or outside the ticket's scope, is rejected by the verb: fix the stdin content (anchor the finding on the in-scope file) and retry.
+   NEVER hand-write or edit `speclink/changes/<name>/review.md` — the ticket is verb-owned; a malformed round, or a finding path with a `:line` suffix or outside the ticket's scope, is rejected by the verb: fix the stdin content (anchor the finding on the in-scope file) and retry.
 
 9. **Branch on the blocking set**
 
@@ -4041,7 +4079,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -4135,7 +4173,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -4199,7 +4237,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
    ```
 
    Parse the JSON to understand:
-   - `schemaName`: The workflow being used (e.g., "spec-driven")
+   - `schemaName`: The workflow being used (e.g., "spec-driven"). Remember it: when `schemaName` is `no-spec-change`, step 8 runs the behavior check in place of the delta-spec checks
    - Which artifacts exist for this change
 
 3. **Load the artifacts and read the task progress**
@@ -4236,7 +4274,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
 
 6. **Branch on `phase`**
 
-   Run the checking pass (steps 7–10) in ONE read-only sub-agent call (e.g. the Agent tool with a read-only agent) so its exploration stays out of the main thread's context. The sub-agent MUST NOT modify any file. If your harness cannot spawn sub-agents, run the checking pass yourself and keep its report separate from the triage that follows. The brief carries the resolved `locale` (step 3): finding descriptions are written in that language; severity labels, dimension prefixes, file paths, and command lines stay in English. When accepted findings exist in the ticket's last round (the `(accepted)` token), the brief also carries that list with a hard instruction: do not re-report these items or near-variants of them — they are already adjudicated.
+   Run the checking pass (steps 7–10) in ONE read-only sub-agent call (e.g. the Agent tool with a read-only agent) so its exploration stays out of the main thread's context. The sub-agent MUST NOT modify any file. If your harness cannot spawn sub-agents, run the checking pass yourself and keep its report separate from the triage that follows. The brief carries the resolved `locale` (step 3): finding descriptions are written in that language; severity labels, dimension prefixes, file paths, and command lines stay in English. It also carries step 2's `schemaName`, so the checking pass knows whether step 8's behavior check applies. When accepted findings exist in the ticket's last round (the `(accepted)` token), the brief also carries that list with a hard instruction: do not re-report these items or near-variants of them — they are already adjudicated.
 
    Inside the `speclink quality` timeline, compose the brief exactly as this step says; `speclink quality` sends it in one message together with the review station's two briefs, so three sub-agents run at once. Continue with step 10 once it reports.
 
@@ -4260,8 +4298,8 @@ Report which test commands ran and which scope was skipped, and say that CI guar
      - Add CRITICAL issue for each incomplete task
      - Recommendation: "Complete task: <description>" or "Mark as done if already implemented"
 
-   **Spec Coverage**:
-   - If delta specs exist in `openspec/changes/<name>/specs/`:
+   **Spec Coverage** (skip it when `schemaName` is `no-spec-change` — step 8's behavior check takes its place):
+   - If delta specs exist in `speclink/changes/<name>/specs/`:
      - Extract all requirements (marked with "### Requirement:")
      - For each requirement:
        - Look for its implementation in the frozen patch first
@@ -4272,6 +4310,15 @@ Report which test commands ran and which scope was skipped, and say that CI guar
        - Recommendation: "Implement requirement X: <description>"
 
 8. **Verify Correctness**
+
+   **Behavior check** (only when `schemaName` is `no-spec-change` — the change has no delta specs, so it replaces Requirement Implementation Mapping, Scenario Coverage and Example Traceability below):
+   - Start from the canonical specs the proposal's Why lists as checked.
+   - Take the concrete names in the frozen patch — commands, flags, `--json` fields, file names, screen text — and search the canonical specs for the requirements that cover those code areas.
+   - For each such requirement, compare: does the patch change the observable behavior the requirement promises?
+   - A promised behavior changed:
+     - Add WARNING: "Behavior change in a no-spec-change change: <capability> / <requirement>" — it is must-fix (step 11) and blocks a clean stamp
+     - Recommendation, in this order: abandon this verify ticket with `speclink verify discard <name>`; switch the change back with `speclink change schema <name> spec-driven`; add the delta spec for this requirement with `speclink ingest <name>`; then run verify again. Do not suggest `--accept` to pass this WARNING — the change would archive with no delta for a behavior it changed
+   - No behavior change found → list the canonical specs you compared in the report.
 
    **Requirement Implementation Mapping**:
    - For each requirement from delta specs:
@@ -4379,7 +4426,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
 
     **Validation rounds**: every unresolved original finding is carried into the new round verbatim — never reworded; a reworded line fakes the shrinking the loop rule depends on. Resolved findings are dropped. Regressions the remediation patch directly introduced enter as new findings lines. Every accepted, still-unfixed **must-fix** finding is appended verbatim ending with the structural token `(accepted)` — the token stays English like the severity labels. Unfixed SUGGESTIONs carry forward as plain unresolved lines without the token (the step 11 boundary). The last round must reflect all outstanding reservations — that is what keeps an `--accept` stamp honest.
 
-    NEVER hand-write or edit `openspec/changes/<name>/verify.md` — the ticket is verb-owned; a malformed round, or a finding path with a `:line` suffix or outside the ticket's scope, is rejected by the verb: fix the stdin content (anchor the finding on the in-scope file) and retry.
+    NEVER hand-write or edit `speclink/changes/<name>/verify.md` — the ticket is verb-owned; a malformed round, or a finding path with a `:line` suffix or outside the ticket's scope, is rejected by the verb: fix the stdin content (anchor the finding on the in-scope file) and retry.
 
 13. **Branch on the blocking set**
 
@@ -4417,6 +4464,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
 **Graceful Degradation**
 
 - If only tasks.md exists: verify task completion only, skip spec/design checks
+- If the schema is `no-spec-change`: the missing delta specs are by design — run the behavior check (step 8) instead of skipping the spec checks
 - If tasks + specs exist: verify completeness and correctness, skip design
 - If full artifacts: verify all three dimensions
 - Always note which checks were skipped and why
@@ -4457,6 +4505,7 @@ Suggestions only. This skill NEVER invokes any of them — report where things s
 - The verify stamp landed in the main checkout → `speclink archive <change-name>`
 - The verify stamp landed inside a worktree → commit the stamp's meta changes first, then `speclink worktree-merge <change-name>` (archive runs only from the main checkout)
 - Findings were left unfixed on purpose → they stay in the ticket; say which ones before suggesting anything downstream
+- A no-spec-change change got a behavior-change WARNING → the repair steps in its recommendation: `speclink verify discard <change-name>`, `speclink change schema <change-name> spec-driven`, `speclink ingest <change-name>`, then verify again — not `--accept`
 
 
 **Preliminary security review boundary**

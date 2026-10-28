@@ -134,8 +134,8 @@ cat CONTEXT.md | speclink workflow-config context --stdin
 Run the first line in a project right after `speclink init`. **Expected output**:
 
 ```text
---- a/openspec/config.yaml
-+++ b/openspec/config.yaml
+--- a/speclink/config.yaml
++++ b/speclink/config.yaml
 @@ -1,5 +1,7 @@
  schema: spec-driven
 
@@ -231,7 +231,7 @@ Speclink ignores other keys.
 
 | Key | Values | Default | Use |
 | --- | --- | --- | --- |
-| `spec_dir` | A relative path | `openspec` | The spec directory, relative to the project root |
+| `spec_dir` | A relative path | `openspec` | This Fork writes this default during init. For an older project with only openspec/ and no key, update records the key before updating skills in place, preserving tools, comments, and unknown keys. In the desktop app's project settings, you can explicitly confirm a one-way conversion from openspec/ to speclink/. Custom folders and remote projects do not use that control. Explicit values and existing speclink/ layouts retain their paths |
 | `tools` | A list | None | AI tools that get skill files: `claude`, `codex`, `copilot`, `antigravity`, or custom tool descriptors |
 | `remote.url` | A URL | None | The connection URL of the remote project (project-scoped URL) |
 | `remote.repo` | A name | None | The registered name of this repo in the remote project. A project with one repo can leave it out |

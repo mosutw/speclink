@@ -2,9 +2,9 @@
 title: 操作手冊：生成與導覽
 section: SDD 工作流
 order: 230
-keywords: [manual, 手冊, 導覽, tour, 生成, 過期, 未入冊, openspec/manual, frontmatter]
+keywords: [manual, 手冊, 導覽, tour, 生成, 過期, 未入冊, speclink/manual, frontmatter]
 sources: [manual-skill, manual-pages]
-generated: 2026-09-11T12:10:31+08:00
+generated: 2026-10-28T20:20:00+08:00
 ---
 
 # 操作手冊：生成與導覽

@@ -1,4 +1,6 @@
+spec_dir: openspec
 tools:
 - copilot
 - codex
 - claude
+- antigravity

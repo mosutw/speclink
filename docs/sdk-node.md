@@ -44,11 +44,11 @@ const { createEngine } = require('/path/to/speclink/crates/adapters/speclink-nod
 
 `createEngine` supports two storage forms.
 
-**Local files**: point the engine at a project root that contains `openspec/`. This form suits local tools and tests.
+**Local files**: point the engine at a project root that contains `openspec/` (or `openspec/`, for a project that an older version created). This form suits local tools and tests.
 
 ```js
 const engine = createEngine({ store: { type: 'fs', root: '/path/to/project' } })
-// optional: specDir (default "openspec")
+// optional: specDir (default: the same folder the CLI uses — spec_dir in .speclink.yaml, else speclink/, else openspec/, else "speclink")
 ```
 
 **Your own Store**: pass an object that implements the Store interface (see [Implement your own Store](#store)). The engine reads and writes documents through it.
@@ -84,7 +84,7 @@ await engine.dispatch(
 - **Output**: a Promise. The result is the same as the CLI `--json` output, with camelCase fields. A verb without a `--json` form (for example `new change`) returns `{ output: string }`. The TypeScript type is `Promise<unknown>`. For the field shapes, see [Verb and Flag Contract](verb-contract.md).
 - **No blocked event loop**: each dispatch runs on a background thread. You can run many at the same time.
 
-Supported verbs today: `list`, `status`, `new change`, `new artifact`, `claim`, `review add-round`, `review stamp`, `verify add-round`, `verify stamp`, plus the history and security verbs described below. Other verbs fail with `invalid_argv`.
+Supported verbs today: `list`, `status`, `new change`, `new artifact`, `change schema`, `claim`, `review add-round`, `review stamp`, `verify add-round`, `verify stamp`, plus the history and security verbs described below. Other verbs fail with `invalid_argv`.
 
 On failure, the Promise rejects with an `Error`. The `message` is the same text that the CLI prints, so you can show it to a user or an agent. The `code` gives the category:
 

@@ -4,7 +4,7 @@ section: 桌面 app
 order: 340
 keywords: [專案, 圖示列, 新增專案, 最近開啟, 初始化, 啟用, 專案動作選單, 專案設定, 應用程式設定, 專案說明, 產出規則, 審查規則, 產出流程, config.yaml, 顯示語言, 外觀, 鍵盤快捷鍵]
 sources: ["desktop-config", "workspace-chooser#新增專案的來源分流", "workspace-chooser#最近開啟清單", "desktop-app#專案層檔案系統動作", "desktop-app#設定頁的鍵盤快捷鍵卡", "desktop-app#裝置層專案圖示底色", "desktop-app#設定頁點專案返回看板", "desktop-app#左側專案排序與裝置持久化", "ui-copy-vocabulary#繁體中文採台灣用語"]
-generated: 2026-10-23T14:19:42+08:00
+generated: 2026-10-28T20:20:00+08:00
 ---
 
 # 專案、新增專案與設定頁
@@ -33,10 +33,10 @@ app 從你選的資料夾往上找 speclink 專案根。找到就直接切換過
 | 資料夾狀態 | app 的反應 |
 | --- | --- |
 | 專案根有 `.speclink.yaml` | 直接開啟，不問任何問題 |
-| 有 openspec/ 但沒有 `.speclink.yaml` | 顯示啟用確認對話框 |
+| 有規格資料夾（`openspec/`，或舊佈局的 `openspec/`）但沒有 `.speclink.yaml` | 顯示啟用確認對話框 |
 | 往上找不到任何 speclink 專案 | 顯示初始化確認對話框 |
 
-兩種確認對話框都有 AI 工具多選（claude、codex、copilot），預設只勾 claude。你按確認之前，app 不會在資料夾寫入任何東西。你取消，資料夾內容維持原樣。
+兩種確認對話框都有 AI 工具多選（claude、codex、copilot），預設只勾 claude。初始化對話框的說明文字寫明會建立 `openspec/`。你按確認之前，app 不會在資料夾寫入任何東西。你取消，資料夾內容維持原樣。
 
 每個工具的技能檔放在各自的目錄：
 
@@ -48,9 +48,11 @@ app 從你選的資料夾往上找 speclink 專案根。找到就直接切換過
 
 **初始化**（全新資料夾）：確認後 app 做的事等同於 `speclink init`。它建立 openspec/ 骨架（specs/、changes/archive/、config.yaml）、在專案根寫 `.speclink.yaml` 記錄你選的工具、為每個工具生成技能檔。它不會產生 CLAUDE.md、AGENTS.md 或 `.github/copilot-instructions.md`。接著切到該專案，看板是空的。
 
-**啟用**（已有 openspec/ 的資料夾，例如從別處搬來的專案）：確認後 app 只補缺的東西：openspec/ 缺的骨架、專案根的 `.speclink.yaml`、你選的工具的技能檔，同樣不生成指令檔。既有的 openspec/ 內容一個位元都不動，包含你自訂過的 config.yaml。判定與寫入都以往上找到的專案根為準，不是你點的子目錄。例如只勾 copilot 啟用，專案根只會多出 `.speclink.yaml`（工具只有 copilot）與 `.github/skills/`，不會產生 `.claude/`、`.agents/`、CLAUDE.md、AGENTS.md。
+**啟用**（已有規格資料夾的資料夾，例如從別處搬來的專案）：確認後 app 只補缺的東西：`openspec/` 缺的骨架、專案根的 `.speclink.yaml`、你選的工具的技能檔，同樣不生成指令檔。既有規格文件的內容不會被改寫，包含你自訂過的 config.yaml。判定與寫入都以往上找到的專案根為準，不是你點的子目錄。例如只勾 copilot 啟用，專案根只會多出 `.speclink.yaml`（工具只有 copilot）與 `.github/skills/`，不會產生 `.claude/`、`.agents/`、CLAUDE.md、AGENTS.md。
 
-初始化或啟用失敗時，app 顯示一行錯誤訊息，不切換專案。
+已有 OpenSpec 資料夾時，本 Fork 原地補齊 openspec，明寫 `spec_dir: openspec`，保留既有內容；不另搬資料夾，也不會因未提交修改或其他 worktree 而拒絕這個原地操作。見[建立工作區與指令檔](init-workspace.md)。
+
+初始化或啟用失敗時，app 顯示一行錯誤訊息說明原因，不切換專案。舊佈局的資料夾有其他 worktree、或 `openspec/` 有未提交修改時，匯入會被拒絕：例如錯誤訊息說明 `openspec/` 有未提交修改，目前專案不變，所選資料夾的內容也不變。
 
 資料夾帶 remote 標記（`.speclink.yaml` 的 remote 區段）時另有分流，見[桌面連線 server 與 remote 專案](desktop-remote.md)。
 
@@ -78,7 +80,7 @@ app 從你選的資料夾往上找 speclink 專案根。找到就直接切換過
 - 滑鼠停在條目上會出現 ×（「自最近開啟移除」）。移除後從畫面與記錄一起消失，重啟 app 也不會回來，其餘條目順序不變。
 - 介面語言是英文時，這幾個字面分別是「Recently opened」、「Remove from recently opened」、「Connection removed」、「Connection signed out」。
 
-**點本機條目**：app 先探測那個路徑。探測成功就關掉對話框，走與「本機資料夾」選同一路徑完全相同的流程：既有專案直接開、沒有 openspec 骨架的走初始化確認（確認前不寫入）、帶 remote 標記的走 remote 分流。探測失敗（例如資料夾已被刪除）時，該條目變成錯誤態並顯示一行原因，對話框留在原地，目前專案不變。條目會留在清單裡，直到你自己移除；你也可以再點一次重試，重試開始時錯誤態清掉。
+**點本機條目**：app 先探測那個路徑。探測成功就關掉對話框，走與「本機資料夾」選同一路徑完全相同的流程：既有專案直接開、沒有 speclink 骨架的走初始化確認（確認前不寫入）、帶 remote 標記的走 remote 分流。探測失敗（例如資料夾已被刪除）時，該條目變成錯誤態並顯示一行原因，對話框留在原地，目前專案不變。條目會留在清單裡，直到你自己移除；你也可以再點一次重試，重試開始時錯誤態清掉。
 
 **點 remote 條目**：app 先確認原本綁定的 checkout 仍然對得上那個 Project／Repo，再用同一個連線開啟。連線已移除或已登出的條目會停用開啟，規則見[桌面連線 server 與 remote 專案](desktop-remote.md)。
 
@@ -166,9 +168,26 @@ app 從你選的資料夾往上找 speclink 專案根。找到就直接切換過
 | | 產出規則 | 產出規則卡 |
 | | 審查規則 | 預設清單卡、專案規則卡 |
 | | 產出流程 | 產出政策卡、產出流程卡 |
-| 專案 | .speclink.yaml | 檔案列、AI 工具卡 |
+| 專案 | .speclink.yaml | 檔案列、規格資料夾模式、AI 工具卡 |
 
-每頁頁標題下用等寬字註記對應的檔案與鍵，例如 `openspec/config.yaml · context`。
+每頁頁標題下用等寬字註記對應的檔案與鍵，例如 `openspec/config.yaml · context`。註記與分類欄的組名都照專案實際的規格資料夾顯示：還沒遷移的舊佈局專案是 `openspec/config.yaml · rules` 這種寫法，`.speclink.yaml` 明寫了規格資料夾路徑時就用那個路徑。
+
+整個 app 提到規格資料夾或變更資料檔的地方都照這條規則，不寫死舊名稱：
+
+- 討論詳情顯示的記錄路徑，例如 `openspec/discussions/board-search-bar.md`。
+- 遷移到遠端與來源選擇對話框，把本機的規格資料夾稱為「本機規格資料夾」。
+- 某個變更的資料檔解析失敗時，看板卡片的提示稱它為「變更資料檔」並附解析原因，不出現 `.meta.yaml` 字樣。
+- 新專案的說明文字（初始化對話框、空狀態、來源選擇）寫 `openspec/`。
+
+這些文案都跟隨介面語言。
+
+#### 規格資料夾模式
+
+本機專案的 `.speclink.yaml` 設定頁在檔案列下方顯示實際規格資料夾。`openspec/` 顯示 OpenSpec（預設），`speclink/` 顯示 Speclink；自訂路徑只顯示實際值，不會被硬歸到其中一種模式。Remote 不顯示此頁。
+
+從 OpenSpec 選 Speclink 時，選取只打開確認框，不會先改變生效模式。繁中警告是「這會將規格資料夾從 openspec/ 轉換為 speclink/。轉換後無法轉回 OpenSpec 模式。」按取消、Escape 或關閉確認框都不寫檔。工具選擇尚未儲存、設定檔無法解析或轉換正在執行時，轉換操作停用。
+
+按「轉換成 Speclink 模式」後，app 搬移資料、更新 `.speclink.yaml`、同步已儲存工具的技能，並重掛對新資料夾的監看。完成後 Speclink 成為現值，OpenSpec 選項停用；設定頁沒有反向轉換。若資料夾與設定已切換但技能同步未完成，頁面顯示未完成狀態及「重試完成轉換」；重新開啟專案也會顯示此狀態，重試只會繼續前往 Speclink。自訂路徑與 Remote 不提供轉換入口。
 
 #### 專案說明
 
@@ -235,7 +254,7 @@ app 從你選的資料夾往上找 speclink 專案根。找到就直接切換過
   | tdd: true | tdd 切關閉 | tdd 被移除（預設就是關） |
   | locale: tw，還有產出規則 | spec_locale 選 auto | 新增 spec_locale: auto，locale 與產出規則不動 |
 
-- worktree 開關的文案直接寫「worktree」，中英文介面都一樣。開關顯示 config.yaml 的現值，儲存時以畫面上的值寫入，成功後同步技能檔（與 CLI 改 worktree 相同）。由開改關時，如果還有活躍的 linked worktree，app 拒絕寫入並浮出擋下訊息：列出每個 worktree 的變更名、分支與路徑，提示先執行 worktree-merge 收尾。設定不變、開關回到開啟。見[平行實作與合回：worktree](worktree.md)。
+- worktree 開關的文案直接寫「worktree」，中英文介面都一樣。開關顯示 config.yaml 的現值，儲存時以畫面上的值寫入，成功後同步技能檔（與 CLI 改 worktree 相同）。這個同步只動技能檔：還是舊佈局 `openspec/` 的專案，資料夾原封不動，兩顆 worktree 技能照常以 `openspec/` 生成，看板持續自動更新；本 Fork 的更新同樣保留 openspec，不會把這個資料夾搬走，見[自動更新、CLI、技能檔過期與關於頁](desktop-update.md)。由開改關時，如果還有活躍的 linked worktree，app 拒絕寫入並浮出擋下訊息：列出每個 worktree 的變更名、分支與路徑，提示先執行 worktree-merge 收尾。設定不變、開關回到開啟。見[平行實作與合回：worktree](worktree.md)。
 - locale 或 spec_locale 的儲存值不在合法選項內時（例如有人手改成「繁體中文」），下拉直接顯示那個原始值，帶無效標註與警示樣式，欄位下方出現提示文字，引導你改選合法代碼。app 不會自動清空或改寫它。你改選合法代碼並儲存後，值被覆蓋、提示消失。合法代碼：locale 為 tw、ja、en；spec_locale 為 tw、ja、en、auto。
 
 **初步安全審查**：在產出政策卡的 audit 下方開啟「啟用 OWASP / CWE 安全審查」。說明是「依選定的 OWASP / CWE 安全標準與規則，對 SDD 規格、原始碼及 API 進行初步安全審查。」預設關閉，子設定全部隱藏；開啟後可選範圍、各標準與版本、三種審查、排除目錄及停用個別規則，並查看資料安裝狀態後儲存。關閉會保留已選子設定，不改 audit、TDD 或既有封存行為。

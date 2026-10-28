@@ -3,6 +3,12 @@
 // remote 專案沒有這一頁（tools 屬本機 checkout 概念）。
 import {
   Button,
+  ConfirmDialog,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SettingsCard,
   SettingsPageHeader,
   SettingsRow,
@@ -16,6 +22,11 @@ import type { ProjectSettingsState } from "./useProjectSettings";
 
 export function SpeclinkPage({ ps }: { ps: ProjectSettingsState }) {
   const { t } = useI18n();
+  const specDir = ps.snap.specDir ?? "speclink";
+  const standardMode = specDir === "openspec" || specDir === "speclink";
+  const pending = ps.snap.specDirConversion?.pending === true;
+  const hasConversion = ps.settings.kind === "local" && ps.settings.convertSpecDirToSpeclink !== undefined;
+  const modeValue = standardMode ? specDir : "custom";
   return (
     <>
       <SettingsPageHeader
@@ -37,6 +48,51 @@ export function SpeclinkPage({ ps }: { ps: ProjectSettingsState }) {
             </span>
           }
         />
+        <SettingsRow
+          label={t("settings.specDirLabel")}
+          description={
+            ps.toolsDirty
+              ? t("settings.specDirSaveToolsFirst")
+              : !standardMode
+                ? t("settings.specDirCustomHelp")
+                : specDir === "speclink" && !pending
+                  ? t("settings.specDirIrreversible")
+                  : undefined
+          }
+          control={
+            standardMode && hasConversion ? (
+              <Select
+                value={modeValue}
+                disabled={ps.appDisabled || ps.toolsDirty || ps.specDirBusy || specDir === "speclink" || pending}
+                onValueChange={(value) => {
+                  if (value === "speclink" && specDir === "openspec") ps.setSpecDirConfirmOpen(true);
+                }}
+              >
+                <SelectTrigger id="spec-dir-select" data-testid="spec-dir-select" className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openspec">{t("settings.specDirOpenSpec")}</SelectItem>
+                  <SelectItem value="speclink">{t("settings.specDirSpeclink")}</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <span data-testid={standardMode ? "spec-dir-mode" : "spec-dir-custom-path"} className="font-mono text-xs text-muted-foreground">
+                {standardMode ? (specDir === "openspec" ? t("settings.specDirOpenSpec") : t("settings.specDirSpeclink")) : specDir}
+              </span>
+            )
+          }
+        >
+          {pending && (
+            <div className="flex items-center gap-2 px-4 pb-3" role="status">
+              <span className="mr-auto text-sm text-destructive">{ps.snap.specDirConversion?.message ?? t("settings.specDirPending")}</span>
+              <Button type="button" size="sm" data-testid="retry-spec-dir-conversion" disabled={ps.specDirBusy || ps.appDisabled || ps.toolsDirty} onClick={() => void ps.convertSpecDir()}>
+                {ps.specDirBusy ? t("settings.specDirConverting") : t("settings.specDirRetry")}
+              </Button>
+            </div>
+          )}
+          {ps.specDirMsg && <p className="px-4 pb-3 text-sm text-destructive" role="alert">{ps.specDirMsg}</p>}
+        </SettingsRow>
       </SettingsCard>
       <div data-testid="tools-card">
         <SettingsCard title={t("settings.toolsLabel")}>
@@ -71,6 +127,16 @@ export function SpeclinkPage({ ps }: { ps: ProjectSettingsState }) {
           </div>
         </SettingsCard>
       </div>
+      <ConfirmDialog
+        open={ps.specDirConfirmOpen}
+        onOpenChange={ps.setSpecDirConfirmOpen}
+        title={t("settings.specDirConfirmTitle")}
+        description={t("settings.specDirConfirmDescription")}
+        cancelLabel={t("common.cancel")}
+        confirmLabel={t("settings.specDirConfirm")}
+        busy={ps.specDirBusy}
+        onConfirm={ps.convertSpecDir}
+      />
     </>
   );
 }

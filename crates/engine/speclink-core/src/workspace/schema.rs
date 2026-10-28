@@ -1,5 +1,5 @@
-//! Workflow schemas: the embedded `spec-driven` schema plus custom schemas in the OpenSpec
-//! format (`openspec/schemas/<name>/schema.yaml` + `templates/`).
+//! Workflow schemas: the embedded built-ins (`spec-driven`, `no-spec-change`) plus custom
+//! schemas in the OpenSpec format (`openspec/schemas/<name>/schema.yaml` + `templates/`).
 //! Resolution order: project → user → built-in.
 
 use crate::workspace::Workspace;
@@ -47,6 +47,10 @@ impl Schema {
     pub fn artifact(&self, id: &str) -> Option<&Artifact> {
         self.artifacts.iter().find(|a| a.id == id)
     }
+    /// 這個 schema 是否產出 delta spec（有 id 為 `specs` 的 artifact）。
+    pub fn has_specs(&self) -> bool {
+        self.artifact("specs").is_some()
+    }
     pub fn artifact_ids(&self) -> Vec<String> {
         self.artifacts.iter().map(|a| a.id.clone()).collect()
     }
@@ -61,34 +65,92 @@ const A_DESIGN_TMPL: &str = include_str!("../../assets/schema/spec-driven/design
 const A_TASKS_TMPL: &str = include_str!("../../assets/schema/spec-driven/tasks.template.md");
 /// The single canonical definition of the built-in `spec-driven` schema: the engine
 /// parses it at load, and `schema fork spec-driven` ships it byte for byte.
-pub const FORK_SCHEMA_YAML: &str =
+pub const SPEC_DRIVEN_SCHEMA_YAML: &str =
     include_str!("../../assets/schema/spec-driven/fork.schema.yaml");
+const NSC_PROPOSAL_TMPL: &str =
+    include_str!("../../assets/schema/no-spec-change/proposal.template.md");
+/// The single canonical definition of the built-in `no-spec-change` schema.
+pub const NO_SPEC_CHANGE_SCHEMA_YAML: &str =
+    include_str!("../../assets/schema/no-spec-change/fork.schema.yaml");
 
-/// Template content for the built-in schema, keyed by the `template:` file name the
+/// Template content for a built-in schema, keyed by the `template:` file name the
 /// canonical YAML declares. This is the built-in's counterpart to a custom schema's
 /// `templates/` directory — the same lookup, served from the binary.
-fn builtin_template_asset(file_name: &str) -> Option<String> {
-    let body = match file_name {
-        "proposal.md" => A_PROPOSAL_TMPL,
-        "spec.md" => A_SPECS_TMPL,
-        "design.md" => A_DESIGN_TMPL,
-        "tasks.md" => A_TASKS_TMPL,
-        _ => return None,
-    };
-    Some(body.to_string())
+fn spec_driven_template(file_name: &str) -> Option<&'static str> {
+    match file_name {
+        "proposal.md" => Some(A_PROPOSAL_TMPL),
+        "spec.md" => Some(A_SPECS_TMPL),
+        "design.md" => Some(A_DESIGN_TMPL),
+        "tasks.md" => Some(A_TASKS_TMPL),
+        _ => None,
+    }
 }
 
-/// The built-in `spec-driven` schema, parsed from [`FORK_SCHEMA_YAML`] through the same
-/// path a custom schema takes. Parsed once per process; the canonical document is
-/// compiled in, so a parse or validation failure is a build-time defect, not user input.
-pub fn spec_driven() -> Schema {
-    static BUILT_IN: OnceLock<Schema> = OnceLock::new();
-    BUILT_IN
-        .get_or_init(|| {
-            parse_schema(FORK_SCHEMA_YAML, "spec-driven", "package", &builtin_template_asset)
-                .expect("built-in spec-driven schema parses and validates")
+/// no-spec-change owns only its proposal template; design and tasks map to spec-driven's
+/// embedded assets so one text never lives twice.
+fn no_spec_change_template(file_name: &str) -> Option<&'static str> {
+    match file_name {
+        "proposal.md" => Some(NSC_PROPOSAL_TMPL),
+        "design.md" | "tasks.md" => spec_driven_template(file_name),
+        _ => None,
+    }
+}
+
+/// One built-in schema: its name, canonical YAML, embedded template lookup and the
+/// schema parsed from them.
+struct Builtin {
+    name: &'static str,
+    yaml: &'static str,
+    template: fn(&str) -> Option<&'static str>,
+    parsed: OnceLock<Schema>,
+}
+
+impl Builtin {
+    /// Parsed once per process through the same path a custom schema takes; the
+    /// canonical documents are compiled in, so a parse or validation failure is a
+    /// build-time defect, not user input.
+    fn schema(&self) -> &Schema {
+        self.parsed.get_or_init(|| {
+            parse_schema(self.yaml, self.name, "package", &|f| (self.template)(f).map(str::to_string))
+                .unwrap_or_else(|e| panic!("built-in {} schema parses and validates: {e}", self.name))
         })
-        .clone()
+    }
+}
+
+/// The built-in schemas in listing order. Every built-in lookup goes through this table,
+/// so no resolution path can know a built-in the others miss.
+static BUILTINS: [Builtin; 2] = [
+    Builtin {
+        name: "spec-driven",
+        yaml: SPEC_DRIVEN_SCHEMA_YAML,
+        template: spec_driven_template,
+        parsed: OnceLock::new(),
+    },
+    Builtin {
+        name: "no-spec-change",
+        yaml: NO_SPEC_CHANGE_SCHEMA_YAML,
+        template: no_spec_change_template,
+        parsed: OnceLock::new(),
+    },
+];
+
+fn builtin_entry(name: &str) -> Option<&'static Builtin> {
+    BUILTINS.iter().find(|b| b.name == name)
+}
+
+/// Built-in schema names in listing order.
+pub fn builtin_names() -> impl Iterator<Item = &'static str> {
+    BUILTINS.iter().map(|b| b.name)
+}
+
+/// A built-in schema by name.
+pub fn builtin(name: &str) -> Option<Schema> {
+    builtin_entry(name).map(|b| b.schema().clone())
+}
+
+/// The built-in `spec-driven` schema.
+pub fn spec_driven() -> Schema {
+    builtin("spec-driven").expect("spec-driven is a built-in")
 }
 
 // --- YAML schema files ---
@@ -310,7 +372,7 @@ pub fn sources(ws: Option<&Workspace>, user_dir: Option<&Path>, name: &str) -> V
             out.push(SchemaSource { path: Some(y), source: src });
         }
     }
-    if name == "spec-driven" {
+    if builtin_names().any(|b| b == name) {
         out.push(SchemaSource { path: None, source: "built-in" });
     }
     out
@@ -328,10 +390,7 @@ pub fn resolve_with(
             return Some(load_dir(&d, name, src));
         }
     }
-    if name == "spec-driven" {
-        return Some(Ok(spec_driven()));
-    }
-    None
+    builtin(name).map(Ok)
 }
 
 /// Template files the schema references but cannot supply — the content lookup came back
@@ -348,7 +407,7 @@ pub fn missing_templates(schema: &Schema) -> Vec<String> {
 }
 
 /// The rejection message for a schema name that is not lowercase kebab-case.
-fn invalid_name_msg(name: &str) -> String {
+pub(crate) fn invalid_name_msg(name: &str) -> String {
     format!("Invalid schema name '{name}': must be lowercase kebab-case (e.g. my-flow)")
 }
 
@@ -360,10 +419,7 @@ pub fn not_found_msg(name: &str) -> String {
 /// The built-in template for an artifact id, looked up by a schema's DISPLAY name — the
 /// instructions payload template is filled this way (custom display names get an empty template).
 pub fn builtin_template(display_name: &str, artifact_id: &str) -> Option<String> {
-    if display_name != "spec-driven" {
-        return None;
-    }
-    spec_driven().artifact(artifact_id).and_then(|a| a.template.clone())
+    builtin(display_name)?.artifact(artifact_id).and_then(|a| a.template.clone())
 }
 
 /// A schema entry for the `schemas` listing (parse failures tolerated → empty artifacts).
@@ -376,13 +432,15 @@ pub struct ListedSchema {
 
 /// All schemas: built-in first, then project (alphabetical), then user (alphabetical).
 pub fn list_all(ws: Option<&Workspace>, user_dir: Option<&Path>) -> Vec<ListedSchema> {
-    let b = spec_driven();
-    let mut out = vec![ListedSchema {
-        name: b.name.clone(),
-        source: "package",
-        description: b.description.clone(),
-        artifact_ids: b.artifact_ids(),
-    }];
+    let mut out: Vec<ListedSchema> = builtin_names()
+        .filter_map(builtin)
+        .map(|b| ListedSchema {
+            artifact_ids: b.artifact_ids(),
+            name: b.name,
+            source: "package",
+            description: b.description,
+        })
+        .collect();
     for (dir, src) in schema_dirs(ws, user_dir) {
         let mut names: Vec<String> = std::fs::read_dir(&dir)
             .map(|it| {
@@ -434,12 +492,13 @@ pub fn fork(
     };
     match &first.path {
         None => {
-            // Built-in: ship the verbatim fork dump + the four templates.
-            write("schema.yaml", FORK_SCHEMA_YAML)?;
-            write("templates/proposal.md", A_PROPOSAL_TMPL)?;
-            write("templates/spec.md", A_SPECS_TMPL)?;
-            write("templates/design.md", A_DESIGN_TMPL)?;
-            write("templates/tasks.md", A_TASKS_TMPL)?;
+            // Built-in: ship the canonical YAML verbatim + the template each artifact declares.
+            let b = builtin_entry(source).expect("sources lists a built-in only for a registered name");
+            write("schema.yaml", b.yaml)?;
+            for art in &b.schema().artifacts {
+                let body = art.template.as_deref().unwrap_or_default();
+                write(&format!("templates/{}", art.template_name), body)?;
+            }
         }
         Some(yaml_path) => {
             let src_dir = yaml_path.parent().unwrap_or(Path::new("."));
@@ -543,16 +602,24 @@ pub fn init_schema(
 #[cfg(test)]
 mod tests {
     use super::{
-        is_valid_schema_name, parse_schema, spec_driven, SchemaYaml, A_DESIGN_TMPL,
-        A_PROPOSAL_TMPL, A_SPECS_TMPL, A_TASKS_TMPL, FORK_SCHEMA_YAML,
+        builtin, builtin_names, builtin_template, is_valid_schema_name, list_all, parse_schema,
+        resolve_with, sources, spec_driven, Schema, SchemaYaml, A_DESIGN_TMPL, A_PROPOSAL_TMPL,
+        A_SPECS_TMPL, A_TASKS_TMPL, BUILTINS, NSC_PROPOSAL_TMPL, SPEC_DRIVEN_SCHEMA_YAML,
     };
+    use crate::workspace::Workspace;
 
     /// 內建 schema 的每個欄位都必須等於正典 YAML 的字面——手寫第二份定義會在這裡紅燈。
     #[test]
     fn builtin_schema_matches_the_canonical_yaml() {
-        let y: SchemaYaml = serde_yaml::from_str(FORK_SCHEMA_YAML).expect("正典 YAML 可解析");
-        let s = spec_driven();
+        for b in &BUILTINS {
+            assert_matches_canonical_yaml(b.yaml, &builtin(b.name).expect("登記表內的名稱可解析"));
+        }
+    }
 
+    fn assert_matches_canonical_yaml(yaml: &str, s: &Schema) {
+        let y: SchemaYaml = serde_yaml::from_str(yaml).expect("正典 YAML 可解析");
+
+        assert_eq!(s.name, y.name, "內建的解析名稱等於正典 name");
         assert_eq!(s.display_name, y.name, "display_name");
         assert_eq!(s.description, y.description, "description");
 
@@ -586,7 +653,7 @@ mod tests {
     /// 日後在正典新增 artifact 而忘了補表，在這裡紅燈，而不是 schema validate 執行期。
     #[test]
     fn every_canonical_artifact_attaches_an_embedded_template() {
-        for art in spec_driven().artifacts {
+        for art in builtin_names().filter_map(builtin).flat_map(|s| s.artifacts) {
             assert!(
                 art.template.as_deref().is_some_and(|t| !t.is_empty()),
                 "{}: 正典宣告的 template {} 必須在內嵌資產表有對應內容",
@@ -634,8 +701,10 @@ mod tests {
     /// 內建正典必須通過全部載入檢查——引擎自帶的文件不得是唯一的例外。
     #[test]
     fn the_canonical_document_passes_every_check() {
-        parse_schema(FORK_SCHEMA_YAML, "spec-driven", "package", &|_| Some(String::new()))
-            .expect("正典 YAML 通過全部載入檢查");
+        for b in &BUILTINS {
+            parse_schema(b.yaml, b.name, "package", &|_| Some(String::new()))
+                .unwrap_or_else(|e| panic!("{} 正典 YAML 通過全部載入檢查：{e}", b.name));
+        }
     }
 
     /// 載入檢查的邊界表：每列一個 schema 文件與預期的錯誤片語（None ＝ 必須通過）。
@@ -719,15 +788,118 @@ artifacts:
         // `[P]` 語意已移除——翻譯保留規則點名的是唯一承載語意的 `[M]`。起草指引只有
         // 正典 YAML 一份，fork 出去的專案因此不會落差。
         assert!(
-            FORK_SCHEMA_YAML.contains("`[M]` markers"),
+            SPEC_DRIVEN_SCHEMA_YAML.contains("`[M]` markers"),
             "fork.schema.yaml 須點名 `[M]` markers"
         );
         // 斷言面只釘翻譯保留規則那一句的舊 token——全文否定「[P]」會把
         // 日後任何合法提及(如遷移說明)一併打死。
         assert!(
-            !FORK_SCHEMA_YAML.contains("`[P]` markers"),
+            !SPEC_DRIVEN_SCHEMA_YAML.contains("`[P]` markers"),
             "fork.schema.yaml 不得再點名 `[P]` markers"
         );
+    }
+
+    const NO_SPEC_CHANGE_DESCRIPTION: &str = "No-spec-change workflow - proposal → tasks (design optional), for changes that alter no promised behavior";
+
+    fn no_spec_change() -> Schema {
+        resolve_with(None, None, "no-spec-change")
+            .expect("no-spec-change 是內建")
+            .expect("no-spec-change 正典 YAML 通過載入檢查")
+    }
+
+    /// 第二個內建 no-spec-change：proposal → design（選用）→ tasks，沒有 specs。
+    #[test]
+    fn no_spec_change_resolves_as_a_builtin_without_specs() {
+        let s = no_spec_change();
+        assert_eq!(s.source, "package");
+        assert_eq!(s.display_name, "no-spec-change");
+        assert_eq!(s.description.as_deref(), Some(NO_SPEC_CHANGE_DESCRIPTION));
+        assert_eq!(s.artifact_ids(), ["proposal", "design", "tasks"]);
+        let requires = |id: &str| s.artifact(id).map(|a| a.requires.clone()).unwrap_or_default();
+        assert!(requires("proposal").is_empty(), "proposal 無前置");
+        assert_eq!(requires("design"), ["proposal"]);
+        assert_eq!(requires("tasks"), ["proposal"]);
+        assert_eq!(s.apply_requires, ["tasks"]);
+    }
+
+    /// design 與 tasks 的 template 與 spec-driven 逐字相同；proposal 的 template 沒有 Capabilities。
+    #[test]
+    fn no_spec_change_templates_reuse_spec_driven_design_and_tasks() {
+        let s = no_spec_change();
+        for art in &s.artifacts {
+            assert!(
+                art.template.as_deref().is_some_and(|t| !t.is_empty()),
+                "{}: template 必須非空",
+                art.id
+            );
+        }
+        let template = |id: &str| s.artifact(id).and_then(|a| a.template.clone());
+        assert_eq!(template("design").as_deref(), Some(A_DESIGN_TMPL));
+        assert_eq!(template("tasks").as_deref(), Some(A_TASKS_TMPL));
+        let proposal = template("proposal").expect("proposal 帶 template");
+        assert_eq!(proposal, NSC_PROPOSAL_TMPL, "proposal template 與內嵌資產逐字相同");
+        assert!(!proposal.contains("## Capabilities"), "proposal template 不得含 Capabilities");
+        for section in ["## Why", "## What Changes", "## Non-Goals", "## Impact"] {
+            assert!(proposal.contains(section), "proposal template 須含 {section}");
+        }
+        // fork 出去的 no-spec-change（display name 不變）取 payload template 時拿到同一份。
+        assert_eq!(builtin_template("no-spec-change", "proposal"), Some(proposal));
+    }
+
+    /// proposal 要求寫明不改行為的理由與查過的規格；tasks 要求最後一項以既有測試確認行為未變、
+    /// 不要求引用 requirement 名稱；design 的 instruction 與 spec-driven 逐字相同。
+    #[test]
+    fn no_spec_change_instructions_ask_for_the_unchanged_behavior_evidence() {
+        let s = no_spec_change();
+        let instruction = |id: &str| {
+            s.artifact(id).and_then(|a| a.instruction.clone()).unwrap_or_default()
+        };
+        let proposal = instruction("proposal");
+        assert!(proposal.contains("alters no behavior the canonical specs promise"));
+        assert!(proposal.contains("list the canonical specs you checked"));
+        let tasks = instruction("tasks");
+        assert!(tasks.contains("The last task MUST confirm with the existing tests"));
+        assert!(!tasks.contains("`### Requirement:` name"), "tasks 不得要求引用 requirement 名稱");
+        let spec_driven_design = spec_driven().artifact("design").and_then(|a| a.instruction.clone());
+        assert_eq!(Some(instruction("design")), spec_driven_design);
+    }
+
+    /// 列表：內建依序 spec-driven、no-spec-change，description 為正典字面。
+    #[test]
+    fn list_all_puts_both_builtins_first_in_order() {
+        let listed = list_all(None, None);
+        let rows: Vec<(&str, &str)> = listed.iter().map(|s| (s.name.as_str(), s.source)).collect();
+        assert_eq!(rows, [("spec-driven", "package"), ("no-spec-change", "package")]);
+        assert_eq!(listed[1].description.as_deref(), Some(NO_SPEC_CHANGE_DESCRIPTION));
+        assert_eq!(listed[1].artifact_ids, ["proposal", "design", "tasks"]);
+    }
+
+    /// 專案層同名 schema 遮蔽內建：解析回專案層，來源依序列出 project 與被遮蔽的內建。
+    #[test]
+    fn a_project_schema_shadows_the_builtin_of_the_same_name() {
+        let root = std::env::temp_dir()
+            .join(format!("speclink-schema-shadow-{}", std::process::id()));
+        let dir = root.join("openspec").join("schemas").join("no-spec-change");
+        std::fs::create_dir_all(&dir).expect("create schema dir");
+        std::fs::write(
+            dir.join("schema.yaml"),
+            "name: no-spec-change\nversion: 1\nartifacts:\n- id: plan\n  generates: plan.md\n  description: The plan\n  template: plan.md\n",
+        )
+        .expect("write schema.yaml");
+        let ws = Workspace { root: root.clone(), spec_dir_name: "openspec".to_string() };
+
+        let s = resolve_with(Some(&ws), None, "no-spec-change")
+            .expect("找得到")
+            .expect("專案層可載入");
+        assert_eq!(s.source, "project");
+        assert_eq!(s.artifact_ids(), ["plan"]);
+        let layers: Vec<(&str, bool)> = sources(Some(&ws), None, "no-spec-change")
+            .iter()
+            .map(|s| (s.source, s.path.is_some()))
+            .collect();
+        assert_eq!(layers, [("project", true), ("built-in", false)]);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -735,13 +907,13 @@ artifacts:
         // analyzer 只要編號（D1／Decision 1／決策一）出現就算引用；指引不講，
         // 起草的人會照抄整串標題，design 改一個字 tasks 就跟著紅。
         assert!(
-            FORK_SCHEMA_YAML
+            SPEC_DRIVEN_SCHEMA_YAML
                 .contains("either its text or just its ordinal (`D1`, `Decision 1`, `決策一`)"),
             "fork.schema.yaml 的 design 交叉引用指引須說明只寫編號也算引用"
         );
         // 同段第一句（需求名以子字串出現）不動。
         assert!(
-            FORK_SCHEMA_YAML.contains(
+            SPEC_DRIVEN_SCHEMA_YAML.contains(
                 "Every `### Requirement:` name from specs MUST appear as a case-insensitive substring in at least one task description"
             ),
             "需求名那一句逐字不變"

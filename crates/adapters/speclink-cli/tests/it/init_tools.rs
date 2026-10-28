@@ -100,7 +100,7 @@ impl Drop for TempEnv {
     }
 }
 
-const URL: &str = "https://team.example.com/speclink/projects/foo";
+const URL: &str = "https://team.example.com/openspec/projects/foo";
 
 #[test]
 fn copilot_init_and_pipe_hint_preserve_cli_contracts() {
@@ -131,7 +131,7 @@ fn copilot_shared_commands_record_actual_agent_and_fail_for_missing_tickets() {
         assert_eq!(out.status.code(), Some(0), "{}", stderr_of(&out));
         let meta = std::fs::read_to_string(
             env.dir
-                .join(format!("openspec/changes/{name}/.openspec.yaml")),
+                .join(format!("openspec/changes/{name}/.meta.yaml")),
         )
         .unwrap();
         let meta: serde_yaml::Value = serde_yaml::from_str(&meta).unwrap();
@@ -243,7 +243,7 @@ fn remote_init_explicit_both_tools_writes_section_without_a_spec_tree() {
     assert_eq!(remote.get("repo").and_then(|v| v.as_str()), Some("backend"));
     assert!(env.exists(".claude/skills/speclink-propose/SKILL.md"));
     assert!(env.exists(".agents/skills/speclink-propose/SKILL.md"));
-    assert!(!env.exists("openspec"), "remote 模式不建立本機規格樹");
+    assert!(!env.exists("speclink"), "remote 模式不建立本機規格樹");
 }
 
 // --- 範本的政策示例（spec Scenario「新專案初始化的範本內容」） ---

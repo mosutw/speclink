@@ -28,11 +28,15 @@ export interface ProjectSettingsViewProps {
   onParseErrors?: (errors: { config: boolean; speclink: boolean }) => void;
   /** 回報有無未存修改——App 的返回據此先問要不要捨棄。 */
   onDirtyChange?: (dirty: boolean) => void;
+  /** 回報工作流設定檔的相對路徑——專案設定分類欄以它當組名（null＝尚未載入）。 */
+  onConfigFile?: (file: string | null) => void;
+  /** 成功搬移後重掛新目錄監看並重新載入看板與開啟文件。 */
+  onSpecDirConverted?: () => Promise<void>;
 }
 
-export function ProjectSettingsView({ settings, section, onParseErrors, onDirtyChange, projectDirectory = null, projectColor, onProjectColorChange }: ProjectSettingsViewProps) {
+export function ProjectSettingsView({ settings, section, onParseErrors, onDirtyChange, onConfigFile, onSpecDirConverted, projectDirectory = null, projectColor, onProjectColorChange }: ProjectSettingsViewProps) {
   const { t } = useI18n();
-  const ps = useProjectSettings(settings);
+  const ps = useProjectSettings(settings, onSpecDirConverted);
   const colorGroup = useId();
   const [colorError, setColorError] = useState<string | null>(null);
   const [colorSaving, setColorSaving] = useState(false);
@@ -46,6 +50,10 @@ export function ProjectSettingsView({ settings, section, onParseErrors, onDirtyC
   const configParseError = ps !== null && ps.snap.workflow.parseError !== null;
   const speclinkParseError = ps !== null && ps.snap.app.parseError !== null;
   const dirty = ps !== null && ps.dirty;
+  const configFile = ps?.configFile ?? null;
+  useEffect(() => {
+    onConfigFile?.(configFile);
+  }, [onConfigFile, configFile]);
   useEffect(() => {
     onParseErrors?.({ config: configParseError, speclink: speclinkParseError });
   }, [onParseErrors, configParseError, speclinkParseError]);
@@ -58,8 +66,9 @@ export function ProjectSettingsView({ settings, section, onParseErrors, onDirtyC
     () => () => {
       onParseErrors?.({ config: false, speclink: false });
       onDirtyChange?.(false);
+      onConfigFile?.(null);
     },
-    [onParseErrors, onDirtyChange],
+    [onParseErrors, onDirtyChange, onConfigFile],
   );
 
   if (!ps) return null;
@@ -88,7 +97,7 @@ export function ProjectSettingsView({ settings, section, onParseErrors, onDirtyC
       {section === "rules" && <RulesPage ps={ps} />}
       {section === "review" && <ReviewRulesPage ps={ps} />}
       {section === "workflow" && <WorkflowPage ps={ps} />}
-      {section === "speclink" && <SpeclinkPage ps={ps} />}
+      {section === "speclink" && !ps.isRemote && <SpeclinkPage ps={ps} />}
     </div>
   );
 }

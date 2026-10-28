@@ -52,6 +52,8 @@ export interface WorkspaceSettingsProvider {
   securityReviewV2?: boolean;
   checkHistory?: boolean;
   readSettings(): Promise<SettingsSnapshot>;
+  /** 本機固定 openspec→speclink；remote 不提供。 */
+  convertSpecDirToSpeclink?(): Promise<SettingsSnapshot>;
   /** 裝置本機的刪除保護紀錄；舊 adapter 沒有此能力。 */
   rememberSecurityPolicy?(policy:import("./adapter/security").SecurityPolicy):Promise<void>;
   writeAppTools(tools: string[]): Promise<void>;

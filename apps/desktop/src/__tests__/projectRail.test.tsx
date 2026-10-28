@@ -313,7 +313,7 @@ describe("ProjectRail", () => {
     renderRail({
       assetPrompts: {
         [KEY_ALPHA]: null,
-        [KEY_BETA]: { kind: "stale", fileCount: 2, version: "v1.3.0", projectVersion: "v0.9.0" },
+        [KEY_BETA]: { kind: "stale", fileCount: 2, version: "v1.3.0", projectVersion: "v0.9.0", migration: { state: "none" } },
       },
     });
     // 與 remote 離線點同一顆、同色；無狀況的方塊無點。

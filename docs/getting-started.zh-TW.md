@@ -99,7 +99,7 @@ Generated files for: claude, codex
 
 它不會改你的 `CLAUDE.md`、`AGENTS.md` 或 `.github/copilot-instructions.md`。Agent 靠技能檔自己的說明判斷什麼時候用哪個技能。
 
-`openspec/` 沿用 OpenSpec 的目錄結構：
+`openspec/` 的目錄結構：
 
 ```text
 openspec/
@@ -110,9 +110,9 @@ openspec/
 └── discussions/                 討論記錄（Speclink 新增）
 ```
 
-全部是純 Markdown 與 YAML。不裝 Speclink 也讀得懂、改得動，每次變動都看得到 Git diff。Speclink 只多兩樣東西：`discussions/`，以及每個變更目錄裡的 `.openspec.yaml`（記錄開工時間、來源討論等生命週期資料）。
+全部是純 Markdown 與 YAML。不裝 Speclink 也讀得懂、改得動，每次變動都看得到 Git diff。Speclink 只多兩樣東西：`discussions/`，以及每個變更目錄裡的 `.meta.yaml`（記錄開工時間、來源討論等生命週期資料）。
 
-這個相容性只適用 Local 模式。接上遠端 server 之後，正式規格在 Store 裡，本機只有唯讀的投影（`.speclink/context/`）。
+這一點只適用 Local 模式。接上遠端 server 之後，正式規格在 Store 裡，本機只有唯讀的投影（`.speclink/context/`）。
 
 確認起點是空的：
 
@@ -312,6 +312,16 @@ Snapshot created for unarchive support.
 | `.speclink/` | 本機工作資料（不進 Git） |
 
 設定的細節見[設定說明](configuration.zh-TW.md)。
+
+## <a id="upgrade"></a>升級舊專案或沿用 OpenSpec 資料夾
+
+升級 CLI 後，在專案根執行 `speclink update`。本 Fork 保留 `openspec/`；當本機實際使用這個資料夾、設定又沒寫 `spec_dir` 時，會先在 `.speclink.yaml` 補上 `spec_dir: openspec`，保留工具、註解與未知鍵，再原地更新技能。自訂目錄及已使用 `speclink/` 的專案維持原路徑，重複更新不會重複加鍵。設定有誤或補寫失敗時，會在遷移與技能生成前停止。
+
+只有 OpenSpec 資料夾、還沒有 `.speclink.yaml` 的專案，在根目錄執行 `speclink init --tools claude,codex`。Speclink 原地沿用 `openspec/`，保留設定、自訂產出流程、規格與變更，新增工作目錄設定與所選技能。這個原地補齊不要求先提交 Git 修改或移除其他 worktree。已有工作目錄可從桌面 app 的補齊操作補上缺件。
+
+若要改用 `speclink/`，開啟本機專案的 `.speclink.yaml` 設定頁，在「規格資料夾」選 Speclink。app 會先詢問確認；取消不會改動檔案。轉換後，設定頁不提供切回 OpenSpec 的操作。若轉換中斷，重新開啟專案後按「重試完成轉換」。本 Fork 的一般 `speclink update` 仍保留 OpenSpec 預設；自訂資料夾與遠端專案沒有這個轉換入口。
+
+新的生命週期資料寫成 `.meta.yaml`；讀取先找新檔，缺席才讀 `.openspec.yaml`。保留資料夾結構方便在工具間移動純文字內容，並未驗證 OpenSpec CLI 的完整互通性。若要用舊版 Speclink 讀新資料，先備份整份工作目錄，包含已完成的品質紀錄。
 
 ## <a id="next"></a>接下來
 

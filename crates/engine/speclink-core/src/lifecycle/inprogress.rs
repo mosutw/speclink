@@ -127,7 +127,7 @@ pub fn add(store: &dyn Store, name: &str, identity: Option<&str>, agent: Option<
             return Ok(false);
         }
         let clean = util::yaml_scalar;
-        m.set("started_at", &util::today())?;
+        m.set("started_at", &util::now_rfc3339())?;
         if let Some(id) = identity {
             m.set("started_by", &clean(id))?;
         }
@@ -156,14 +156,17 @@ mod tests {
             meta.starts_with(EXISTING_META),
             "existing fields must be preserved byte-for-byte, got: {meta}"
         );
-        let today = crate::util::today();
-        assert_eq!(
-            meta[EXISTING_META.len()..],
-            format!("started_at: {today}\nstarted_by: Tester <t@example.com>\nstarted_with: claude\n")
-        );
-        // The stamped document parses and exposes the started fields.
+        let added: Vec<&str> = meta[EXISTING_META.len()..].lines().collect();
+        let [started_at, started_by, started_with] = added[..] else {
+            panic!("expected exactly the three started fields, got: {added:?}");
+        };
+        let stamp = started_at.strip_prefix("started_at: ").expect("started_at first");
+        assert!(crate::util::is_offset_stamp(stamp), "started_at is not an offset stamp: {stamp}");
+        assert_eq!(started_by, "started_by: Tester <t@example.com>");
+        assert_eq!(started_with, "started_with: claude");
+        // The stamped document parses and exposes the started fields (the date part).
         let parsed = crate::model::ChangeMeta::from_text(Some(&meta)).expect("stamped meta parses");
-        assert_eq!(parsed.started_at.as_deref(), Some(today.as_str()));
+        assert_eq!(parsed.started_at.as_deref(), Some(&stamp[..10]));
         assert_eq!(parsed.started_by.as_deref(), Some("Tester <t@example.com>"));
         assert_eq!(parsed.started_with.as_deref(), Some("claude"));
     }
@@ -251,13 +254,13 @@ mod tests {
     #[test]
     fn add_refuses_on_corrupt_meta_without_writing() {
         // spec「壞 metadata 使生命週期寫入 fail closed」：壞檔不得被解讀為
-        // 未開工而疊寫 started_* 行——拒絕、指名檔案，.openspec.yaml 逐位元不變。
+        // 未開工而疊寫 started_* 行——拒絕、指名檔案，.meta.yaml 逐位元不變。
         const BAD: &str = ": : :\n\t bad yaml [unclosed\n";
         let store = TestStore::with_meta("demo", BAD);
         let err = super::add(&store, "demo", Some("T <t@example.com>"), Some("claude"))
             .expect_err("corrupt meta must refuse the stamp");
         assert!(
-            err.to_string().contains("openspec/changes/demo/.openspec.yaml"),
+            err.to_string().contains("speclink/changes/demo/.meta.yaml"),
             "error must name the metadata file: {err}"
         );
         assert_eq!(store.meta("demo"), BAD, "meta byte-identical");
@@ -449,7 +452,7 @@ mod tests {
         let err = super::remove(&store, "demo").expect_err("corrupt meta must refuse");
 
         assert!(
-            err.to_string().contains("openspec/changes/demo/.openspec.yaml"),
+            err.to_string().contains("speclink/changes/demo/.meta.yaml"),
             "error must name the metadata file: {err}"
         );
         assert_eq!(store.meta("demo"), BAD, "meta byte-identical");

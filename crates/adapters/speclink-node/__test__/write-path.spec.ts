@@ -61,7 +61,7 @@ describe('dispatch write path — stdin parameter form', () => {
       validated: true,
     })
     expect(result.path.endsWith('design.md')).toBe(true)
-    const onDisk = readFileSync(join(fsFixture, 'openspec', 'changes', 'alpha', 'design.md'), 'utf8')
+    const onDisk = readFileSync(join(fsFixture, 'speclink', 'changes', 'alpha', 'design.md'), 'utf8')
     expect(onDisk).toBe(content)
   })
 
@@ -114,5 +114,19 @@ describe('claim — semantic conflict errors', () => {
   it('claim on the fs store fails loud like the CLI', async () => {
     const engine = createEngine({ store: { type: 'fs', root: fsFixture } })
     await expect(engine.dispatch(['claim', 'alpha'])).rejects.toThrow(/claim requires a remote store/)
+  })
+})
+
+describe('change schema — shared Host decision', () => {
+  it('switches schema without specs and refuses a change with deltas without writing', async () => {
+    const store = memoryStore(fixtureProject())
+    const engine = createEngine({ store })
+    const result = await engine.dispatch(['change', 'schema', 'beta', 'no-spec-change'])
+    expect(result).toMatchObject({ change: 'beta', previous: 'spec-driven', schema: 'no-spec-change', changed: true })
+    expect(await store.readChangeMeta('beta')).toContain('schema: no-spec-change')
+    const before = await store.readChangeMeta('alpha')
+    await expect(engine.dispatch(['change', 'schema', 'alpha', 'no-spec-change'])).rejects.toThrow(/delta specs/)
+    expect(await store.readChangeMeta('alpha')).toBe(before)
+    expect(await engine.dispatch(['change', 'schema', 'beta', 'no-spec-change'])).toMatchObject({ changed: false })
   })
 })

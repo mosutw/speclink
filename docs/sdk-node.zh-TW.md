@@ -44,11 +44,11 @@ const { createEngine } = require('/path/to/speclink/crates/adapters/speclink-nod
 
 `createEngine` 有兩種儲存方式。
 
-**本機檔案**：指向含 `openspec/` 的專案根目錄，適合本機工具與測試。
+**本機檔案**：指向含 `openspec/`（或舊版建立的 `openspec/`）的專案根目錄，適合本機工具與測試。
 
 ```js
 const engine = createEngine({ store: { type: 'fs', root: '/path/to/project' } })
-// 選填：specDir（預設 "openspec"）
+// 選填：specDir（預設與 CLI 相同：依序取 .speclink.yaml 的 spec_dir、speclink/、openspec/，都沒有時為 "speclink"）
 ```
 
 **自己的 Store**：傳入一個實作 Store 介面的物件（見[自己實作 Store](#store)），引擎透過它讀寫文件。
@@ -84,7 +84,7 @@ await engine.dispatch(
 - **輸出**：Promise，結果和 CLI `--json` 的輸出相同（欄位是 camelCase）。沒有 `--json` 形式的動詞（例如 `new change`）回傳 `{ output: string }`。TypeScript 型別是 `Promise<unknown>`，欄位形狀見[動詞與旗標契約](verb-contract.zh-TW.md)。
 - **不會卡住事件迴圈**：每次 dispatch 都在背景執行緒執行，可以同時發出多個。
 
-目前接上的動詞：`list`、`status`、`new change`、`new artifact`、`claim`、`review add-round`、`review stamp`、`verify add-round`、`verify stamp`。其他動詞會以 `invalid_argv` 拒絕。
+目前接上的動詞：`list`、`status`、`new change`、`new artifact`、`change schema`、`claim`、`review add-round`、`review stamp`、`verify add-round`、`verify stamp`。其他動詞會以 `invalid_argv` 拒絕。
 
 失敗時 Promise 以 `Error` 拒絕。`message` 和 CLI 印出的訊息相同，可以直接交給使用者或 agent；`code` 是分類：
 

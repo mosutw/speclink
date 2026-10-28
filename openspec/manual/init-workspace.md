@@ -4,12 +4,15 @@ section: 開始使用
 order: 30
 keywords: [init, update, 工作區, 技能檔, 指令檔, 過期, 降級, skills_dir, init --force, Copilot, Antigravity]
 sources: [workspace-tools, skill-routing]
-generated: 2026-10-23T14:19:42+08:00
+generated: 2026-10-28T20:20:00+08:00
 ---
 
 # 建立工作區與指令檔
 
-一個專案要用 Speclink，先在專案根目錄執行 `speclink init`。這個指令會建立 openspec 資料夾、寫下設定檔，並替你選的 AI 工具產生技能檔。之後引擎版本更新時，用 `speclink update` 讓技能檔跟上。
+一個專案要用 Speclink，先在專案根目錄執行 `speclink init`。這個指令會建立規格資料夾 `openspec/`、寫下設定檔，並替你選的 AI 工具產生技能檔。之後引擎版本更新時，用 `speclink update` 讓技能檔跟上。
+
+> [!NOTE]
+> 在 OpenSpec 專案執行 init 時，本 Fork 原地沿用 `openspec/`，補寫 `spec_dir: openspec`，保留既有內容。舊 Speclink 專案由 update 補設定並更新技能。見[規格資料夾與舊佈局遷移](spec-folder.md)。
 
 ## 用 speclink init 初始化
 
@@ -85,6 +88,7 @@ update 會：
 - 清掉已經從清單移除的工具所產生的技能檔。拿掉 Copilot 時，只移除 `.github/skills/` 底下名稱以 `speclink-` 開頭的資料夾；`.github/skills/` 因此變空才一併移除，原本就是空的會保留；`.github/` 的其他內容不動。被拿掉的工具，如果它的技能資料夾本身是 symlink，Speclink 不會穿過 symlink 刪任何東西，symlink 本身也保留。
 - 清掉技能資料夾下名稱以 `speclink-` 開頭、但這次不該產生的資料夾。例如舊版的 speclink-onboard 會被清掉，換成 speclink-baseline。你自己建的技能資料夾（名稱不以 `speclink-` 開頭）不會被動到。
 - 補齊缺少的技能檔。
+- 專案使用 `openspec/` 且設定沒有 spec_dir 時，先補寫 `spec_dir: openspec`，再原地同步技能；既有自訂目錄與 speclink 佈局不變。見[規格資料夾與舊佈局遷移](spec-folder.md)。
 
 `.speclink.yaml` 無法解析時，update 以單行解析錯誤失敗，任何檔案都不會改。
 
@@ -165,10 +169,17 @@ skills_dir 還有兩條拒絕規則，比對的是把 `.` 段丟掉、`..` 回�
 
 自訂工具的技能檔用中性寫法：不含 `/speclink-` 前綴，也不提 plan mode。描述子驗證失敗時，指令以單行錯誤結束並指出錯誤欄位。通過驗證的描述子也參與技能檔過期探測，逐工具結果用描述子的 name 表示；沒通過驗證的描述子不參與探測、不讓結果變成無法判定，錯誤由 update 報出。
 
-## 已有 openspec 但沒有 .speclink.yaml 的專案
+## 已有規格資料夾但沒有 .speclink.yaml 的專案
 
-引擎提供「工作區補齊」入口：對已有 `openspec/` 但沒有 `.speclink.yaml` 的資料夾，補齊 openspec 骨架缺件（specs 與 changes/archive 目錄；config.yaml 只在不存在時寫範本）、寫 `.speclink.yaml`、產生技能檔、確保 `.gitignore` 涵蓋 `.speclink/`。既有的規格、變更、討論與 config.yaml 完全不動。重複執行得到相同結果。規格未載對應的 CLI 指令名。
+引擎提供「工作區補齊」入口，給已有規格資料夾、但沒有 `.speclink.yaml` 的資料夾用。它做這幾件事：
+
+1. 解析既有規格資料夾；預設沿用 openspec，不搬動內容，也不要求先提交修改或移除其他 worktree。
+2. 補齊 `openspec/` 骨架缺件：specs 與 changes/archive 目錄；config.yaml 只在不存在時寫範本。
+3. 在專案根寫 `.speclink.yaml`，記錄你選的工具，使用 openspec 時明寫 `spec_dir: openspec`。
+4. 產生技能檔，並確保 `.gitignore` 涵蓋 `.speclink/`。
+
+既有的規格、變更、討論、自訂產出流程與 config.yaml，內容都不會被改寫。重複執行得到相同結果。規格未載對應的 CLI 指令名；桌面 app 的「啟用」就是走這個入口，見[專案、新增專案與設定頁](desktop-projects.md)。
 
 下一步：[工作流總覽：站別與交棒](workflow-overview.md)。
 
-**出處**：`workspace-tools`、`skill-routing`
+**出處**：`workspace-tools`、`skill-routing`、`spec-dir-migration`

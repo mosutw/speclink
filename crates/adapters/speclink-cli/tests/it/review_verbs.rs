@@ -26,7 +26,7 @@ impl TempProject {
         let _ = std::fs::remove_dir_all(&dir);
         let change = dir.join("openspec").join("changes").join("demo");
         std::fs::create_dir_all(&change).unwrap();
-        std::fs::write(change.join(".openspec.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
+        std::fs::write(change.join(".meta.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
             .unwrap();
         std::fs::write(change.join("tasks.md"), tasks).unwrap();
         std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -119,7 +119,7 @@ impl TempProject {
 
     fn meta(&self) -> String {
         std::fs::read_to_string(
-            self.dir.join("openspec").join("changes").join("demo").join(".openspec.yaml"),
+            self.dir.join("openspec").join("changes").join("demo").join(".meta.yaml"),
         )
         .unwrap()
     }
@@ -367,6 +367,11 @@ fn stamp_clean_round_writes_the_anchors_and_deletes_the_ticket() {
     assert!(meta.contains("reviewed_tasks_total: 2"), "{meta}");
     assert!(meta.contains("reviewed_scope:"), "{meta}");
     assert!(meta.contains("  - path: src/lib.rs"), "{meta}");
+    // spec「蓋章記錄審查輪數」：一輪的工單蓋章寫入 reviewed_rounds: 1，蓋章時間是 RFC 3339。
+    assert_eq!(meta.matches("reviewed_rounds: ").count(), 1, "{meta}");
+    assert!(meta.contains("reviewed_rounds: 1\n"), "{meta}");
+    let at = meta.lines().find_map(|l| l.strip_prefix("reviewed_at: ")).expect("reviewed_at");
+    assert!(chrono::DateTime::parse_from_rfc3339(at).is_ok(), "reviewed_at is RFC 3339: {meta}");
     assert!(meta.contains("    hash: "), "{meta}");
 }
 
@@ -374,7 +379,7 @@ fn stamp_clean_round_writes_the_anchors_and_deletes_the_ticket() {
 
 #[test]
 fn discard_deletes_the_ticket_and_leaves_meta() {
-    // spec「放棄審查」：exit 0、review.md 不存在、.openspec.yaml 不變。
+    // spec「放棄審查」：exit 0、review.md 不存在、.meta.yaml 不變。
     let p = TempProject::with_change("discard", TASKS_DONE);
     p.run_stdin(&["review", "add-round", "demo", "--stdin"], ROUND_WITH_FINDINGS);
     let before = p.meta();
@@ -454,7 +459,7 @@ fn review_prepare_late_warns_on_stderr_but_exits_zero() {
     // Scenario 已開始但 baseline 缺失：exit 0、stderr 說明 baseline 為 late、
     // 後續審查需明示 fixed point。
     let p = TempProject::with_git_change("prepare-late", TASKS_DONE);
-    let meta = p.dir.join("openspec").join("changes").join("demo").join(".openspec.yaml");
+    let meta = p.dir.join("openspec").join("changes").join("demo").join(".meta.yaml");
     std::fs::write(
         &meta,
         "schema: spec-driven\ncreated: 2026-07-01\nstarted_at: 2026-07-02\n",
@@ -751,7 +756,7 @@ fn review_scope_active_overlap_needs_input() {
     let p = scope_fixture("scope-overlap");
     let other = p.dir.join("openspec").join("changes").join("other");
     std::fs::create_dir_all(&other).unwrap();
-    std::fs::write(other.join(".openspec.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
+    std::fs::write(other.join(".meta.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
         .unwrap();
     p.touched("other", &["src/lib.rs"]);
     let out = p.run(&["review", "scope", "demo", "--json"]);

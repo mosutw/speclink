@@ -24,14 +24,14 @@ fn security_required_archive_needs_review_even_without_stamps_and_with_carry() {
         let p=TempProject::new(&format!("required-security-{carry}"),"- [x] Done\n");
         std::fs::write(p.dir.join("openspec/config.yaml"),"security_verification:\n  enabled: true\n  required_for_acceptance: true\n  standards:\n    owasp_top10: {enabled: true, version: '2025'}\n").unwrap();
         let change=p.dir.join("openspec/changes/demo");
-        let before=std::fs::read(change.join(".openspec.yaml")).unwrap();
+        let before=std::fs::read(change.join(".meta.yaml")).unwrap();
         let mut args=vec!["archive","demo","--skip-specs","--no-validate","--mark-tasks-complete"];
         if carry {
             for name in ["review.md","verify.md"] {std::fs::write(change.join(name),"# Ticket\n\n## Round 1\n\n- [CRITICAL] open item\n").unwrap();}
             args.extend(["--carry-review","--carry-verify"]);
         }
         let result=p.run(&args);assert_eq!(result.status.code(),Some(1),"{}",String::from_utf8_lossy(&result.stdout));
-        assert!(String::from_utf8_lossy(&result.stderr).contains("security"));assert_eq!(std::fs::read(change.join(".openspec.yaml")).unwrap(),before);
+        assert!(String::from_utf8_lossy(&result.stderr).contains("security"));assert_eq!(std::fs::read(change.join(".meta.yaml")).unwrap(),before);
         assert!(!p.archive_dir().exists());
     }
 }
@@ -53,7 +53,7 @@ impl TempProject {
         std::fs::write(dir.join(".speclink.yaml"), "tools:\n  - claude\n").unwrap();
         let change = dir.join("openspec").join("changes").join("demo");
         std::fs::create_dir_all(change.join("specs").join("demo-cap")).unwrap();
-        std::fs::write(change.join(".openspec.yaml"), META).unwrap();
+        std::fs::write(change.join(".meta.yaml"), META).unwrap();
         std::fs::write(change.join("proposal.md"), "## Why\n\nDemo.\n").unwrap();
         std::fs::write(change.join("tasks.md"), tasks_md).unwrap();
         std::fs::write(change.join("specs").join("demo-cap").join("spec.md"), DELTA_SPEC).unwrap();
@@ -130,6 +130,27 @@ fn mark_tasks_complete_archives_and_checks_every_task() {
     let tasks = std::fs::read_to_string(archived.join("tasks.md")).unwrap();
     assert!(!tasks.contains("- [ ]"), "every task checked after archive: {tasks}");
     assert_eq!(tasks.matches("- [x]").count(), 3, "all three tasks present and checked: {tasks}");
+    // spec「封存寫入 archived_at」：封存目錄 metadata 有一行 RFC 3339 的 archived_at，
+    // 日期與目錄名前綴相同。
+    let meta = std::fs::read_to_string(archived.join(".meta.yaml")).unwrap();
+    let stamps: Vec<&str> = meta.lines().filter_map(|l| l.strip_prefix("archived_at: ")).collect();
+    assert_eq!(stamps.len(), 1, "one archived_at line: {meta}");
+    assert!(chrono::DateTime::parse_from_rfc3339(stamps[0]).is_ok(), "RFC 3339: {meta}");
+    let dir_name = archived.file_name().unwrap().to_str().unwrap();
+    assert_eq!(&stamps[0][..10], &dir_name[..10], "same instant as the dated name: {meta}");
+}
+
+#[test]
+fn archiving_a_change_without_metadata_creates_none() {
+    // spec「封存寫入 archived_at」：沒有 `.meta.yaml` 的舊式 change 照常封存，
+    // 不為了 archived_at 新建一份 metadata。
+    let p = TempProject::new("no-meta", "- [x] 1.1 a\n");
+    std::fs::remove_file(p.dir.join("openspec").join("changes").join("demo").join(".meta.yaml"))
+        .unwrap();
+    let out = p.run(&["archive", "demo"]);
+    assert!(out.status.success(), "a meta-less change archives: {}", String::from_utf8_lossy(&out.stderr));
+    let archived = p.archived_demo().expect("dated archive directory exists");
+    assert!(!archived.join(".meta.yaml").exists(), "no metadata is created for archived_at");
 }
 
 /// 真實 git repo ＋ sibling linked worktree 的沙盒。change `demo` 的 tasks.md
@@ -169,7 +190,7 @@ impl GitProject {
     fn add_change(&self, name: &str, tasks_md: &str) {
         let change = self.repo.join("openspec").join("changes").join(name);
         std::fs::create_dir_all(change.join("specs").join(format!("{name}-cap"))).unwrap();
-        std::fs::write(change.join(".openspec.yaml"), META).unwrap();
+        std::fs::write(change.join(".meta.yaml"), META).unwrap();
         std::fs::write(change.join("proposal.md"), "## Why\n\nDemo.\n").unwrap();
         std::fs::write(change.join("tasks.md"), tasks_md).unwrap();
         std::fs::write(
@@ -299,7 +320,7 @@ fn archive_inside_a_worktree_without_git_fails_open() {
 #[test]
 fn archive_from_a_main_checkout_on_a_speclink_branch_passes_through() {
     // spec scenario「主 checkout 零額外開銷」的反向案例:`.git` 是目錄,分支名
-    // 卻恰為 speclink/demo。兩次執行分工明確——
+    // 卻恰為 openspec/demo。兩次執行分工明確——
     //  (a) git 正常可用:守門的 fs 短路若被拿掉,分支事實取得到就會誤拒,這是
     //      本測試的紅燈來源;
     //  (b) PATH 清空:主 checkout 路徑完全不依賴 git。
@@ -312,7 +333,7 @@ fn archive_from_a_main_checkout_on_a_speclink_branch_passes_through() {
     let out = p.run_in(&p.repo, &["archive", "demo"], &[("NO_COLOR", "1")]);
     assert!(
         out.status.success(),
-        "a main checkout must archive even on a speclink/ branch: {}",
+        "a main checkout must archive even on a openspec/ branch: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(

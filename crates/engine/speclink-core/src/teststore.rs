@@ -15,11 +15,11 @@ use std::path::PathBuf;
 #[derive(Default)]
 pub(crate) struct TestStore {
     pub workflow_config: RefCell<Option<String>>,
-    /// Active change name → raw `.openspec.yaml` text.
+    /// Active change name → raw `.meta.yaml` text.
     pub metas: RefCell<HashMap<String, String>>,
     /// (change, artifact rel path) → content.
     pub artifacts: RefCell<HashMap<(String, String), String>>,
-    /// Archived dated name → raw `.openspec.yaml` text.
+    /// Archived dated name → raw `.meta.yaml` text.
     pub archived_metas: RefCell<HashMap<String, String>>,
     /// (archived dated name, artifact rel path) → content — populated by
     /// `archive_change` (faithful directory move: every document travels).
@@ -28,6 +28,10 @@ pub(crate) struct TestStore {
     pub evidence: RefCell<HashMap<String, String>>,
     /// Capability → canonical spec content.
     pub canonical: RefCell<HashMap<String, String>>,
+    /// When set to a change name, `read_change_meta` reads it as absent while
+    /// the change still lists — the fs shape of a change folder with no
+    /// `.meta.yaml`.
+    pub missing_meta: RefCell<Option<String>>,
     /// Number of `write_change_meta` calls (idempotence assertions).
     pub meta_writes: RefCell<u32>,
     /// The change names `write_change_meta` wrote, in order (write-order
@@ -147,6 +151,9 @@ impl Store for TestStore {
         0
     }
     fn read_change_meta(&self, name: &str) -> Option<String> {
+        if self.missing_meta.borrow().as_deref() == Some(name) {
+            return None;
+        }
         self.metas.borrow().get(name).cloned()
     }
     fn write_change_meta(&self, name: &str, content: &str) -> Result<()> {
@@ -192,13 +199,13 @@ impl Store for TestStore {
     }
     fn commit_checks(&self, change: &str, commit: &crate::quality::history::ChecksCommit) -> Result<()> {
         commit.validate()?;
-        if commit.writes.contains_key(".openspec.yaml") && self.fail_meta_write.borrow().as_deref() == Some(change) { anyhow::bail!("simulated meta write failure"); }
+        if commit.writes.contains_key(".meta.yaml") && self.fail_meta_write.borrow().as_deref() == Some(change) { anyhow::bail!("simulated meta write failure"); }
         for (path, expected) in &commit.expected {
-            let old = if path == ".openspec.yaml" { self.read_change_meta(change) } else { self.read_artifact(change, path) };
+            let old = if path == ".meta.yaml" { self.read_change_meta(change) } else { self.read_artifact(change, path) };
             anyhow::ensure!(old.map(|text| crate::security::data::sha256(text.as_bytes())) == *expected, "revision_conflict");
         }
         for (path, text) in &commit.writes {
-            if path == ".openspec.yaml" { self.write_change_meta(change, text)?; } else { self.write_artifact(change, path, text)?; }
+            if path == ".meta.yaml" { self.write_change_meta(change, text)?; } else { self.write_artifact(change, path, text)?; }
         }
         for path in &commit.deletes { self.delete_artifact(change, path)?; }
         Ok(())

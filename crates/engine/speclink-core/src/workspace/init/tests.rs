@@ -1,5 +1,234 @@
 use super::*;
 
+#[test]
+fn fork_default_is_written_explicitly_for_init_and_adopt() {
+    let fresh = TempRoot::new("fork-explicit-init");
+    init(&fresh.dir, &[Tool::Codex], false, "openspec").unwrap();
+    let app = crate::config::AppConfig::load(&fresh.at(".speclink.yaml")).unwrap();
+    assert_eq!(app.spec_dir.as_deref(), Some("openspec"));
+
+    let existing = TempRoot::new("fork-explicit-adopt");
+    existing.write("openspec/specs/auth/spec.md", "# Existing spec\n");
+    adopt(&existing.dir, &[Tool::Codex]).unwrap();
+    let app = crate::config::AppConfig::load(&existing.at(".speclink.yaml")).unwrap();
+    assert_eq!(app.spec_dir.as_deref(), Some("openspec"));
+    assert_eq!(existing.read("openspec/specs/auth/spec.md"), "# Existing spec\n");
+    assert!(!existing.exists("speclink"));
+}
+
+#[test]
+fn fork_default_update_backfills_only_missing_openspec_path() {
+    let root = TempRoot::new("fork-update-default");
+    root.write(".speclink.yaml", "# keep this comment\ntools: [codex]\ncustom: retained\n");
+    root.write("openspec/specs/auth/spec.md", "# Existing spec\n");
+    update(&root.dir, false).unwrap();
+    let text = root.read(".speclink.yaml");
+    let app = crate::config::AppConfig::load(&root.at(".speclink.yaml")).unwrap();
+    assert_eq!(app.spec_dir.as_deref(), Some("openspec"));
+    assert!(text.contains("# keep this comment") && text.contains("custom: retained"));
+    update(&root.dir, false).unwrap();
+    assert_eq!(root.read(".speclink.yaml"), text);
+    assert_eq!(root.read("openspec/specs/auth/spec.md"), "# Existing spec\n");
+    assert!(!root.exists("speclink"));
+}
+
+#[test]
+fn fork_default_keeps_custom_path_and_rejects_broken_settings() {
+    let custom = TempRoot::new("fork-custom-path");
+    custom.write(".speclink.yaml", "tools: [codex]\nspec_dir: docs/specs\n");
+    custom.write("docs/specs/config.yaml", "schema: spec-driven\n");
+    update(&custom.dir, false).unwrap();
+    let app = crate::config::AppConfig::load(&custom.at(".speclink.yaml")).unwrap();
+    assert_eq!(app.spec_dir.as_deref(), Some("docs/specs"));
+    assert!(!custom.exists("openspec"));
+
+    let broken = TempRoot::new("fork-broken-path");
+    broken.write(".speclink.yaml", "tools: [\n");
+    broken.write("openspec/specs/auth/spec.md", "# Keep\n");
+    assert!(update(&broken.dir, false).is_err());
+    assert_eq!(broken.read(".speclink.yaml"), "tools: [\n");
+    assert!(!broken.exists(".agents"));
+    assert_eq!(broken.read("openspec/specs/auth/spec.md"), "# Keep\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn fork_default_failed_config_backfill_leaves_specs_and_skills_untouched() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = TempRoot::new("fork-backfill-write-failure");
+    let original = "# retain\ntools: [codex]\n";
+    root.write(".speclink.yaml", original);
+    root.write("openspec/changes/demo/.openspec.yaml", "schema: spec-driven\n");
+    root.write(".agents/skills/speclink-apply/SKILL.md", "old skill\n");
+    let config = root.at(".speclink.yaml");
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o444)).unwrap();
+    std::fs::set_permissions(&root.dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let result = update(&root.dir, false);
+    std::fs::set_permissions(&root.dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(result.is_err());
+    assert_eq!(root.read(".speclink.yaml"), original);
+    assert_eq!(root.read(".agents/skills/speclink-apply/SKILL.md"), "old skill\n");
+    assert_eq!(root.read("openspec/changes/demo/.openspec.yaml"), "schema: spec-driven\n");
+    assert!(!root.exists("speclink"));
+}
+
+#[test]
+fn explicit_conversion_moves_openspec_without_changing_its_contents_or_saved_tools() {
+    let root = TempRoot::new("explicit-spec-dir-conversion");
+    root.write(
+        ".speclink.yaml",
+        "# keep this comment\nspec_dir: openspec\ntools: [codex]\ncustom: retained\n",
+    );
+    root.write("openspec/config.yaml", "schema: spec-driven\n");
+    root.write("openspec/specs/auth/spec.md", "# Existing spec\n");
+    root.write("openspec/changes/demo/.openspec.yaml", "schema: spec-driven\n");
+    root.write("openspec/changes/demo/tasks.md", "- [ ] 1.1 Keep task\n");
+
+    convert_spec_dir_to_speclink(&root.dir).unwrap();
+
+    assert!(!root.exists("openspec"));
+    assert_eq!(root.read("speclink/specs/auth/spec.md"), "# Existing spec\n");
+    assert_eq!(root.read("speclink/changes/demo/.openspec.yaml"), "schema: spec-driven\n");
+    assert!(!root.exists("speclink/changes/demo/.meta.yaml"));
+    let config = root.read(".speclink.yaml");
+    assert!(config.contains("# keep this comment"));
+    assert!(config.contains("spec_dir: speclink"));
+    assert!(config.contains("tools: [codex]"));
+    assert!(config.contains("custom: retained"));
+    assert!(root.exists(".agents/skills/speclink-apply/SKILL.md"));
+
+    // Retrying an already completed conversion is idempotent and cannot move back.
+    convert_spec_dir_to_speclink(&root.dir).unwrap();
+    update(&root.dir, false).unwrap();
+    assert!(!root.exists("openspec"));
+    assert_eq!(root.read(".speclink.yaml"), config);
+}
+
+#[test]
+fn explicit_conversion_rejects_custom_remote_bad_settings_and_downgrade_before_writes() {
+    for (tag, config) in [
+        ("custom", "spec_dir: docs/specs\ntools: [codex]\n"),
+        ("remote", "spec_dir: openspec\nremote: {}\n"),
+        ("bad", "spec_dir: [\ntools: [codex]\n"),
+    ] {
+        let root = TempRoot::new(&format!("explicit-convert-{tag}"));
+        root.write(".speclink.yaml", config);
+        root.write("openspec/specs/auth/spec.md", "# Keep\n");
+        assert!(convert_spec_dir_to_speclink(&root.dir).is_err(), "{tag} settings");
+        assert_eq!(root.read(".speclink.yaml"), config);
+        assert_eq!(root.read("openspec/specs/auth/spec.md"), "# Keep\n");
+        assert!(!root.exists("speclink"));
+        assert!(!root.exists(".speclink/spec-dir-conversion.json"));
+    }
+
+    let ahead = TempRoot::new("explicit-convert-downgrade");
+    init(&ahead.dir, &[Tool::Codex], false, "openspec").unwrap();
+    ahead.write("openspec/config.yaml", "schema: spec-driven\n");
+    let major: u64 = ASSET_VERSION.trim_start_matches('v').split('.').next().unwrap().parse().unwrap();
+    crate::testkit::set_skill_version(&ahead.at(Tool::Codex.skills_dir()), &format!("v{}.0.0", major + 1));
+    let config = ahead.read(".speclink.yaml");
+    assert!(convert_spec_dir_to_speclink(&ahead.dir).is_err(), "downgrade guard");
+    assert_eq!(ahead.read(".speclink.yaml"), config);
+    assert!(ahead.exists("openspec/config.yaml"));
+    assert!(!ahead.exists("speclink"));
+    assert!(!ahead.exists(".speclink/spec-dir-conversion.json"));
+}
+
+#[test]
+fn explicit_conversion_does_not_overwrite_a_concurrent_settings_edit() {
+    let root = TempRoot::new("explicit-convert-config-race");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [codex]\n");
+    root.write("openspec/specs/auth/spec.md", "# Keep\n");
+    let result = convert_spec_dir_to_speclink_with(
+        &root.dir,
+        || root.write(".speclink.yaml", "spec_dir: docs/specs\ntools: [codex]\n"),
+        |from, to| std::fs::rename(from, to),
+        |path, content| util::write_file(path, content),
+    );
+    assert!(result.is_err());
+    assert_eq!(root.read(".speclink.yaml"), "spec_dir: docs/specs\ntools: [codex]\n");
+    assert_eq!(root.read("openspec/specs/auth/spec.md"), "# Keep\n");
+    assert!(!root.exists("speclink"));
+    assert!(root.exists(".speclink/spec-dir-conversion.json"));
+}
+
+#[test]
+fn explicit_conversion_failures_leave_a_recoverable_one_way_state() {
+    use std::cell::Cell;
+
+    let move_fail = TempRoot::new("explicit-convert-move-fail");
+    move_fail.write(".speclink.yaml", "spec_dir: openspec\ntools: [codex]\n");
+    move_fail.write("openspec/config.yaml", "schema: spec-driven\n");
+    let error = convert_spec_dir_to_speclink_with(
+        &move_fail.dir,
+        || {},
+        |_, _| Err(std::io::Error::other("injected rename failure")),
+        |path, content| util::write_file(path, content),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("openspec/ remains"));
+    assert_eq!(move_fail.read(".speclink.yaml"), "spec_dir: openspec\ntools: [codex]\n");
+    assert!(move_fail.exists("openspec/config.yaml"));
+    assert!(!move_fail.exists("speclink"));
+    assert!(!move_fail.exists(".speclink/spec-dir-conversion.json"));
+
+    let config_fail = TempRoot::new("explicit-convert-config-fail");
+    config_fail.write(".speclink.yaml", "spec_dir: openspec\ntools: [codex]\n");
+    config_fail.write("openspec/config.yaml", "schema: spec-driven\n");
+    let error = convert_spec_dir_to_speclink_with(
+        &config_fail.dir,
+        || {},
+        |from, to| std::fs::rename(from, to),
+        |_, _| Err(std::io::Error::other("injected config failure")),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("restored openspec/"));
+    assert_eq!(config_fail.read(".speclink.yaml"), "spec_dir: openspec\ntools: [codex]\n");
+    assert!(config_fail.exists("openspec/config.yaml"));
+    assert!(!config_fail.exists("speclink"));
+    assert!(!config_fail.exists(".speclink/spec-dir-conversion.json"));
+
+    let rollback_fail = TempRoot::new("explicit-convert-rollback-fail");
+    rollback_fail.write(".speclink.yaml", "spec_dir: openspec\ntools: [codex]\n");
+    rollback_fail.write("openspec/config.yaml", "schema: spec-driven\n");
+    let renames = Cell::new(0);
+    let error = convert_spec_dir_to_speclink_with(
+        &rollback_fail.dir,
+        || {},
+        |from, to| {
+            renames.set(renames.get() + 1);
+            if renames.get() == 2 {
+                Err(std::io::Error::other("injected rollback failure"))
+            } else {
+                std::fs::rename(from, to)
+            }
+        },
+        |_, _| Err(std::io::Error::other("injected config failure")),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("could not restore openspec/"));
+    assert_eq!(rollback_fail.read(".speclink.yaml"), "spec_dir: openspec\ntools: [codex]\n");
+    assert!(rollback_fail.exists("speclink/config.yaml"));
+    assert!(rollback_fail.exists(".speclink/spec-dir-conversion.json"));
+    convert_spec_dir_to_speclink(&rollback_fail.dir).unwrap();
+    assert_eq!(crate::config::AppConfig::load(&rollback_fail.at(".speclink.yaml")).unwrap().spec_dir.as_deref(), Some("speclink"));
+    assert!(!rollback_fail.exists(".speclink/spec-dir-conversion.json"));
+
+    let skill_fail = TempRoot::new("explicit-convert-skill-fail");
+    skill_fail.write(".speclink.yaml", "spec_dir: openspec\ntools: [codex]\n");
+    skill_fail.write("openspec/config.yaml", "schema: spec-driven\n");
+    skill_fail.write(".agents/skills/speclink-apply", "block skill directory\n");
+    assert!(convert_spec_dir_to_speclink(&skill_fail.dir).is_err());
+    assert_eq!(crate::config::AppConfig::load(&skill_fail.at(".speclink.yaml")).unwrap().spec_dir.as_deref(), Some("speclink"));
+    assert!(skill_fail.exists("speclink/config.yaml"));
+    assert!(skill_fail.exists(".speclink/spec-dir-conversion.json"));
+    std::fs::remove_file(skill_fail.at(".agents/skills/speclink-apply")).unwrap();
+    convert_spec_dir_to_speclink(&skill_fail.dir).unwrap();
+    assert!(skill_fail.exists(".agents/skills/speclink-apply/SKILL.md"));
+    assert!(!skill_fail.exists(".speclink/spec-dir-conversion.json"));
+}
+
 /// Throwaway project root, removed on drop.
 struct TempRoot {
     dir: PathBuf,
@@ -93,6 +322,21 @@ fn init_app_config_template_links_the_real_repository() {
 }
 
 #[test]
+fn init_over_a_speclink_entry_that_is_no_spec_folder_names_it() {
+    // 同名的 speclink 不是規格資料夾（例如同名的 repo clone）：說清楚原因、零寫入，
+    // 不回誤導的「Already initialized」。
+    let root = TempRoot::new("init-speclink-taken");
+    root.write("speclink/src/main.rs", "fn main() {}\n");
+    let before = snapshot(&root);
+    let Err(err) = init(&root.dir, &[Tool::Claude], false, DEFAULT_SPEC_DIR) else {
+        panic!("init must refuse");
+    };
+    let err = err.to_string();
+    assert!(err.contains("speclink") && err.contains("not a spec folder"), "{err}");
+    assert_eq!(snapshot(&root), before, "零寫入");
+}
+
+#[test]
 fn init_with_tools_records_selection_without_policy_keys() {
     let root = TempRoot::new("app-tools");
     init(&root.dir, &[Tool::Claude, Tool::Codex], false, "openspec").unwrap();
@@ -168,22 +412,29 @@ fn marker_count(text: &str) -> usize {
 
 /// 目錄快照（檔案內容與目錄項目），供「零寫入」斷言逐位元組比對。
 fn snapshot(root: &TempRoot) -> Vec<(String, Vec<u8>)> {
-    fn walk(dir: &Path, prefix: &str, out: &mut Vec<(String, Vec<u8>)>) {
+    walk_snapshot(root, false)
+}
+
+fn walk_snapshot(root: &TempRoot, skip_git: bool) -> Vec<(String, Vec<u8>)> {
+    fn walk(dir: &Path, prefix: &str, skip_git: bool, out: &mut Vec<(String, Vec<u8>)>) {
         let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().flatten().collect();
         entries.sort_by_key(|e| e.file_name());
         for entry in entries {
             let name = entry.file_name().to_string_lossy().to_string();
+            if skip_git && prefix.is_empty() && name == ".git" {
+                continue;
+            }
             let rel = if prefix.is_empty() { name } else { format!("{prefix}/{name}") };
             if entry.path().is_dir() {
                 out.push((format!("{rel}/"), Vec::new()));
-                walk(&entry.path(), &rel, out);
+                walk(&entry.path(), &rel, skip_git, out);
             } else {
                 out.push((rel, std::fs::read(entry.path()).unwrap()));
             }
         }
     }
     let mut out = Vec::new();
-    walk(&root.dir, "", &mut out);
+    walk(&root.dir, "", skip_git, &mut out);
     out
 }
 
@@ -314,8 +565,9 @@ fn reconcile_in_remote_mode_writes_no_instruction_file_and_no_spec_tree() {
 }
 
 // --- adopt：工作區補齊入口 ---
-// Spec requirement:「工作區補齊入口」（desktop-enable-speclink-prompt）——
-// 冪等補骨架缺件、寫 tools、生成受管檔，既有 openspec/ 內容零觸碰。
+// Spec requirement:「工作區補齊入口」（desktop-enable-speclink-prompt；desktop-spec-dir-migration
+// D3）——OpenSpec 專案先以 init 匯入的同一套程式改名為 speclink/，再冪等補骨架缺件、寫 tools、
+// 生成受管檔；既有規格文件內容不被改寫。
 
 const CUSTOM_WORKFLOW_CONFIG: &str =
     "schema: spec-driven\nlocale: tw\nrules:\n  proposal:\n    - 保持提案精簡\n";
@@ -325,33 +577,38 @@ const CUSTOM_WORKFLOW_CONFIG: &str =
 fn seed_unadopted(root: &TempRoot) {
     root.write("openspec/specs/auth/spec.md", "## Purpose\n既有規格文件。\n");
     root.write("openspec/changes/add-auth/proposal.md", "## Why\n既有變更。\n");
+    root.write("openspec/changes/add-auth/.openspec.yaml", "schema: spec-driven\ncreated: 2026-10-01\n");
     root.write("openspec/discussions/auth-scope.md", "# Discussion\n既有討論。\n");
     root.write("openspec/config.yaml", CUSTOM_WORKFLOW_CONFIG);
 }
 
-/// Spec Scenario「補齊工作區檔且既有內容零觸碰」：工作區檔補齊，
-/// 既有 openspec/ 文件（含自訂 config.yaml）位元級不變。
-#[test]
-fn adopt_fills_workspace_files_with_existing_content_untouched() {
-    let root = TempRoot::new("adopt-fill");
-    seed_unadopted(&root);
-    let before = snapshot(&root);
-
-    adopt(&root.dir, &[Tool::Claude]).expect("adopt succeeds");
-
-    let app = root.read(".speclink.yaml");
-    assert!(app.contains("claude"), "tools 須記錄 claude：{app}");
-    assert!(!root.exists("CLAUDE.md"), "工作區補齊不得產生指令檔");
-    assert!(root.exists(".claude/skills/speclink-propose/SKILL.md"));
-
-    let after = snapshot(&root);
-    for entry in before.iter().filter(|(rel, _)| !rel.ends_with('/')) {
-        assert!(after.contains(entry), "既有文件必須位元級不變：{}", entry.0);
-    }
-    assert_eq!(root.read("openspec/config.yaml"), CUSTOM_WORKFLOW_CONFIG);
+/// 目錄快照去掉 `.git/`：git status 會刷新 index，零寫入斷言只看專案檔。
+/// 同 snapshot，但不走進 `.git/`：commit 後 git 可能在背景整理，`.git/` 裡的檔案
+/// 會在讀到一半時消失。
+fn project_snapshot(root: &TempRoot) -> Vec<(String, Vec<u8>)> {
+    walk_snapshot(root, true)
 }
 
-/// Spec Scenario「骨架缺件補齊」：缺 specs/ 與 config.yaml 時補齊目錄與範本。
+/// Spec Scenario「匯入後既有內容位元級不變」：openspec/ 改名為 speclink/、資料檔改名為
+/// .meta.yaml，內容逐位元組不變；.speclink.yaml 記錄 tools、不寫 spec_dir。
+#[test]
+fn adopt_keeps_an_openspec_project_byte_for_byte() {
+    let root = TempRoot::new("adopt-in-place");
+    seed_unadopted(&root);
+    commit_all(&root);
+    let before = project_snapshot(&root);
+    adopt(&root.dir, &[Tool::Claude]).unwrap();
+    assert!(root.exists("openspec") && !root.exists("speclink"));
+    for (rel, bytes) in before.iter().filter(|(rel, _)| rel.starts_with("openspec/") && !rel.ends_with('/')) {
+        assert_eq!(std::fs::read(root.at(rel)).unwrap(), *bytes, "{rel}");
+    }
+    let app = crate::config::AppConfig::load(&root.at(".speclink.yaml")).unwrap();
+    assert_eq!(app.spec_dir.as_deref(), Some("openspec"));
+    assert!(root.exists(".claude/skills/speclink-propose/SKILL.md"));
+    assert!(!root.exists("CLAUDE.md"));
+}
+
+/// Spec Scenario「骨架缺件補齊」：缺 specs/ 與 config.yaml 時，匯入後在 speclink/ 補齊目錄與範本。
 #[test]
 fn adopt_backfills_missing_skeleton() {
     let root = TempRoot::new("adopt-skeleton");
@@ -359,9 +616,41 @@ fn adopt_backfills_missing_skeleton() {
 
     adopt(&root.dir, &[Tool::Claude]).expect("adopt succeeds");
 
+    assert!(!root.exists("speclink"));
     assert!(root.at("openspec/specs").is_dir());
     assert!(root.at("openspec/changes/archive").is_dir());
     assert_eq!(root.read("openspec/config.yaml"), WORKFLOW_CONFIG_TEMPLATE);
+}
+
+/// Spec Scenario「有未提交修改時拒絕匯入」：單行錯誤、零寫入；另有 worktree 時同樣拒絕。
+#[test]
+fn adopt_preserves_uncommitted_work_and_existing_worktrees() {
+    let root = TempRoot::new("adopt-dirty");
+    seed_unadopted(&root);
+    commit_all(&root);
+    root.write("openspec/changes/add-auth/proposal.md", "## Why\n改到一半。\n");
+    adopt(&root.dir, &[Tool::Claude]).unwrap();
+    assert_eq!(root.read("openspec/changes/add-auth/proposal.md"), "## Why\n改到一半。\n");
+    assert!(!root.exists("speclink"));
+    let clean = TempRoot::new("adopt-worktree");
+    seed_unadopted(&clean);
+    commit_all(&clean);
+    git(&clean, &["worktree", "add", "-q", clean.at("wt").to_str().unwrap(), "-b", "side"]);
+    adopt(&clean.dir, &[Tool::Claude]).unwrap();
+    assert!(clean.exists("openspec") && !clean.exists("speclink"));
+    assert!(clean.exists("wt/openspec/changes/add-auth/proposal.md"));
+}
+
+#[test]
+fn adopt_fills_the_folder_the_project_actually_uses() {
+    let root = TempRoot::new("adopt-speclink-only");
+    root.write("speclink/changes/add-auth/proposal.md", "## Why\n既有變更。\n");
+
+    adopt(&root.dir, &[Tool::Claude]).expect("adopt succeeds");
+
+    assert!(root.at("speclink/specs").is_dir());
+    assert!(root.at("speclink/config.yaml").is_file());
+    assert!(!root.at("openspec").exists(), "no second spec folder");
 }
 
 /// Spec Scenario「工作資料夾納入版控忽略」：.gitignore 缺席時建立並涵蓋 `.speclink/`。
@@ -1276,6 +1565,146 @@ fn probe_with_an_empty_tools_list_reports_current_and_writes_nothing() {
     assert_eq!(snapshot(&root), before, "探測不得寫入任何檔案");
 }
 
+// --- 探測回報遷移狀態（desktop-spec-dir-migration D1；需求「技能檔提示承載規格資料夾遷移」）---
+
+fn git(root: &TempRoot, args: &[&str]) {
+    let ok = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root.dir)
+        .args(["-c", "user.name=T", "-c", "user.email=t@example.com"])
+        .args(args)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    assert!(ok, "git {args:?} failed");
+}
+
+fn commit_all(root: &TempRoot) {
+    git(root, &["init", "-q"]);
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-qm", "init"]);
+}
+
+/// 舊佈局專案：`.speclink.yaml` 沒有 spec_dir、規格在 openspec/，兩個變更資料檔
+///（一個作用中、一個已封存），技能檔為現版。
+fn legacy_workspace(tag: &str) -> TempRoot {
+    let root = TempRoot::new(tag);
+    init(&root.dir, &[Tool::Claude], false, "openspec").unwrap();
+    root.write(".speclink.yaml", "tools: [claude]\n");
+    root.write("openspec/changes/demo/.openspec.yaml", "schema: spec-driven\n");
+    root.write("openspec/changes/archive/2026-01-01-done/.openspec.yaml", "schema: spec-driven\n");
+    root
+}
+
+fn deferred(reason: crate::migrate::DeferCode, worktrees: Vec<String>) -> crate::migrate::MigrationProbe {
+    crate::migrate::MigrationProbe::Deferred { folder: crate::migrate::SpecFolder::Openspec, reason, worktrees }
+}
+
+#[test]
+fn probe_keeps_openspec_in_place_when_the_skills_are_current() {
+    // Fork 會在 update 補明確預設，不提示搬走 openspec。
+    let root = legacy_workspace("probe-migration-pending");
+    commit_all(&root);
+    let before = project_snapshot(&root);
+
+    let probe = probe_assets(&root.dir);
+    assert_eq!(probe.status, AssetStatus::Current, "{probe:?}");
+    assert_eq!(probe.migration, crate::migrate::MigrationProbe::None, "{probe:?}");
+    // Scenario「app 升版不在背景遷移」：探測只讀，openspec/ 原封不動。
+    assert_eq!(project_snapshot(&root), before, "探測不得移動或寫入任何檔案");
+    assert!(root.exists("openspec/changes/demo/.openspec.yaml"));
+}
+
+#[test]
+fn probe_reports_stale_skills_without_moving_openspec() {
+    let root = legacy_workspace("probe-migration-stale");
+    set_skill_version(&root, Tool::Claude, "v0.9.0");
+
+    let probe = probe_assets(&root.dir);
+    assert_eq!(probe.status, AssetStatus::Stale, "{probe:?}");
+    assert_eq!(probe.migration, crate::migrate::MigrationProbe::None, "{probe:?}");
+}
+
+#[test]
+fn probe_keeps_openspec_in_place_with_other_worktrees() {
+    // 原地補設定不搬資料夾，主 checkout 與 linked worktree 都不需要搬移。
+    let root = legacy_workspace("probe-migration-worktrees");
+    commit_all(&root);
+    let wt = root.at("wt");
+    git(&root, &["worktree", "add", "-q", wt.to_str().unwrap(), "-b", "side"]);
+    let listed: Vec<String> =
+        crate::testkit::listed_worktrees(&root.dir).iter().map(|p| p.display().to_string()).collect();
+    assert_eq!(listed.len(), 1);
+
+    assert_eq!(probe_assets(&root.dir).migration, crate::migrate::MigrationProbe::None);
+    assert_eq!(probe_assets(&wt).migration, crate::migrate::MigrationProbe::None);
+}
+
+#[test]
+fn probe_keeps_openspec_in_place_with_uncommitted_changes() {
+    let root = legacy_workspace("probe-migration-dirty");
+    commit_all(&root);
+    root.write("openspec/changes/demo/tasks.md", "- [ ] 1.1 x\n");
+
+    assert_eq!(probe_assets(&root.dir).migration, crate::migrate::MigrationProbe::None);
+}
+
+#[test]
+fn probe_reports_no_migration_for_the_new_layout_an_explicit_spec_dir_or_remote_mode() {
+    let fresh = TempRoot::new("probe-migration-new-layout");
+    init(&fresh.dir, &[Tool::Claude], false, DEFAULT_SPEC_DIR).unwrap();
+    assert_eq!(probe_assets(&fresh.dir).migration, crate::migrate::MigrationProbe::None, "new layout");
+
+    // init 以非預設資料夾初始化會寫入 `spec_dir: openspec`。
+    let explicit = TempRoot::new("probe-migration-explicit");
+    init(&explicit.dir, &[Tool::Claude], false, "openspec").unwrap();
+    explicit.write("openspec/changes/demo/.openspec.yaml", "schema: spec-driven\n");
+    assert_eq!(probe_assets(&explicit.dir).migration, crate::migrate::MigrationProbe::None, "explicit spec_dir");
+
+    let remote = TempRoot::new("probe-migration-remote");
+    seed_remote_workspace(&remote, &[Tool::Claude]);
+    remote.write("openspec/changes/demo/.openspec.yaml", "schema: spec-driven\n");
+    assert_eq!(probe_assets(&remote.dir).migration, crate::migrate::MigrationProbe::None, "remote");
+}
+
+#[test]
+fn sync_skills_regenerates_without_moving_the_spec_folder() {
+    // spec「技能足跡同步不遷移規格資料夾」（desktop-spec-dir-migration D6）：worktree 政策
+    // 切換的技能同步不遷移；降級守門照舊。
+    let root = legacy_workspace("sync-skills-no-migration");
+    commit_all(&root);
+    std::fs::remove_dir_all(root.at(".claude/skills/speclink-propose")).unwrap();
+
+    let outcome = sync_skills(&root.dir).expect("sync succeeds");
+    assert_eq!(outcome.migration, crate::migrate::MigrationPlan::Nothing);
+    assert!(root.exists("openspec/changes/demo/.openspec.yaml"), "openspec/ 原封不動");
+    assert!(!root.exists("speclink"));
+    assert!(root.exists(".claude/skills/speclink-propose/SKILL.md"), "技能檔照常再生");
+
+    set_skill_version(&root, Tool::Claude, &ahead_of_current());
+    assert!(sync_skills(&root.dir).is_err(), "工作區領先引擎時照樣拒絕");
+}
+
+#[test]
+fn probe_serializes_the_migration_in_camel_case() {
+    let root = legacy_workspace("probe-migration-json");
+    let value = serde_json::to_value(probe_assets(&root.dir)).unwrap();
+    assert_eq!(
+        value["migration"],
+        serde_json::json!({ "state": "none" })
+    );
+
+    let value = serde_json::to_value(deferred(crate::migrate::DeferCode::OtherWorktrees, vec!["/w".into()])).unwrap();
+    assert_eq!(
+        value,
+        serde_json::json!({ "state": "deferred", "folder": "openspec", "reason": "otherWorktrees", "worktrees": ["/w"] })
+    );
+    assert_eq!(
+        serde_json::to_value(crate::migrate::MigrationProbe::None).unwrap(),
+        serde_json::json!({ "state": "none" })
+    );
+}
+
 // --- worktree 政策閘：生成集合隨 openspec/config.yaml 的 worktree 檔值 ---
 // Spec requirement「worktree 技能的政策條件式生成」。
 
@@ -1339,9 +1768,10 @@ fn the_gate_applies_to_codex_and_custom_descriptors_alike() {
     // 需求句「此過濾對 claude、codex 與自訂描述子工具一視同仁」。
     let root = TempRoot::new("gate-all-targets");
     init(&root.dir, &[Tool::Claude, Tool::Codex], true, "openspec").unwrap();
+    // init 以非預設資料夾初始化時會寫明 spec_dir；改寫時保留它，免得變成待遷移的舊佈局。
     root.write(
         ".speclink.yaml",
-        &format!("tools:\n  - claude\n  - codex\n{CUSTOM_DESCRIPTOR}"),
+        &format!("spec_dir: openspec\ntools:\n  - claude\n  - codex\n{CUSTOM_DESCRIPTOR}"),
     );
 
     update(&root.dir, false).unwrap();

@@ -102,6 +102,17 @@ Update an existing Speclink change — from a plan file or conversation context.
 
 5. **Update artifacts**
 
+   **Check the schema first.** Read `schemaName` from `speclink status --change "<name>" --json`. When it is `no-spec-change` and the new requirement adds, modifies or removes behavior a canonical spec promises, switch the change back before you touch any artifact:
+
+   ```bash
+   speclink change schema "<name>" spec-driven
+   ```
+
+   - The switch succeeds → add a Capabilities section to the proposal, write the delta spec with `speclink new artifact spec <capability> --change "<name>"`, then update design and tasks for the new requirement. The summary says that the schema was switched, and why.
+   - The switch is refused (for example, the change has an open verify ticket) → report the stderr reason, with the `speclink verify discard <name>` hint it carries, and stop. Do not write a delta around the refusal.
+
+   A new requirement that changes no promised behavior keeps the schema as it is. Never switch a `spec-driven` change to `no-spec-change` on your own: do that only when the user asks for it and the change has no delta spec.
+
    For each artifact, get instructions first:
 
    ```bash
@@ -110,7 +121,7 @@ Update an existing Speclink change — from a plan file or conversation context.
 
    Use the `template` from instructions as the output structure. Apply `context` and `rules` as constraints but do not copy them into the file.
 
-   The instructions JSON includes `locale` — the language to write artifacts in. If present, write the artifact content in that language. Spec files (specs/\*/\*.md) default to the operating-system language of the machine running Speclink — unless the project sets `spec_locale` in `openspec/config.yaml` (a locale code, or `auto` to follow `locale`), in which case write spec prose in that language. Structural markers (`### Requirement:`, `#### Scenario:`, `- **WHEN**`/`- **THEN**`) and normative keywords (SHALL/MUST) always stay in English.
+   The instructions JSON includes `locale` — the language to write artifacts in. If present, write the artifact content in that language. Spec files (specs/\*/\*.md) default to the operating-system language of the machine running Speclink — unless the project sets `spec_locale` in `{{SPEC_DIR}}config.yaml` (a locale code, or `auto` to follow `locale`), in which case write spec prose in that language. Structural markers (`### Requirement:`, `#### Scenario:`, `- **WHEN**`/`- **THEN**`) and normative keywords (SHALL/MUST) always stay in English.
 
    **Plan-to-Artifact Mapping** (when using a plan file):
 

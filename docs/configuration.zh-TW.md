@@ -134,8 +134,8 @@ cat CONTEXT.md | speclink workflow-config context --stdin
 在剛 `speclink init` 完的專案跑第一行，**預期輸出**：
 
 ```text
---- a/openspec/config.yaml
-+++ b/openspec/config.yaml
+--- a/speclink/config.yaml
++++ b/speclink/config.yaml
 @@ -1,5 +1,7 @@
  schema: spec-driven
 
@@ -231,7 +231,7 @@ tools:
 
 | 鍵 | 值 | 預設 | 用途 |
 | --- | --- | --- | --- |
-| `spec_dir` | 相對路徑 | `openspec` | 規格目錄的位置，相對於專案根目錄 |
+| `spec_dir` | 相對路徑 | `openspec` | 本 Fork 的 init 預設明寫此值。舊專案只有 openspec/ 且未設定時，update 先補寫此鍵，保留 tools、註解與未知鍵，再原地更新技能。桌面 app 的專案設定可在明確確認後，單向把 openspec/ 轉成 speclink/；自訂目錄及遠端專案不提供這個操作。明確值及已使用 speclink/ 的專案維持原路徑 |
 | `tools` | 清單 | 無 | 要產生技能檔的 AI 工具：`claude`、`codex`、`copilot`、`antigravity` 或自訂工具描述子 |
 | `remote.url` | 網址 | 無 | 遠端專案的連線網址（project-scoped URL） |
 | `remote.repo` | 名稱 | 無 | 這個 repo 在遠端專案裡的註冊名稱；只有一個 repo 的專案可以省略 |

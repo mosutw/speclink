@@ -190,7 +190,7 @@ pub fn prepare_archive_checks(
     store: &dyn Store,
     change: &str,
     actor: Option<&str>,
-    date: &str,
+    _date: &str,
     stamp: &str,
     proof: Option<&AcceptanceProof>,
 ) -> Result<ArchiveChecksPlan> {
@@ -231,13 +231,12 @@ pub fn prepare_archive_checks(
     let original_meta = store.read_change_meta(change);
     let mut archived_meta = original_meta.clone();
     if let Some(meta) = &mut archived_meta {
-        if !meta.ends_with('\n') {
-            meta.push('\n');
-        }
+        let mut lines = crate::keylines::KeyLines::whole(meta);
         if let Some(actor) = actor {
-            meta.push_str(&format!("archived_by: {actor}\n"));
+            lines.set("archived_by", &crate::util::yaml_scalar(actor))?;
         }
-        meta.push_str(&format!("archived_at: {date}\n"));
+        lines.set("archived_at", stamp)?;
+        *meta = lines.text();
     }
     let policy = config.security();
     let receipt = if policy.enabled && policy.required_for_acceptance {

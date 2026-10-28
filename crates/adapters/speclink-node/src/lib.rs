@@ -246,11 +246,19 @@ pub fn engine_from_fs(
             "createEngine: store.root must be a non-empty path",
         ));
     }
+    let root = PathBuf::from(root);
+    let spec_dir = match spec_dir {
+        Some(dir) => dir,
+        None => {
+            // The same resolution the CLI runs: an explicit `spec_dir` first.
+            let explicit = core::config::AppConfig::load(&root.join(".speclink.yaml"))
+                .map_err(|e| Error::from_reason(format!("createEngine: {e}")))?
+                .spec_dir;
+            core::workspace::resolve_spec_dir(&root, explicit.as_deref()).0
+        }
+    };
     Ok(Engine {
-        backend: Arc::new(Backend::Fs {
-            root: PathBuf::from(root),
-            spec_dir: spec_dir.unwrap_or_else(|| "openspec".to_string()),
-        }),
+        backend: Arc::new(Backend::Fs { root, spec_dir }),
         actor: normalize_actor(actor),
         stamp_lock: Arc::new(std::sync::Mutex::new(())),
     })
@@ -338,6 +346,7 @@ fn run_dispatch(
         "status" => verb_status(backend, actor, rest),
         "new" => verb_new(backend, actor, rest, stdin),
         "claim" => verb_claim(backend, actor, rest),
+        "change" => verb_change_schema(backend, actor, rest),
         "review" => verb_station(backend, actor, stamp_lock, StationKind::Review, rest, stdin),
         "security" => verb_security(backend,actor,rest,stdin),
         "verify" => verb_station(backend, actor, stamp_lock, StationKind::Verify, rest, stdin),
@@ -346,6 +355,24 @@ fn run_dispatch(
             format!("Unknown or unsupported verb '{verb}'"),
         )),
     }
+}
+
+/// `change schema <name> <schema>` delegates every write guard to the runtime.
+fn verb_change_schema(backend: &Backend, actor: Option<&str>, args: &[String]) -> DispatchResult {
+    let a = parse_argv(args, &[])?;
+    let ["schema", name, schema] = a.positionals.as_slice() else {
+        return Err(DispatchError::new("invalid_argv", "expected change schema <name> <schema>"));
+    };
+    if a.flags.iter().any(|flag| !matches!(*flag, "json" | "no-color")) {
+        return Err(DispatchError::new("invalid_argv", "change schema accepts only --json and --no-color"));
+    }
+    let outcome = run_engine(backend, actor, core::command::Command::ChangeSchema {
+        name: (*name).to_string(), schema: (*schema).to_string(),
+    })?;
+    let core::command::CommandOutcome::ChangeSchema(o) = outcome else {
+        unreachable!("change schema yields a schema outcome");
+    };
+    Ok(serde_json::json!({ "change": o.change, "schema": o.schema, "previous": o.previous, "changed": o.changed }))
 }
 
 /// `list [--specs] [--changes] [--sort <key>]` — always the `--json` shape.

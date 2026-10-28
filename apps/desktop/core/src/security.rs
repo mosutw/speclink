@@ -483,7 +483,7 @@ fn resolve_review(
             }
             ReviewTarget::local(
                 reader.root(),
-                config.spec_dir.as_deref().unwrap_or("openspec"),
+                &speclink_core::workspace::resolve_spec_dir(reader.root(), config.spec_dir.as_deref()).0,
                 change,
             )?
         }
@@ -734,7 +734,7 @@ mod tests {
     }
     #[test]
     fn security_report_export_never_overwrites_or_follows_links() {
-        let device = crate::testfixture::FixtureRoot::new("security-export");
+        let device = crate::testfixture::FixtureRoot::legacy("security-export");
         let path = device.root().join("report.json");
         speclink_fs::security::reports::export_to_path(&path, b"redacted").unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"redacted");
@@ -799,8 +799,8 @@ mod tests {
     #[test]
     fn security_review_jobs_resolve_root_and_save_report_without_quality_tickets() {
         let _guard=REVIEW_TEST_LOCK.lock().unwrap();
-        let project = crate::testfixture::FixtureRoot::new("security-review-project");
-        let device = crate::testfixture::FixtureRoot::new("security-review-device");
+        let project = crate::testfixture::FixtureRoot::legacy("security-review-project");
+        let device = crate::testfixture::FixtureRoot::legacy("security-review-device");
         let input = ReviewTargetInput::Local {
             root: project.root().to_path_buf(),
         };
@@ -853,10 +853,10 @@ mod proposal_tests {
         let input=ReviewTargetInput::Local{root:project.root().into()};let jobs=SecurityJobs::default();
         let ticket=jobs.start_review_at(device.root().into(),input.clone(),Some("demo".into()),|_|{},|_|{}).unwrap();
         let result=jobs.wait(&ticket.job_id,&ticket.project_key).unwrap();let id=result["reportId"].as_str().unwrap();
-        let store=speclink_fs::FsStore::new(project.root(),"openspec");
+        let store=speclink_fs::FsStore::new(project.root(),"speclink");
         assert!(speclink_core::security::report::read_change_report(&store,"demo",id).unwrap().is_some(),"a change report belongs in its proposal");
         assert!(read_report_at(device.root(),id).is_err(),"device cache is not the local proposal authority");
-        let store=speclink_fs::FsStore::new(other.root(),"openspec");assert!(speclink_core::security::report::read_change_report(&store,"demo",id).unwrap().is_none());
+        let store=speclink_fs::FsStore::new(other.root(),"speclink");assert!(speclink_core::security::report::read_change_report(&store,"demo",id).unwrap().is_none());
         assert!(jobs.wait("unknown",&ticket.project_key).is_err());
     }
 }
@@ -941,8 +941,8 @@ mod history_tests {
     #[test]
     fn desktop_completed_history_survives_stamps_and_archive_names() {
         use speclink_core::{station,store::Store};
-        let root=crate::testfixture::FixtureRoot::new("history-query");root.add_change("demo","schema: spec-driven\n");root.write("openspec/changes/demo/tasks.md","- [x] 1.1 Done\n");root.write("app.ts","const value=1;\n");
-        let store=speclink_fs::FsStore::new(root.root(),"openspec");
+        let root=crate::testfixture::FixtureRoot::new("history-query");root.add_change("demo","schema: spec-driven\n");root.write("speclink/changes/demo/tasks.md","- [x] 1.1 Done\n");root.write("app.ts","const value=1;\n");
+        let store=speclink_fs::FsStore::new(root.root(),"speclink");
         station::add_round(&station::REVIEW,&store,"demo","**Scope**: app.ts\n").unwrap();
         station::stamp(&station::REVIEW,&store,"demo",false,Some("Tester"),None,&|p|std::fs::read(root.root().join(p)).ok(),&|p|root.root().join(p).is_file()).unwrap();
         let list=crate::query::check_history_at(root.root(),"demo","review",None).unwrap();let value=serde_json::to_value(list).unwrap();let id=value["records"][0]["recordId"].as_str().unwrap();

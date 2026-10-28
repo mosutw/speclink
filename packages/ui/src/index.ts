@@ -107,7 +107,7 @@ export type {
   ReviewList,
   ReviewRules,
 } from "./adapter";
-export { RevertBlockedError, toRevertError, emptyManualIndex, REVIEW_LISTS } from "./adapter";
+export { RevertBlockedError, toRevertError, emptyManualIndex, REVIEW_LISTS, DEFAULT_SPEC_DIR } from "./adapter";
 export {
   RevertBlockedDialog,
   type RevertBlockedInfo,

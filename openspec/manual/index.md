@@ -4,17 +4,17 @@ section: 開始使用
 order: 10
 keywords: [首頁, 入門, 角色, 導覽, SDD, 手冊]
 sources: []
-generated: 2026-10-23T14:19:42+08:00
+generated: 2026-10-28T20:20:00+08:00
 ---
 
 # Speclink 操作手冊
 
-Speclink 是一套 SDD（規格驅動開發，Spec-Driven Development）引擎：PM、PO、RD 與 AI agent 共用同一套「變更、產物、任務、驗證、封存」的語意，資料可以放在本機的 Local Repo，也可以放在團隊共用的 Remote Store。
+Speclink 是一套可驗收的 SDD（規格驅動開發，Spec-Driven Development）引擎：每個變更先寫一小份規格、交給 AI agent 實作，封存前由審查與驗證兩道品質關卡檢查並留下證據。一個人用本機的 Local Repo 就夠；團隊要共用規格時，再接上 Remote Store，讓 PM、PO、RD 與 AI agent 共用同一套「變更、產物、任務、驗證、封存」的語意。
 
 ## 三個核心觀念
 
 1. **變更（change）與產物**：每一件要做的事都是一個變更。變更底下有提案、設計、任務清單與規格差異（delta）這些產物。任務勾完、品質關卡蓋章後，變更就能封存。
-2. **正式規格與封存**：`openspec/specs/` 是系統現況的唯一真相。封存把變更的規格差異併進正式規格，之後所有人讀到的都是併入後的版本。
+2. **正式規格與封存**：規格資料夾裡的 `specs/`（預設 `openspec/specs/`）是系統現況的唯一真相。封存把變更的規格差異併進正式規格，之後所有人讀到的都是併入後的版本。
 3. **本地與 remote 兩條路**：本地模式把一切存在你的 repo 裡，純 Markdown 與 YAML。remote 模式把正式規格放在 server 上的 Store，本機只有唯讀投影，團隊成員用帳號與 membership 共用同一份資料。
 
 ## 依角色選入口
@@ -23,16 +23,17 @@ Speclink 是一套 SDD（規格驅動開發，Spec-Driven Development）引擎�
 
 1. [安裝 CLI 與桌面 app](install.md)
 2. [建立工作區與指令檔](init-workspace.md)
-3. [認識資料：變更、討論與規格](data-layout.md)
-4. [工作流總覽：站別與交棒](workflow-overview.md)
-5. 專案已有程式碼、還沒有規格：先做[基準盤點](baseline.md)
-6. 照順序走：[提案](propose.md) → [實作](apply.md) → [品質關卡](quality-stations.md) → [封存](archive.md)
+3. 舊專案或 OpenSpec 專案：[規格資料夾與舊佈局遷移](spec-folder.md)
+4. [認識資料：變更、討論與規格](data-layout.md)
+5. [工作流總覽：站別與交棒](workflow-overview.md)
+6. 專案已有程式碼、還沒有規格：先做[基準盤點](baseline.md)
+7. 照順序走：[提案](propose.md) → [實作](apply.md) → [品質關卡](quality-stations.md) → [封存](archive.md)
 
 ### 用 AI agent 跑 SDD 的開發者（RD）
 
 - 既有專案第一次採用：[基準盤點](baseline.md)
 - 需求還不清楚：[討論](discuss.md)
-- 建立與實作變更：[提案](propose.md)、[分析：交叉檢查變更的產物](analyze.md)、[實作](apply.md)、[執行順序：plan 與依賴](plan.md)
+- 建立與實作變更：[提案](propose.md)（含要不要改規格的判斷）、[分析：交叉檢查變更的產物](analyze.md)、[實作](apply.md)、[執行順序：plan 與依賴](plan.md)
 - 放了一陣子再回來、或需求中途變了：[續作與需求變更](drift-ingest.md)
 - 交付前的把關：[品質關卡總覽](quality-stations.md)、[審查站](review.md)、[驗證站](verify.md)、[封存](archive.md)
 - 初步安全審查：[設定政策](policy-config.md) → [安裝資料](security-data.md) → [執行審查](security-review.md) → [閱讀報告](security-report.md)
