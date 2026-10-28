@@ -32,9 +32,10 @@
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx`、`integrations/claude-code/speclink-skills/hooks/groups.ts`、`integrations/claude-code/speclink-skills/hooks/skills.ts`，以及 `integrations/claude-code/speclink-skills/tests/register.test.tsx` 的技能分頁、合併按鈕與 clear／resume 測試；無技能與問卷情境由已讀取程式確認。
 
+---
 ### Requirement: 點技能只填入指令並保留參數
 
-點擊技能 SHALL 將對應斜線指令放在輸入框最前方，取代原先最前方的斜線指令並保留後方文字；SHALL 不自動送出或執行指令。`archive+commit` SHALL 填入 `/speclink-archive + /speclink-commit`，更換技能時 SHALL 將兩個指令一起取代。此操作 SHALL 不建立或修改 proposal.md、delta spec、.openspec.yaml、任務 evidence 或 snapshots；這些效果屬之後送出指令的工作流程。
+點擊技能 SHALL 將對應斜線指令放在輸入框最前方，取代原先最前方的斜線指令並保留後方文字；SHALL 不自動送出或執行指令。`archive+commit` SHALL 填入 `/speclink-archive + /speclink-commit`，更換技能時 SHALL 將兩個指令一起取代。此操作 SHALL 不建立或修改 proposal.md、delta spec、.meta.yaml、任務 evidence 或 snapshots；這些效果屬之後送出指令的工作流程。
 
 #### Scenario: 保留原有參數
 
@@ -48,6 +49,13 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx`、`integ
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/skills.ts`、`integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的指令填入、合併指令與技能列互動測試。
 
+
+<!-- @trace
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
+-->
+
+---
 ### Requirement: 技能說明與窄視窗呈現
 
 寬視窗的技能列 SHALL 在滑鼠移到技能時顯示該技能說明，平常隱藏說明；合併技能 SHALL 以 `/speclink-archive → /speclink-commit` 作為說明。分頁與面板按鈕放不下一列時，面板按鈕 SHALL 移到 speclink 標題列，且 SHALL 不顯示技能說明。
@@ -64,6 +72,7 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/skills.ts`、`integrat
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的窄視窗與技能說明測試。滑鼠顯示條件由已讀取程式確認，測試確認說明內容存在。
 
+---
 ### Requirement: 介面語言由 mod 與 Claude Code 設定決定
 
 mod 的 language 選項 SHALL 支援 `auto`、`en`、`zh-TW`，預設為 auto。明選 en 或 zh-TW SHALL 優先於 Claude Code 設定；auto SHALL 在 Claude Code 語言文字含「中文」、chinese 或 zh（英文不分大小寫）時選繁中，其餘含未設定時選英文。工作流 locale 的 `tw`／`ja`／`en` SHALL 不作為此介面的語言來源；此介面只有繁中與英文，日文設定在 auto 下落到英文，中文弱偵測依上述文字條件。

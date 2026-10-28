@@ -4,7 +4,7 @@ section: 開始使用
 order: 25
 keywords: [規格資料夾, openspec, speclink, spec_dir, OpenSpec, .meta.yaml, speclink update]
 sources: [spec-dir-migration, workspace-tools, user-documentation]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 規格資料夾與舊佈局遷移

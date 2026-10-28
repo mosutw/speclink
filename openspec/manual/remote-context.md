@@ -4,7 +4,7 @@ section: Remote 模式
 order: 490
 keywords: [投影, context, refresh, stale, 唯讀, gitignore]
 sources: [context-projection]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 # remote 模式的規格投影
 

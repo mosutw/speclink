@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 125
 keywords: [plan, 執行順序, 波次, 依賴, 前置, depends, 阻擋, 並行, 依賴成環, change depends, 封存順序, 同名重疊, 衝突, change rank, 插隊, strict-overlap]
 sources: [change-plan]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 執行順序：plan 與依賴

@@ -10,6 +10,11 @@ function item(name: string, fields: Partial<ArchivedItem>): ArchivedItem {
 }
 
 describe("median and P90", () => {
+  it("returns 0 for empty arrays", () => {
+    expect(median([])).toBe(0);
+    expect(p90([])).toBe(0);
+  });
+
   it("takes the middle value of an odd count and the mean of the two middle values of an even count", () => {
     expect(median([400, 100, 200])).toBe(200);
     expect(median([1, 0])).toBe(0.5);

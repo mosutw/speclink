@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 160
 keywords: [驗證, verify, 規格符合, 完整, 正確, 一致, 驗證門, 子代理, 證據順序, 首輪, 複驗]
 sources: ["verify-skill", "verify-station"]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 驗證站

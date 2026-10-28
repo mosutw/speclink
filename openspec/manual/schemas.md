@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 220
 keywords: [schema, 產出流程, spec-driven, no-spec-change, 不改規格, change schema, schema init, schema validate]
 sources: [workflow-schemas]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 # 產出流程 schema 管理
 

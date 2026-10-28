@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 210
 keywords: [config.yaml, 政策, locale, tdd, audit, worktree, 專案說明, 產出規則, 審查規則, review, 確認表, 提醒分流, dry-run, 對話語言]
 sources: ["skill-authoring#技能共用的對話語言段落", "workflow-config", "config-skill#技能規定固定輸入來源與四條內容判準", "config-skill#技能規定 diff 先行與收斂驗收", "config-skill#技能規定政策語系欄位寫入代碼", "config-skill#技能規定任務驗證測試範圍的第五問", "config-skill#技能規定審查規則的第六問與規則接收", "config-skill#技能規定政策欄位一次確認現值", "config-skill#技能規定提醒的分流"]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 # 工作流政策與設定
 

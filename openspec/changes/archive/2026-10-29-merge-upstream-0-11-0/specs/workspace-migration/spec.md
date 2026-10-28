@@ -31,5 +31,5 @@
 
 #### Scenario: 備份目錄依實際資料夾命名
 
-- **WHEN** 規格資料夾為 openspec/ 的專案在 2026-11-02 遷移成功，資料夾內已有 speclink.migrated-2026-11-02
+- **WHEN** 規格資料夾為 speclink/ 的專案在 2026-11-02 遷移成功，資料夾內已有 speclink.migrated-2026-11-02
 - **THEN** 本機規格資料夾改名為 speclink.migrated-2026-11-02-2

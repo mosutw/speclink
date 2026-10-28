@@ -4,7 +4,7 @@ section: 桌面 app
 order: 340
 keywords: [專案, 圖示列, 新增專案, 最近開啟, 初始化, 啟用, 專案動作選單, 專案設定, 應用程式設定, 專案說明, 產出規則, 審查規則, 產出流程, config.yaml, 顯示語言, 外觀, 鍵盤快捷鍵]
 sources: ["desktop-config", "workspace-chooser#新增專案的來源分流", "workspace-chooser#最近開啟清單", "desktop-app#專案層檔案系統動作", "desktop-app#設定頁的鍵盤快捷鍵卡", "desktop-app#裝置層專案圖示底色", "desktop-app#設定頁點專案返回看板", "desktop-app#左側專案排序與裝置持久化", "ui-copy-vocabulary#繁體中文採台灣用語"]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 專案、新增專案與設定頁

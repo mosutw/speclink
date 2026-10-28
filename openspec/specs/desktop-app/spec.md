@@ -739,22 +739,22 @@ updated: 2026-10-10T19:39:25+08:00
 #### Scenario: 勾選首任務蓋章並移欄
 
 - **WHEN** 使用者於看板勾選某 meta 無 started_* 的 change 的第一項任務
-- **THEN** tasks.md 該任務成 [x]，.openspec.yaml 新增 started_at（git 身分可得時含 started_by），看板刷新後卡片移入「進行中」欄且詳情頁顯示開工列
+- **THEN** tasks.md 該任務成 [x]，.meta.yaml 新增 started_at（git 身分可得時含 started_by），看板刷新後卡片移入「進行中」欄且詳情頁顯示開工列
 
 #### Scenario: 取消勾選不動 meta 與 touched
 
 - **WHEN** 使用者取消勾選一項已完成任務
-- **THEN** 僅 tasks.md 該行標記變為 [ ]；.openspec.yaml 與 touched 記錄逐字元不變
+- **THEN** 僅 tasks.md 該行標記變為 [ ]；.meta.yaml 與 touched 記錄逐字元不變
 
 #### Scenario: 拖曳排序不觸發完成語意
 
 - **WHEN** 使用者拖曳任務改變順序（含跨群組重編號）
-- **THEN** 僅 tasks.md 變動；.openspec.yaml 與 touched 記錄逐字元不變
+- **THEN** 僅 tasks.md 變動；.meta.yaml 與 touched 記錄逐字元不變
 
 
 <!-- @trace
-source: desktop-detail-page
-updated: 2026-10-10T15:55:28+08:00
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->
 
 ---
@@ -3697,7 +3697,7 @@ change 詳情頁 SHALL 於左欄「文件」節點「規格」之後提供「排
 #### Scenario: 新增前置寫回
 
 - **WHEN** 於排程文件的下拉選單選擇 add-c
-- **THEN** 該變更 .openspec.yaml 的 depends_on 含 add-c，前置卡出現 add-c，看板順序刷新
+- **THEN** 該變更 .meta.yaml 的 depends_on 含 add-c，前置卡出現 add-c，看板順序刷新
 
 #### Scenario: 引擎拒絕新增
 
@@ -3771,8 +3771,8 @@ change 詳情頁 SHALL 於左欄「文件」節點「規格」之後提供「排
 
 
 <!-- @trace
-source: desktop-change-doc-views
-updated: 2026-10-12T16:18:33+08:00
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->
 
 ---
@@ -4551,4 +4551,64 @@ Desktop SHALL 讓活動提案與已封存詳情品質關卡中的「已審查」
 <!-- @trace
 source: archived-quality-history-access
 updated: 2026-10-23T22:41:06+08:00
+-->
+
+---
+### Requirement: 已封存頁的流程成本摘要
+
+已封存頁 SHALL 在頁標題區與列表卡之間顯示「流程成本」摘要，以全部已封存變更（不含已封存討論，且不受頁內搜尋影響）的流程成本欄位計算，最多四項：
+
+- 文件行數：`docLines` 的中位數與 P90
+- 任務數：`tasksTotal` 的中位數
+- 建立到封存：`leadDays` 的中位數（天）；有 `leadHours` 樣本時，同一項另顯示 `leadHours` 的中位數（小時）
+- 品質關卡輪數：`reviewRounds` 與 `verifyRounds` 各自的中位數，分別標為審查與驗證
+
+每個數字 SHALL 標出樣本數，也就是帶有該欄位的封存變更筆數。樣本數為 0 的數字 SHALL NOT 顯示；一項內所有數字都沒有樣本時，該項 SHALL NOT 顯示；沒有任何封存變更帶 `docLines`、`leadDays`、`leadHours`、`reviewRounds` 或 `verifyRounds` 時（包含沒有任何封存變更，以及清單只帶 `tasksTotal`、不帶這些欄位的遠端工作區），整個摘要 SHALL NOT 顯示，即使任務數有樣本。中位數 SHALL 為由小到大排序後的中間值，筆數為偶數時取中間兩值的平均；P90 SHALL 為由小到大第 ⌈0.9 × n⌉ 個值。數字 SHALL 以最多一位小數顯示，整數不帶小數點。摘要文案 SHALL 跟隨 UI 語言：繁中為「流程成本」「文件行數」「任務數」「建立到封存」「品質關卡輪數」「審查」「驗證」「中位數」「P90」「天」「小時」「筆」；英文為 "Process cost"、"Doc lines"、"Tasks"、"Created to archived"、"Quality gate rounds"、"Review"、"Verify"、"median"、"P90"、"days"、"hours"、"changes"，數量為 1 時用單數形 "day"、"hour"、"change"。摘要 SHALL 為唯讀，SHALL NOT 提供任何寫入動作。
+
+#### Scenario: 顯示中位數、P90 與樣本數
+
+- **WHEN** 本機工作區有 3 筆封存變更，`docLines` 分別為 100、200、400，`tasksTotal` 分別為 4、6、9，`leadDays` 分別為 0、0、3
+- **THEN** 已封存頁的流程成本摘要顯示文件行數中位數 200、P90 400、3 筆，任務數中位數 6、3 筆，建立到封存中位數 0 天、3 筆
+
+#### Scenario: 偶數筆取中間兩值平均
+
+- **WHEN** 本機工作區有 2 筆封存變更，`leadDays` 分別為 0 與 1，`leadHours` 分別為 6 與 30.5
+- **THEN** 建立到封存顯示中位數 0.5 天、2 筆，以及中位數 18.3 小時、2 筆
+
+#### Scenario: 舊記錄沒有輪數時不顯示該項
+
+- **WHEN** 所有封存變更都沒有 `reviewRounds` 與 `verifyRounds`
+- **THEN** 流程成本摘要不顯示品質關卡輪數這一項，其他有樣本的項目照常顯示
+
+#### Scenario: 沒有資料時整個摘要不出現
+
+- **WHEN** 已封存頁沒有任何封存變更，或處於清單只帶 `tasksTotal`、不帶流程成本欄位的遠端工作區
+- **THEN** 頁標題區與列表卡之間沒有流程成本摘要，列表卡與分頁照常顯示
+
+#### Scenario: 搜尋不改變摘要數字
+
+- **WHEN** 使用者在已封存頁的搜尋框輸入只命中 1 筆封存變更的字串
+- **THEN** 列表只顯示命中的那一筆，流程成本摘要的數字與樣本數維持全部封存變更的計算結果
+
+<!-- @trace
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
+-->
+
+---
+### Requirement: 技能檔提示承載規格資料夾遷移
+
+桌面技能更新提示 SHALL 依共用路徑與遷移規劃結果顯示；明寫或待補 spec_dir: openspec 的專案更新 SHALL 不被描述為將搬到 speclink/。使用者觸發更新時 SHALL 經共用 update 流程先補預設，再決定遷移並同步技能；更新後 watcher、快取與開啟的文件以實際規格路徑繼續運作。確實會遷移的其他佈局沿用上游改名前說明及完成提示；失敗顯示原因，不能顯示成功。
+
+#### Scenario: 預設專案更新不中斷閱讀
+- **WHEN** 桌面開啟缺少 spec_dir、實際為 openspec/ 的專案並執行技能更新
+- **THEN** .speclink.yaml 補入 spec_dir: openspec，資料夾未搬移，提示不聲稱改名，原看板、文件與外部檔案變動仍可更新
+
+#### Scenario: 設定無法補值時顯示失敗
+- **WHEN** 更新前設定無法解析或補值失敗
+- **THEN** 畫面顯示失敗原因、不顯示更新完成，仍使用原專案與原資料夾
+
+<!-- @trace
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->

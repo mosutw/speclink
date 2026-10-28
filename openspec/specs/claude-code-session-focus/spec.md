@@ -32,6 +32,7 @@
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/focus.ts`、`integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的焦點辨識與工具呼叫測試。子代理排除由已讀取程式確認。
 
+---
 ### Requirement: 技能列與對話標題更新時機
 
 有焦點時，技能列 SHALL 顯示目前步驟及變更；送出訊息時 SHALL 將已知資訊組成對話標題 `步驟 · 變更`，僅一項已知時顯示該項。工具執行中辨識出新變更時 SHALL 立即更新技能列，對話標題 SHALL 等下次送出訊息再更新。沒有焦點時 SHALL 不新增焦點文字，也不改對話標題。
@@ -48,6 +49,7 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/focus.ts`、`integrati
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/focus.ts`、`integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的標題更新與無焦點測試。
 
+---
 ### Requirement: 從 worktree 與接回資訊恢復焦點
 
 對話尚無焦點時，若所在目錄為已知變更的 worktree 或其子目錄，SHALL 以該變更作為焦點；否則 SHALL 先從對話紀錄恢復最後步驟與變更，再嘗試辨識原標題。標題中的變更 SHALL 是現有變更，或是帶步驟及完成記號 `✓` 的已封存標題；其他自訂標題 SHALL 不當成變更。
@@ -69,6 +71,7 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/focus.ts`、`integrati
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/focus.ts`、`integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的 worktree、歷史紀錄與 resume 測試。
 
+---
 ### Requirement: clear 後只清除 mod 可辨識的舊標題
 
 clear 後 SHALL 不顯示舊焦點；若帶入的標題可辨識為 mod 工作焦點，SHALL 等下一次送出訊息、且沒有新焦點時將標題改回 `Claude Code`。不可辨識的自訂標題 SHALL 保留。clear 當下 SHALL 不回傳標題修改。
@@ -85,11 +88,12 @@ clear 後 SHALL 不顯示舊焦點；若帶入的標題可辨識為 mod 工作�
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx`、`integrations/claude-code/speclink-skills/hooks/focus.ts`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的 clear 測試。
 
+---
 ### Requirement: 依封存後清單標示完成
 
 主代理的 `speclink archive` 呼叫完成後 SHALL 重讀變更清單，以封存前已知名稱辨識目標；目標不再出現在新清單時 SHALL 於焦點顯示 `✓`，下次送出訊息時標題 SHALL 同樣帶 `✓`。清單讀取失敗 SHALL 視為沒有可用的已知變更；此顯示不是成功封存證據，亦 SHALL 不執行額外封存、認證或 revision 寫入。
 
-本能力 SHALL 不新增 CLI 子指令、旗標、stdin、exit code、stdout／stderr、JSON 輸出或檔案寫入；proposal.md、delta spec、.openspec.yaml、任務 evidence 與 snapshots 不因焦點更新而建立或修改。焦點步驟與變更名稱 SHALL 保留原指令文字，不隨工作流 `tw`／`ja`／`en` 或未設定值翻譯；其他介面文字依 claude-code-skill-bar 的中英選擇及中文弱偵測。`--no-color` 不控制焦點 UI。本基準 SHALL 記錄既有顯示與判定，不改變既有 CLI 人眼與 JSON 位元級輸出。
+本能力 SHALL 不新增 CLI 子指令、旗標、stdin、exit code、stdout／stderr、JSON 輸出或檔案寫入；proposal.md、delta spec、.meta.yaml、任務 evidence 與 snapshots 不因焦點更新而建立或修改。焦點步驟與變更名稱 SHALL 保留原指令文字，不隨工作流 `tw`／`ja`／`en` 或未設定值翻譯；其他介面文字依 claude-code-skill-bar 的中英選擇及中文弱偵測。`--no-color` 不控制焦點 UI。本基準 SHALL 記錄既有顯示與判定，不改變既有 CLI 人眼與 JSON 位元級輸出。
 
 #### Scenario: 目標從清單消失
 
@@ -102,3 +106,9 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx`、`integ
 - **THEN** 已知清單清空，目標被判為不在清單而顯示 `✓`，不能據此確認遠端封存成功
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx` 的清單失敗與封存後判定；`integrations/claude-code/speclink-skills/hooks/focus.ts` 的標題呈現；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的封存完成測試。清單失敗情境由已讀取程式確認，沒有宣稱已實跑遠端失敗情境。
+
+
+<!-- @trace
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
+-->

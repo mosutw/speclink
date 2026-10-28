@@ -579,7 +579,7 @@ pub fn convert_spec_dir_to_speclink(root: &Path) -> Result<UpdateOutcome> {
     convert_spec_dir_to_speclink_with(
         root,
         || {},
-        |from, to| std::fs::rename(from, to),
+        |from, to| crate::migrate::rename_folder(from, to),
         |path, content| util::write_file(path, content),
     )
 }

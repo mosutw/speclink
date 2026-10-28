@@ -4,7 +4,7 @@ section: Remote 模式
 order: 480
 keywords: [遷移, 匯入, 備份, 空 scope, remote, 規格資料夾, openspec]
 sources: [workspace-migration]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 # 本地工作區遷移到 remote
 

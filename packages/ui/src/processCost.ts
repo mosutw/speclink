@@ -22,15 +22,17 @@ export interface ProcessCostSummaryData {
 
 const ascending = (values: number[]) => [...values].sort((a, b) => a - b);
 
-/** 由小到大排序後的中間值；偶數筆取中間兩值的平均。 */
+/** 由小到大排序後的中間值；偶數筆取中間兩值的平均；空陣列回傳 0。 */
 export function median(values: number[]): number {
+  if (values.length === 0) return 0;
   const sorted = ascending(values);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-/** 由小到大第 ⌈0.9 × n⌉ 個值（整數運算，避開 0.9 × n 的浮點誤差）。 */
+/** 由小到大第 ⌈0.9 × n⌉ 個值（整數運算，避開 0.9 × n 的浮點誤差）；空陣列回傳 0。 */
 export function p90(values: number[]): number {
+  if (values.length === 0) return 0;
   return ascending(values)[Math.ceil((9 * values.length) / 10) - 1];
 }
 

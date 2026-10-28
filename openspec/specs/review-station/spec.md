@@ -140,7 +140,7 @@ updated: 2026-10-15T09:31:43+08:00
 ---
 ### Requirement: 蓋章守門與蓋章效果
 
-系統 SHALL 提供 `speclink review stamp <change> [--accept]`。守門條件:(1) change 的寫碼任務全數完成(非 `[M]` 任務全數勾選;手動測試任務不計,見 manual-task-marker 的寫碼任務全完成預測子);(2) 工單末輪零未解必修 findings。必修 SHALL 以嚴重度界定:CRITICAL 與 WARNING 級為必修、擋乾淨蓋章;SUGGESTION 級 SHALL NOT 擋章——末輪僅含 SUGGESTION 級 findings 時蓋章照常放行。`--accept` SHALL 僅豁免條件 (2) 的必修部分。守門通過時系統 SHALL 於同一原子寫入內:將 `reviewed_at`/`reviewed_by`/`reviewed_with`/`reviewed_tasks_total`(蓋章時全任務總數,含 `[M]` 任務)/`reviewed_scope`(指紋清單)寫入該 change 的 `.openspec.yaml`,並刪除 `review.md`。不得出現「章已寫入而工單仍存在」的中間狀態。活動工單刪除前 SHALL 將完整輪次、當時規則、接受情形、操作者及章指紋保存於checks/review/<YYYYMMDDHHmmss><ULID>.md，時間為審查開始的UTC時間，ULID仍為索引中的recordId，checks/index.json SHALL 登錄完整relativePath。舊checks/review/<ULID>.md紀錄 SHALL 仍可讀且不重新命名；完成紀錄不視為未結工單，蓋章後及保留紀錄的封存後仍可查詢。這是刻意新增的檔案效果，原成功stdout及JSON SHALL 維持；歷史、索引或章寫入失敗 SHALL 不回成功，本機journal恢復原工單／metadata／索引、Remote交易不提交；恢復未完成時 SHALL 明示history_recovery_required。
+系統 SHALL 提供 `speclink review stamp <change> [--accept]`。守門條件:(1) change 的寫碼任務全數完成(非 `[M]` 任務全數勾選;手動測試任務不計,見 manual-task-marker 的寫碼任務全完成預測子);(2) 工單末輪零未解必修 findings。必修 SHALL 以嚴重度界定:CRITICAL 與 WARNING 級為必修、擋乾淨蓋章;SUGGESTION 級 SHALL NOT 擋章——末輪僅含 SUGGESTION 級 findings 時蓋章照常放行。`--accept` SHALL 僅豁免條件 (2) 的必修部分。守門通過時系統 SHALL 於同一原子寫入內:將 `reviewed_at`/`reviewed_by`/`reviewed_with`/`reviewed_tasks_total`(蓋章時全任務總數,含 `[M]` 任務)/`reviewed_scope`(指紋清單)寫入該 change 的 `.meta.yaml`,並刪除 `review.md`。不得出現「章已寫入而工單仍存在」的中間狀態。活動工單刪除前 SHALL 將完整輪次、當時規則、接受情形、操作者及章指紋保存於checks/review/<YYYYMMDDHHmmss><ULID>.md，時間為審查開始的UTC時間，ULID仍為索引中的recordId，checks/index.json SHALL 登錄完整relativePath。舊checks/review/<ULID>.md紀錄 SHALL 仍可讀且不重新命名；完成紀錄不視為未結工單，蓋章後及保留紀錄的封存後仍可查詢。這是刻意新增的檔案效果，原成功stdout及JSON SHALL 維持；歷史、索引或章寫入失敗 SHALL 不回成功，本機journal恢復原工單／metadata／索引、Remote交易不提交；恢復未完成時 SHALL 明示history_recovery_required。
 
 #### Scenario: 寫碼任務未全完成即拒絕
 
@@ -170,13 +170,13 @@ updated: 2026-10-15T09:31:43+08:00
 #### Scenario: 乾淨蓋章
 
 - **WHEN** 任務 5/5 完成且工單末輪 findings 為空時執行 `review stamp`
-- **THEN** exit code 0,`.openspec.yaml` 含五個 reviewed 欄位且 `review.md` 不存在
+- **THEN** exit code 0,`.meta.yaml` 含五個 reviewed 欄位且 `review.md` 不存在
 
 ##### Example: 蓋章寫入的任務錨
 
 - **GIVEN** change 有 5 個任務,其中 4 個寫碼任務全數勾選、1 個 `[M]` 任務未勾,工單 Round 2 的 findings 為空
 - **WHEN** `review stamp` 成功
-- **THEN** `.openspec.yaml` 內 `reviewed_tasks_total` 為 5(全任務總數,含未勾的 `[M]` 任務)
+- **THEN** `.meta.yaml` 內 `reviewed_tasks_total` 為 5(全任務總數,含未勾的 `[M]` 任務)
 
 #### Scenario: 歷史寫入失敗保全工單
 
@@ -190,8 +190,8 @@ updated: 2026-10-15T09:31:43+08:00
 
 
 <!-- @trace
-source: desktop-workflow-and-offline-security-review
-updated: 2026-10-23T14:12:44+08:00
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->
 
 ---
@@ -267,7 +267,7 @@ updated: 2026-08-20
 #### Scenario: 放棄既有工單
 
 - **WHEN** 對有工單的 change 執行 `review discard`
-- **THEN** exit code 0，`review.md` 不存在，`.openspec.yaml` 不變
+- **THEN** exit code 0，`review.md` 不存在，`.meta.yaml` 不變
 
 #### Scenario: 無工單可放棄
 
@@ -276,71 +276,8 @@ updated: 2026-08-20
 
 
 <!-- @trace
-source: code-review-stage
-updated: 2026-08-02
-code:
-  - AGENTS.md
-  - CLAUDE.md
-  - README.en.md
-  - README.md
-  - apps/desktop/core/src/cache.rs
-  - apps/desktop/core/src/query.rs
-  - apps/desktop/core/src/verbs.rs
-  - apps/desktop/src-tauri/src/lib.rs
-  - apps/desktop/src-tauri/src/remote.rs
-  - apps/desktop/src/App.tsx
-  - apps/desktop/src/__tests__/store.test.ts
-  - apps/desktop/src/__tests__/tauriDataSource.test.ts
-  - apps/desktop/src/adapter/tauriDataSource.ts
-  - apps/desktop/src/i18n/messages.ts
-  - apps/desktop/src/store.ts
-  - crates/speclink-cli/src/commands.rs
-  - crates/speclink-cli/src/main.rs
-  - crates/speclink-cli/src/remote_commands.rs
-  - crates/speclink-cli/tests/review_verbs.rs
-  - crates/speclink-core/assets/skills/review.md
-  - crates/speclink-core/src/archive.rs
-  - crates/speclink-core/src/command/mod.rs
-  - crates/speclink-core/src/init.rs
-  - crates/speclink-core/src/inprogress.rs
-  - crates/speclink-core/src/lib.rs
-  - crates/speclink-core/src/listing.rs
-  - crates/speclink-core/src/model.rs
-  - crates/speclink-core/src/review.rs
-  - crates/speclink-core/src/skills.rs
-  - crates/speclink-core/src/store.rs
-  - crates/speclink-core/src/teststore.rs
-  - crates/speclink-core/src/util.rs
-  - crates/speclink-core/tests/golden/assets.lock
-  - crates/speclink-core/tests/golden/claude.snapshot.md
-  - crates/speclink-core/tests/golden/codex.snapshot.md
-  - crates/speclink-core/tests/golden/neutral-cli.snapshot.md
-  - crates/speclink-core/tests/golden/neutral-tool-call.snapshot.md
-  - crates/speclink-core/tests/golden/remote-claude.marker.md
-  - crates/speclink-core/tests/render_golden.rs
-  - crates/speclink-fs/src/lib.rs
-  - crates/speclink-host/src/bridge.rs
-  - crates/speclink-host/src/commit.rs
-  - crates/speclink-node/src/store_bridge.rs
-  - crates/speclink-protocol/src/command.rs
-  - crates/speclink-remote/src/client.rs
-  - crates/speclink-remote/tests/client_errors.rs
-  - crates/speclink-remote/tests/typed_client.rs
-  - crates/speclink-server/src/app.rs
-  - crates/speclink-server/src/routes.rs
-  - crates/speclink-server/tests/e2e_cli.rs
-  - crates/speclink-server/tests/read_api.rs
-  - crates/speclink-server/tests/review_api.rs
-  - packages/ui/src/__tests__/reviewBadge.test.tsx
-  - packages/ui/src/adapter.ts
-  - packages/ui/src/components/ArchivedDrawer.tsx
-  - packages/ui/src/components/ArchivedList.tsx
-  - packages/ui/src/components/ChangeCard.tsx
-  - packages/ui/src/components/ReviewArchiveDialog.tsx
-  - packages/ui/src/components/RichDetailDrawer.tsx
-  - packages/ui/src/components/reviewStyle.tsx
-  - packages/ui/src/i18n.tsx
-  - packages/ui/src/index.ts
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->
 
 ---
@@ -439,76 +376,13 @@ code:
 
 #### Scenario: 帶章的 change 不外洩新欄位
 
-- **WHEN** 某 change 的 `.openspec.yaml` 含全套 reviewed 欄位時執行 `speclink list --json`
+- **WHEN** 某 change 的 `.meta.yaml` 含全套 reviewed 欄位時執行 `speclink list --json`
 - **THEN** 該 change 的 JSON 項目與無 reviewed 欄位的 change 具有相同的欄位集合
 
 
 <!-- @trace
-source: code-review-stage
-updated: 2026-08-02
-code:
-  - AGENTS.md
-  - CLAUDE.md
-  - README.en.md
-  - README.md
-  - apps/desktop/core/src/cache.rs
-  - apps/desktop/core/src/query.rs
-  - apps/desktop/core/src/verbs.rs
-  - apps/desktop/src-tauri/src/lib.rs
-  - apps/desktop/src-tauri/src/remote.rs
-  - apps/desktop/src/App.tsx
-  - apps/desktop/src/__tests__/store.test.ts
-  - apps/desktop/src/__tests__/tauriDataSource.test.ts
-  - apps/desktop/src/adapter/tauriDataSource.ts
-  - apps/desktop/src/i18n/messages.ts
-  - apps/desktop/src/store.ts
-  - crates/speclink-cli/src/commands.rs
-  - crates/speclink-cli/src/main.rs
-  - crates/speclink-cli/src/remote_commands.rs
-  - crates/speclink-cli/tests/review_verbs.rs
-  - crates/speclink-core/assets/skills/review.md
-  - crates/speclink-core/src/archive.rs
-  - crates/speclink-core/src/command/mod.rs
-  - crates/speclink-core/src/init.rs
-  - crates/speclink-core/src/inprogress.rs
-  - crates/speclink-core/src/lib.rs
-  - crates/speclink-core/src/listing.rs
-  - crates/speclink-core/src/model.rs
-  - crates/speclink-core/src/review.rs
-  - crates/speclink-core/src/skills.rs
-  - crates/speclink-core/src/store.rs
-  - crates/speclink-core/src/teststore.rs
-  - crates/speclink-core/src/util.rs
-  - crates/speclink-core/tests/golden/assets.lock
-  - crates/speclink-core/tests/golden/claude.snapshot.md
-  - crates/speclink-core/tests/golden/codex.snapshot.md
-  - crates/speclink-core/tests/golden/neutral-cli.snapshot.md
-  - crates/speclink-core/tests/golden/neutral-tool-call.snapshot.md
-  - crates/speclink-core/tests/golden/remote-claude.marker.md
-  - crates/speclink-core/tests/render_golden.rs
-  - crates/speclink-fs/src/lib.rs
-  - crates/speclink-host/src/bridge.rs
-  - crates/speclink-host/src/commit.rs
-  - crates/speclink-node/src/store_bridge.rs
-  - crates/speclink-protocol/src/command.rs
-  - crates/speclink-remote/src/client.rs
-  - crates/speclink-remote/tests/client_errors.rs
-  - crates/speclink-remote/tests/typed_client.rs
-  - crates/speclink-server/src/app.rs
-  - crates/speclink-server/src/routes.rs
-  - crates/speclink-server/tests/e2e_cli.rs
-  - crates/speclink-server/tests/read_api.rs
-  - crates/speclink-server/tests/review_api.rs
-  - packages/ui/src/__tests__/reviewBadge.test.tsx
-  - packages/ui/src/adapter.ts
-  - packages/ui/src/components/ArchivedDrawer.tsx
-  - packages/ui/src/components/ArchivedList.tsx
-  - packages/ui/src/components/ChangeCard.tsx
-  - packages/ui/src/components/ReviewArchiveDialog.tsx
-  - packages/ui/src/components/RichDetailDrawer.tsx
-  - packages/ui/src/components/reviewStyle.tsx
-  - packages/ui/src/i18n.tsx
-  - packages/ui/src/index.ts
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->
 
 ---
@@ -698,4 +572,34 @@ CHANGE SHALL 接受active名稱或已封存dated名稱，只能讀該變更index
 <!-- @trace
 source: archived-quality-history-access
 updated: 2026-10-23T22:41:06+08:00
+-->
+
+---
+### Requirement: 蓋章記錄審查輪數
+
+`speclink review stamp <change>` 守門通過時，系統 SHALL 在寫入其他章欄位的同一次原子寫入中，把 `reviewed_rounds` 寫入該 change 的 `.meta.yaml`：值為原有 `reviewed_rounds`（缺席視為 0）加上本次蓋章的審查工單回合數，檔內 SHALL 只有一行 `reviewed_rounds`。帶 `--accept` 的蓋章 SHALL 同樣記錄。守門失敗時 SHALL NOT 改動 `reviewed_rounds`；放棄審查（只刪工單、未蓋章）SHALL NOT 改動 `reviewed_rounds`。原有 `reviewed_rounds` 不是非負整數時，metadata 視為無法解析，蓋章 SHALL 以非零 exit code 拒絕且零寫入。
+
+#### Scenario: 首次蓋章記錄回合數
+
+- **WHEN** change 的審查工單有 3 個回合、寫碼任務全數完成、末輪零必修 findings，執行 `speclink review stamp <change>`
+- **THEN** exit code 為 0，`.meta.yaml` 含 `reviewed_rounds: 3` 與 `reviewed_at` 等章欄位，`review.md` 已刪除
+
+#### Scenario: 章失效後重新蓋章累加輪數
+
+- **WHEN** change 的 `.meta.yaml` 已有 `reviewed_rounds: 3`，章失效後重開的審查工單有 2 個回合，再次執行 `speclink review stamp <change>` 且守門通過
+- **THEN** exit code 為 0，`.meta.yaml` 只有一行 `reviewed_rounds`，值為 5
+
+#### Scenario: 守門失敗不改輪數
+
+- **WHEN** 審查工單末輪有一條未解的 WARNING finding，執行 `speclink review stamp <change>` 且未帶 `--accept`
+- **THEN** exit code 非零，`.meta.yaml` 的 `reviewed_rounds` 與其他欄位皆不變，`review.md` 仍存在
+
+#### Scenario: 原有輪數不是整數時拒絕
+
+- **WHEN** change 的 `.meta.yaml` 含 `reviewed_rounds: many`，執行 `speclink review stamp <change>`
+- **THEN** exit code 非零，stderr 說明該 change 的 metadata 無法解析，`.meta.yaml` 與 `review.md` 皆不變
+
+<!-- @trace
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->

@@ -4,7 +4,7 @@ section: Claude Code
 order: 370
 keywords: ["Claude Code", "技能列", "規劃", "實作", "品質", "收尾", "Copilot"]
 sources: ["claude-code-skill-bar", "archive-skill#封存完成後的收尾提交提醒"]
-generated: 2026-10-10T08:25:58+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # Claude Code：選擇技能

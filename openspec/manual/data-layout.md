@@ -4,7 +4,7 @@ section: 開始使用
 order: 40
 keywords: [openspec, 變更, 討論, 規格, 生命週期, 封存, 廢棄]
 sources: ["change-lifecycle#in-progress 標記真相存於 change meta", "change-lifecycle#任務完成蘊含開工標記", "change-lifecycle#變更以 discard 動詞廢棄", "change-lifecycle#必要安全驗收的封存判定", "change-lifecycle#封存時按類別保留完成紀錄", discussion-docs, user-documentation]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 認識資料：變更、討論與規格

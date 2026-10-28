@@ -4,7 +4,7 @@ section: Claude Code
 order: 390
 keywords: ["Claude Code", "面板", "看板", "討論", "審查", "驗證", "CLI", "PATH"]
 sources: ["claude-code-workflow-panel", "claude-code-skill-bar#介面語言由 mod 與 Claude Code 設定決定"]
-generated: 2026-10-10T08:25:58+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # Claude Code：查看進度與工單

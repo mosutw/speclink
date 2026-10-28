@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 140
 keywords: [品質關卡, 審查, 驗證, 工單, 蓋章, 審查面, 首輪, 複驗, 子代理, 中斷接續, review prepare]
 sources: [quality-skill, review-station, verify-station, change-diff-scope]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 品質關卡總覽：審查與驗證

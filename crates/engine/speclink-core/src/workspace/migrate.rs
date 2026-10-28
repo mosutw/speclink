@@ -318,6 +318,11 @@ fn retried<T>(attempts: u32, mut op: impl FnMut() -> std::io::Result<T>) -> std:
     result
 }
 
+/// Rename a directory with retry on Windows to tolerate delayed handle release.
+pub(crate) fn rename_folder(from: &Path, to: &Path) -> std::io::Result<()> {
+    retried(RENAME_ATTEMPTS, || std::fs::rename(from, to))
+}
+
 /// Carry out `plan`. A failed folder rename moves nothing; a failed data-file
 /// rename names that file and keeps the renames before it — the next run picks
 /// up the rest as leftovers.
@@ -330,7 +335,7 @@ pub fn apply(root: &Path, plan: &MigrationPlan) -> Result<MigrationReport> {
             if to.symlink_metadata().is_ok() {
                 bail!("cannot move {LEGACY_SPEC_DIR}/ to {DEFAULT_SPEC_DIR}/: {DEFAULT_SPEC_DIR} already exists — nothing was moved");
             }
-            retried(RENAME_ATTEMPTS, || std::fs::rename(&from, &to)).with_context(|| {
+            rename_folder(&from, &to).with_context(|| {
                 format!("cannot move {LEGACY_SPEC_DIR}/ to {DEFAULT_SPEC_DIR}/ — nothing was moved (close programs that hold files in it, such as the desktop app, and retry)")
             })?;
             report.moved_folder = true;

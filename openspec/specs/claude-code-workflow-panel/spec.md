@@ -10,7 +10,7 @@
 
 使用者點面板按鈕或送出 `/speclink-panel` 時，面板 SHALL 在開啟與關閉間切換；斜線指令沒有額外旗標或 stdin，也不是新增的 speclink CLI 子指令。開啟時 SHALL 取得看板資料。點擊變更、下一步、討論或工單名稱 SHALL 將名稱設為輸入框最前方指令的參數；沒有指令時 SHALL 接在現有文字後方，不自動執行。
 
-此 UI SHALL 沿用 claude-code-skill-bar 的語言選擇：明選 en／zh-TW 優先，auto 對中文、chinese、zh 作弱偵測，其餘（含日文與未設定）選英文，不讀工作流 `tw`／`ja`／`en`。面板操作 SHALL 不建立或修改 proposal.md、delta spec、.openspec.yaml、任務 evidence 或 snapshots。本基準 SHALL 記錄既有呈現，不變更 CLI 人眼或 JSON 位元級輸出；面板沒有自己的 stdout／stderr、exit code、`--json` 或 `--no-color` 模式。
+此 UI SHALL 沿用 claude-code-skill-bar 的語言選擇：明選 en／zh-TW 優先，auto 對中文、chinese、zh 作弱偵測，其餘（含日文與未設定）選英文，不讀工作流 `tw`／`ja`／`en`。面板操作 SHALL 不建立或修改 proposal.md、delta spec、.meta.yaml、任務 evidence 或 snapshots。本基準 SHALL 記錄既有呈現，不變更 CLI 人眼或 JSON 位元級輸出；面板沒有自己的 stdout／stderr、exit code、`--json` 或 `--no-color` 模式。
 
 #### Scenario: 開關回應
 
@@ -24,6 +24,13 @@
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx`、`integrations/claude-code/speclink-skills/hooks/skills.ts`、`integrations/claude-code/speclink-skills/hooks/text.ts`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的面板開啟與名稱填入測試。關閉回應由已讀取程式確認。
 
+
+<!-- @trace
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
+-->
+
+---
 ### Requirement: 看板順序與變更詳情
 
 面板 SHALL 依 plan 結果提供下一步、波次、階段及阻擋關係，任務數與 worktree 資料 SHALL 來自變更清單。變更 SHALL 分為提案中、進行中、已就緒；使用者 SHALL 能收合各區塊。展開變更時 SHALL 讀取該變更的文件完成狀態與任務；有 worktree 時 SHALL 從它的目錄讀取。任務 SHALL 依 Markdown 標題分組、區分完成與未完成、以「手動」標示 `[M]`，並隱藏行尾的任務 ID 註解。
@@ -45,6 +52,7 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/register.tsx`、`integ
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/board.ts`、`integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的面板資料、任務解析及 worktree 展開測試。
 
+---
 ### Requirement: 討論分組與內文
 
 討論分頁 SHALL 排除已轉出的討論，分開呈現討論中與其餘討論；討論中 SHALL 顯示輪數，已結論 SHALL 顯示已結論。展開討論 SHALL 顯示內文，移除開頭 YAML metadata 與 HTML 註解並統一換行。
@@ -61,6 +69,7 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/board.ts`、`integrati
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/board.ts`、`integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的討論分頁與內文測試。
 
+---
 ### Requirement: 品質分頁只列未結工單
 
 品質分頁 SHALL 查詢變更的審查與驗證工單，只呈現至少有一份工單的變更。每份工單 SHALL 只使用最後一輪，顯示輪數及各嚴重度數量；展開時 SHALL 顯示發現的嚴重度、路徑與文字。查詢非零結束且 stderr 含 `no review ticket` 或 `no verify ticket` 時 SHALL 視為沒有工單，其餘失敗 SHALL 視為讀取錯誤。
@@ -77,6 +86,7 @@ Evidence: `integrations/claude-code/speclink-skills/hooks/board.ts`、`integrati
 
 Evidence: `integrations/claude-code/speclink-skills/hooks/board.ts`、`integrations/claude-code/speclink-skills/hooks/register.tsx`；`integrations/claude-code/speclink-skills/tests/register.test.tsx` 的工單判定與品質分頁測試。
 
+---
 ### Requirement: 唯讀查詢輸入與錯誤顯示
 
 面板 SHALL 以以下既有 CLI 呼叫取得資料，全部附帶 `--json`，不提供 stdin。成功時 SHALL 從 stdout 讀 JSON；非零 exit code SHALL 從 stderr 取得錯誤，stderr 空白時顯示 exit code。Windows SHALL 經 `cmd.exe /d /c speclink`，其他平台 SHALL 直接執行 speclink。

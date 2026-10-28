@@ -4,7 +4,7 @@ section: 附錄
 order: 900
 keywords: [來源, 矛盾, 限制, 編纂日期, 規格]
 sources: []
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 本手冊的來源
@@ -13,9 +13,9 @@ generated: 2026-10-28T20:20:00+08:00
 
 本手冊全部內容只取材自 `openspec/specs/` 底下的正式規格。README、`docs/` 與原始碼都不是來源。規格沒寫的，手冊就不寫，或在該處標明「規格未載」。每一頁的最後一行列出它取材的能力名稱。
 
-正式規格共 95 個能力。其中 68 個是使用者會操作或看到的東西（畫面、指令、技能、輸出、檔案），已入冊。其餘 27 個是引擎內部（儲存、wire 契約、host 執行期、測試骨架、建置與發布管線、本 repo 自用的發版技能、更新日誌的資料契約、技能原稿的寫法規範），不入冊：
+正式規格共 96 個能力。其中 69 個是使用者會操作或看到的東西（畫面、指令、技能、輸出、檔案），已入冊。其餘 26 個是引擎內部（儲存、wire 契約、host 執行期、測試骨架、建置與發布管線、本 repo 自用的發版技能、更新日誌的資料契約、技能原稿的寫法規範），不入冊：
 
-`client-protocol`、`command-runtime`、`delivery-baseline`、`desktop-release`、`dev-harness`、`host-runtime`、`node-sdk`、`node-sdk-release`、`phase2-acceptance`、`phase3-acceptance`、`postgres-team-store`、`reference-server`、`release-notes`、`release-skill`、`remote-board-order`、`remote-workspace-data`、`server-context-api`、`server-drift-api`、`server-event-stream`、`server-read-api`、`server-verb-api`、`serverfs-team-store`、`skill-authoring`、`sqlite-team-store`、`store-abstraction`、`teamstore-contract`、`workspace-session`。
+`client-protocol`、`command-runtime`、`delivery-baseline`、`desktop-release`、`dev-harness`、`host-runtime`、`node-sdk`、`node-sdk-release`、`phase2-acceptance`、`phase3-acceptance`、`postgres-team-store`、`reference-server`、`release-notes`、`release-skill`、`remote-board-order`、`remote-workspace-data`、`server-context-api`、`server-drift-api`、`server-event-stream`、`server-read-api`、`server-verb-api`、`serverfs-team-store`、`sqlite-team-store`、`store-abstraction`、`teamstore-contract`、`workspace-session`。（註：`skill-authoring` 僅其中「技能共用的對話語言段落」一段寫進[工作流政策與設定](policy-config.md)）
 
 `release-notes` 定義的更新日誌，使用者看得到的那一面（桌面 app 的更新日誌）由 `desktop-app` 載明，寫在[自動更新、CLI、技能檔過期與關於頁](desktop-update.md)。`desktop-app` 裡有兩段需求講前端元件怎麼共用（「前端元件庫與資料源解耦」「共用元件唯一來源」），屬於內部結構，沒有任何一頁取材。
 
@@ -97,6 +97,6 @@ generated: 2026-10-28T20:20:00+08:00
 
 ## 編纂日期
 
-2026-10-23
+2026-10-29
 
 **出處**：本頁為說明頁，不直接取材自單一能力；各頁末行列出自己的出處。

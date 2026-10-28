@@ -138,6 +138,7 @@ export function useProjectSettings(
   const [appMsg, setAppMsg] = useState<string | null>(null);
   const [specDirConfirmOpen, setSpecDirConfirmOpen] = useState(false);
   const [specDirBusy, setSpecDirBusy] = useState(false);
+  const specDirConverting = useRef(false);
   const [specDirMsg, setSpecDirMsg] = useState<string | null>(null);
   const afterSpecDirConverted = useRef(onSpecDirConverted);
   afterSpecDirConverted.current = onSpecDirConverted;
@@ -294,7 +295,15 @@ export function useProjectSettings(
   };
 
   const convertSpecDir = async () => {
-    if (settings.kind !== "local" || !settings.convertSpecDirToSpeclink || appDisabled || toolsDirty || specDirBusy) return;
+    if (
+      settings.kind !== "local" ||
+      !settings.convertSpecDirToSpeclink ||
+      appDisabled ||
+      toolsDirty ||
+      specDirBusy ||
+      specDirConverting.current
+    ) return;
+    specDirConverting.current = true;
     setSpecDirBusy(true);
     setSpecDirMsg(null);
     setSpecDirConfirmOpen(false);
@@ -315,6 +324,7 @@ export function useProjectSettings(
         // 保留最後一次讀到的實際模式，錯誤已顯示在上方。
       }
     } finally {
+      specDirConverting.current = false;
       setSpecDirBusy(false);
     }
   };
@@ -756,8 +766,7 @@ export function useProjectSettings(
 
   // 未存修改（App 的返回據此先問要不要捨棄）：表單值對照快照，兩張文字卡只看編輯中的草稿。
   const dirty =
-    tools.length !== snap.app.tools.length ||
-    tools.some((tool) => !snap.app.tools.includes(tool)) ||
+    toolsDirty ||
     policyDirty ||
     (ctxEditing && draftContext !== contextText) ||
     (rulesEditing && editingRuleKeys.some((id) => (draftRules[id] ?? "") !== entriesToText(rules[id] ?? []))) ||

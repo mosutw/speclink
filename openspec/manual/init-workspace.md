@@ -4,7 +4,7 @@ section: 開始使用
 order: 30
 keywords: [init, update, 工作區, 技能檔, 指令檔, 過期, 降級, skills_dir, init --force, Copilot, Antigravity]
 sources: [workspace-tools, skill-routing]
-generated: 2026-10-28T20:20:00+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 建立工作區與指令檔

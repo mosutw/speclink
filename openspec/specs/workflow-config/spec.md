@@ -34,7 +34,7 @@ updated: 2026-10-10T08:18:29+08:00
 ---
 ### Requirement: workflow-config show 動詞
 
-CLI SHALL 提供 speclink workflow-config show（旗標 --json 與 --no-color，無 stdin），顯示 openspec/config.yaml 的正典內容：政策五欄（locale、spec_locale、tdd、audit、worktree——未設定的欄位標示為未設定與其預設語意）、context（有無與行數）、rules（各 artifact 節的條數）與 review（預設清單模式與三個嚴重度清單的條數）。show SHALL 顯示正典值，SHALL NOT 應用環境變數的覆寫（有效值的三層解析屬 instructions payload 職責）。帶 --json 時 SHALL 輸出 camelCase payload：locale、specLocale（未設定為 null）、tdd、audit、worktree（布林）、context（字串或 null）、rules（artifact id 對規則字串陣列的物件）、review（物件：baseline 為字串 "extend" 或 "replace"，critical、warning、suggestion 為規則字串陣列；檔案未寫 review 區塊時為 baseline "extend" 與三個空陣列）。人眼輸出 SHALL 於 rules 行之後、以與其他行相同的標籤欄寬印出 review 行：baseline 為 extend（含未設定）且三個清單皆空時值為 none，否則值為「<baseline>, critical <n>, warning <n>, suggestion <n>」。fs 模式讀取 openspec/config.yaml；remote 模式 SHALL 經既有連線讀取 server 端 config 文件，人眼與 --json 輸出形狀與 fs 模式一致。config 文件無法解析時 SHALL 沿用既有 fail-closed 行為：非零 exit code、stderr 指出檔案與解析原因。本動詞為周邊設定動詞（與 config 同類），SHALL NOT 進入命令執行層。成功 exit code 0、輸出至 stdout；--no-color 下無 ANSI 色彩。本次安全審查修訂 SHALL 保留 review 行與欄位，刻意於 review 行之後新增 security_verification 摘要行與 JSON securityVerification 物件；除此之外的各行與既有欄位 SHALL 維持既有位元級輸出。安全物件 SHALL 含 enabled:boolean、scope:string、standards:object、reviews:object、disabledRules:string[]、excludeDirs:string[]，其預設與值域依安全政策區塊需求；四標準皆含 enabled:boolean 與 version:string|null，ASVS 另含 level:string，reviews 含 spec／code／apiBoundary 布林。
+CLI SHALL 提供 speclink workflow-config show（旗標 --json 與 --no-color，無 stdin），顯示 openspec/config.yaml 的正典內容：schema（專案預設產出流程名稱，未設定為 spec-driven）、政策五欄（locale、spec_locale、tdd、audit、worktree——未設定的欄位標示為未設定與其預設語意）、context（有無與行數）、rules（各 artifact 節的條數）與 review（預設清單模式與三個嚴重度清單的條數）。show SHALL 顯示正典值，SHALL NOT 應用環境變數的覆寫（有效值的三層解析屬 instructions payload 職責）。帶 --json 時 SHALL 輸出 camelCase payload：schema（字串，未設定為 null）、locale、specLocale（未設定為 null）、tdd、audit、worktree（布林）、context（字串或 null）、rules（artifact id 對規則字串陣列的物件）、review（物件：baseline 為字串 "extend" 或 "replace"，critical、warning、suggestion 為規則字串陣列；檔案未寫 review 區塊時為 baseline "extend" 與三個空陣列）。人眼輸出 SHALL 於 locale 行之前新增 schema 行，值為設定的名稱，未設定時為 unset (spec-driven)；並於 rules 行之後、以與其他行相同的標籤欄寬印出 review 行：baseline 為 extend（含未設定）且三個清單皆空時值為 none，否則值為「<baseline>, critical <n>, warning <n>, suggestion <n>」。fs 模式讀取 openspec/config.yaml；remote 模式 SHALL 經既有連線讀取 server 端 config 文件，人眼與 --json 輸出形狀與 fs 模式一致。config 文件無法解析時 SHALL 沿用既有 fail-closed 行為：非零 exit code、stderr 指出檔案與解析原因。本動詞為周邊設定動詞（與 config 同類），SHALL NOT 進入命令執行層。成功 exit code 0、輸出至 stdout；--no-color 下無 ANSI 色彩。本次安全審查修訂 SHALL 保留 review 行與欄位，刻意於 review 行之後新增 security_verification 摘要行與 JSON securityVerification 物件；此次另刻意新增 schema 行與 JSON schema 欄位；除此之外的各行與既有欄位 SHALL 維持既有位元級輸出。安全物件 SHALL 含 enabled:boolean、scope:string、standards:object、reviews:object、disabledRules:string[]、excludeDirs:string[]，其預設與值域依安全政策區塊需求；四標準皆含 enabled:boolean 與 version:string|null，ASVS 另含 level:string，reviews 含 spec／code／apiBoundary 布林。
 
 #### Scenario: fs 模式顯示正典值
 
@@ -44,7 +44,7 @@ CLI SHALL 提供 speclink workflow-config show（旗標 --json 與 --no-color，
 #### Scenario: --json payload 形狀
 
 - **WHEN** 執行 speclink workflow-config show --json
-- **THEN** stdout 為 JSON，欄位 locale、specLocale、tdd、audit、worktree、context、rules、review 一律 camelCase；未設定的 specLocale 為 null、未設定的 tdd 為 false、未設定的 worktree 為 false、未寫 review 區塊時 review 為 baseline "extend" 與 critical、warning、suggestion 三個空陣列
+- **THEN** stdout 為 JSON，欄位 schema、locale、specLocale、tdd、audit、worktree、context、rules、review 一律 camelCase；未設定的 specLocale 為 null、未設定的 tdd 為 false、未設定的 worktree 為 false、未寫 review 區塊時 review 為 baseline "extend" 與 critical、warning、suggestion 三個空陣列
 
 #### Scenario: show 不應用環境變數覆寫
 
@@ -64,7 +64,7 @@ CLI SHALL 提供 speclink workflow-config show（旗標 --json 與 --no-color，
 #### Scenario: 人眼輸出的 review 行
 
 - **WHEN** 執行 speclink workflow-config show --no-color
-- **THEN** stdout 於 rules 行之後恰有一行 review，標籤欄寬與 rules 行相同，值依 review 區塊內容而定；除新增 security_verification 摘要行外，其餘各行與本次修訂前逐位元一致
+- **THEN** stdout 於 rules 行之後恰有一行 review，標籤欄寬與 rules 行相同，值依 review 區塊內容而定；除新增 schema 行與 security_verification 摘要行外，其餘各行與本次修訂前逐位元一致
 
 ##### Example: review 行的值
 
@@ -91,10 +91,23 @@ CLI SHALL 提供 speclink workflow-config show（旗標 --json 與 --no-color，
 - **WHEN** enabled=true、只啟用 Top 10 2025、ASVS 停用，執行 show --json
 - **THEN** securityVerification.standards.owaspTop10 為 enabled=true、version="2025"，ASVS 停用不影響 Top 10，Local／Remote JSON 同形
 
+#### Scenario: 顯示專案預設 schema
+
+- **WHEN** 執行 speclink workflow-config show --no-color 與 speclink workflow-config show --json
+- **THEN** 人眼輸出於 locale 行之前恰有一行 schema，標籤欄寬與 locale 行相同；--json 的 schema 欄位值依 config 的 schema 鍵而定；exit code 0
+
+##### Example: schema 的值
+
+| config.yaml 的 schema 鍵 | 人眼 schema 行的值 | --json 的 schema |
+| ------------------------ | ------------------ | ---------------- |
+| 未寫 schema | unset (spec-driven) | null |
+| schema: spec-driven | spec-driven | "spec-driven" |
+| schema: my-flow | my-flow | "my-flow" |
+
 
 <!-- @trace
-source: add-owasp-cwe-preliminary-review
-updated: 2026-10-17T16:55:59+08:00
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->
 
 ---
