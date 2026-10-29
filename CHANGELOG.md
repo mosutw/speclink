@@ -1,6 +1,12 @@
 # Changelog
 **English** · [繁體中文](CHANGELOG.zh-TW.md)
 
+## 0.11.2 (2026-10-29)
+
+### New features
+
+- The upstream 0.11.0 update adds a workflow for changes without spec updates, cost summaries for archived changes, and precise quality timestamps, while projects keep openspec/ by default and offer a confirmed one-way switch to speclink/.
+
 ## 0.11.1 (2026-10-29)
 
 ### New features

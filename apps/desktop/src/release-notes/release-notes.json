@@ -1,5 +1,20 @@
 [
   {
+    "version": "0.11.2",
+    "date": "2026-10-29",
+    "sections": [
+      {
+        "kind": "features",
+        "items": [
+          {
+            "en": "The upstream 0.11.0 update adds a workflow for changes without spec updates, cost summaries for archived changes, and precise quality timestamps, while projects keep openspec/ by default and offer a confirmed one-way switch to speclink/.",
+            "zh-TW": "整合上游 0.11.0，新增不改規格的產出流程、已封存變更的成本摘要與更精確的品質時間，並保留 openspec/ 預設及確認後單向轉成 speclink/ 的選項。"
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.11.1",
     "date": "2026-10-29",
     "sections": [
