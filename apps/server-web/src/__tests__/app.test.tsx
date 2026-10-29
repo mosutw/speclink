@@ -44,6 +44,8 @@ function makeClient(overrides: Record<string, unknown> = {}) {
       todos: [],
       recentAudit: [],
     })),
+    getAdminUsers: vi.fn(async () => ({ users: [], pending: [] })),
+    getAdminRegistry: vi.fn(async () => ({ projects: [] })),
     getAccount: vi.fn(async () => ({
       user: { id: "u1", email: "member@example.com", display: "Member", admin: false },
       memberships: [],

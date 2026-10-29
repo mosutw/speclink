@@ -70,7 +70,10 @@ export function UsersSection() {
   // 重載時詳情頁才不會卸載重掛、跳回第一個分頁（design D1）。只有第一次載入顯示載入中。
   const data = useLastData(fresh, error);
   // 成員資格的專案選項來自 registry（專案代號為封閉集合，不開放自由輸入）；還沒載入時為 null。
-  const registry = useAsync(() => client.getAdminRegistry(), []);
+  const registry = useAsync(
+    () => (typeof client.getAdminRegistry === "function" ? client.getAdminRegistry() : Promise.resolve(null)),
+    [client],
+  );
   const projects = registry.data?.projects ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   // 其他值或缺席都是使用者分頁。

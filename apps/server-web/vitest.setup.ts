@@ -1,4 +1,10 @@
 import { JSDOM } from "jsdom";
+import { configure } from "@testing-library/react";
+
+// CI runner（特別是 Windows runner）執行負載高時，Testing Library 預設 1000ms 的
+// asyncUtilTimeout（findBy* 與 waitFor）容易偶發逾時。
+// 調高至 5000ms 對齊 vitest 預設測試逾時時間，避免不穩定的競態失敗。
+configure({ asyncUtilTimeout: 5000 });
 
 // vitest 3.2 的 jsdom 環境未把 Web Storage 掛到 window 或全域（與 apps/desktop 同一個
 // 問題）。導覽的「看過了」狀態存 localStorage，沒有它連測試的初始狀態都無從設定。
@@ -8,6 +14,19 @@ for (const key of ["localStorage", "sessionStorage"] as const) {
   storage.clear();
   Object.defineProperty(globalThis, key, { configurable: true, value: storage });
 }
+
+// 每個測試結束後清空 storage 並重設語言，避免測試間狀態殘留相互干擾。
+afterEach(() => {
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+  } catch {
+    // 忽略特定環境例外
+  }
+  if (typeof navigator !== "undefined") {
+    Object.defineProperty(navigator, "language", { value: "zh-TW", configurable: true });
+  }
+});
 
 // jsdom 的 navigator.language 預設是 en-US，而既有測試斷言的是中文介面。把測試環境的
 // 瀏覽器語言釘成 zh-TW——這是環境預設值，不是 app 狀態；要驗語言偵測的測試自己覆寫它。
