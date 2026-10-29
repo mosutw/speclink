@@ -1,6 +1,22 @@
 # Changelog
 **English** · [繁體中文](CHANGELOG.zh-TW.md)
 
+## 0.11.1 (2026-10-29)
+
+### New features
+
+- Windows releases now include a standalone portable ZIP archive alongside the installer.
+
+### Fixes
+
+- Resolves an issue where macOS security path file locks were delayed in release when inherited by background child processes.
+- Node SDK now includes Antigravity render target types and aligns file lease lock transfer across host modules.
+- Container image publication now routes to the current repository owner's GitHub Container Registry.
+
+### Improvements
+
+- Improves web console test reliability by isolating Web Storage state and accommodating asynchronous load delays on Windows.
+
 ## 0.10.2 (2026-10-23)
 
 ### New features

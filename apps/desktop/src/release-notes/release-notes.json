@@ -1,5 +1,46 @@
 [
   {
+    "version": "0.11.1",
+    "date": "2026-10-29",
+    "sections": [
+      {
+        "kind": "features",
+        "items": [
+          {
+            "en": "Windows releases now include a standalone portable ZIP archive alongside the installer.",
+            "zh-TW": "Windows 正式發布版除了安裝程式外，現亦提供免安裝可攜式 ZIP 壓縮檔。"
+          }
+        ]
+      },
+      {
+        "kind": "fixes",
+        "items": [
+          {
+            "en": "Resolves an issue where macOS security path file locks were delayed in release when inherited by background child processes.",
+            "zh-TW": "修正在 macOS 下背景子程序繼承控制代碼時，安全路徑檔案鎖延遲釋放的問題。"
+          },
+          {
+            "en": "Node SDK now includes Antigravity render target types and aligns file lease lock transfer across host modules.",
+            "zh-TW": "Node SDK 補齊 Antigravity 渲染目標公開型別，並修復跨模組的安全路徑鎖轉移相容性。"
+          },
+          {
+            "en": "Container image publication now routes to the current repository owner's GitHub Container Registry.",
+            "zh-TW": "容器映像檔發布路徑現已對齊目前倉庫擁有者的 GitHub Container Registry。"
+          }
+        ]
+      },
+      {
+        "kind": "improvements",
+        "items": [
+          {
+            "en": "Improves web console test reliability by isolating Web Storage state and accommodating asynchronous load delays on Windows.",
+            "zh-TW": "隔離測試間的 Web Storage 暫存狀態並放寬非同步等待容許時間，提升管理主控台在 Windows 上的穩定度。"
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.10.2",
     "date": "2026-10-23",
     "sections": [
