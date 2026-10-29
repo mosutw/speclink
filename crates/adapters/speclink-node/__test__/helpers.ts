@@ -36,12 +36,12 @@ export function makeFsFixture(): string {
   // realpath: macOS 的 tmpdir 是 /var → /private/var 的 symlink；CLI 以 getcwd 回報
   // 實體路徑，engine 則沿用傳入字串——不先解析，兩邊的 path 欄位無法逐位元比對。
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'speclink-node-fixture-')))
-  const changes = join(root, 'openspec', 'changes')
+  const changes = join(root, 'speclink', 'changes')
 
   const alpha = join(changes, 'alpha')
   mkdirSync(alpha, { recursive: true })
   writeFileSync(
-    join(alpha, '.openspec.yaml'),
+    join(alpha, '.meta.yaml'),
     'schema: spec-driven\ncreated: "2026-07-01"\ncreated_by: tester\n',
   )
   writeFileSync(join(alpha, 'proposal.md'), PROPOSAL_ALPHA)
@@ -53,13 +53,13 @@ export function makeFsFixture(): string {
   const beta = join(changes, 'beta')
   mkdirSync(beta, { recursive: true })
   writeFileSync(
-    join(beta, '.openspec.yaml'),
+    join(beta, '.meta.yaml'),
     'schema: spec-driven\ncreated: "2026-07-02"\ncreated_by: tester\n',
   )
   writeFileSync(join(beta, 'proposal.md'), PROPOSAL_BETA)
   writeFileSync(join(beta, 'tasks.md'), TASKS_BETA)
 
-  const specDir = join(root, 'openspec', 'specs', 'user-auth')
+  const specDir = join(root, 'speclink', 'specs', 'user-auth')
   mkdirSync(specDir, { recursive: true })
   writeFileSync(join(specDir, 'spec.md'), SPEC_USER_AUTH)
   return root
@@ -88,7 +88,7 @@ export function fixtureProject(): MemoryProject {
         artifacts: {
           // raw metadata 文件與 meta 物件同步——蓋章走 readChangeMeta 讀原文，
           // 缺了它就測不出「既有欄位被整份洗掉」。
-          '.openspec.yaml': 'schema: spec-driven\ncreated: "2026-07-01"\ncreated_by: tester\n',
+          '.meta.yaml': 'schema: spec-driven\ncreated: "2026-07-01"\ncreated_by: tester\n',
           'proposal.md': PROPOSAL_ALPHA,
           'tasks.md': TASKS_ALPHA,
           'specs/api-quota/spec.md': DELTA_ALPHA,
@@ -98,7 +98,7 @@ export function fixtureProject(): MemoryProject {
       beta: {
         meta: { schema: 'spec-driven', created: '2026-07-02', createdBy: 'tester' },
         artifacts: {
-          '.openspec.yaml': 'schema: spec-driven\ncreated: "2026-07-02"\ncreated_by: tester\n',
+          '.meta.yaml': 'schema: spec-driven\ncreated: "2026-07-02"\ncreated_by: tester\n',
           'proposal.md': PROPOSAL_BETA,
           'tasks.md': TASKS_BETA,
         },
@@ -146,19 +146,19 @@ export function memoryStore(project: MemoryProject) {
     },
     async createChange(name: string, metaText: string) {
       if (changes[name]) throw new Error(`change '${name}' already exists`)
-      changes[name] = { artifacts: { '.openspec.yaml': metaText } }
+      changes[name] = { artifacts: { '.meta.yaml': metaText } }
       return `changes/${name}`
     },
     async updatedAtSecs(name: string) {
       return changes[name]?.updatedAtSecs ?? 0
     },
-    // 原始 metadata 文件（選填的宿主方法）——蓋章動詞經這一對讀寫 .openspec.yaml。
+    // 原始 metadata 文件（選填的宿主方法）——蓋章動詞經這一對讀寫 .meta.yaml。
     async readChangeMeta(name: string) {
-      return changes[name]?.artifacts['.openspec.yaml'] ?? null
+      return changes[name]?.artifacts['.meta.yaml'] ?? null
     },
     async writeChangeMeta(name: string, content: string) {
       if (!changes[name]) throw new Error(`change '${name}' not found`)
-      changes[name].artifacts['.openspec.yaml'] = content
+      changes[name].artifacts['.meta.yaml'] = content
     },
     // --- artifacts ---
     async readArtifact(change: string, artifact: string) {
@@ -224,7 +224,7 @@ export function memoryStore(project: MemoryProject) {
     async readArchivedMeta(datedName: string) {
       const raw = archived.get(datedName)
       if (!raw) return null
-      return (JSON.parse(raw).artifacts ?? {})['.openspec.yaml'] ?? null
+      return (JSON.parse(raw).artifacts ?? {})['.meta.yaml'] ?? null
     },
     async readArchivedArtifact(datedName: string, artifact: string) {
       const raw = archived.get(datedName)
@@ -234,7 +234,7 @@ export function memoryStore(project: MemoryProject) {
       const raw = archived.get(datedName)
       if (!raw) throw new Error(`archived change '${datedName}' not found`)
       const parsed = JSON.parse(raw)
-      parsed.artifacts['.openspec.yaml'] = content
+      parsed.artifacts['.meta.yaml'] = content
       archived.set(datedName, JSON.stringify(parsed))
     },
     // --- discussions ---

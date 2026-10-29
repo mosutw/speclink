@@ -174,7 +174,7 @@ impl ChecksCommit {
         {
             ensure!(
                 valid_check_path(path)
-                    || matches!(path.as_str(), ".openspec.yaml" | "review.md" | "verify.md"),
+                    || matches!(path.as_str(), ".meta.yaml" | ".openspec.yaml" | "review.md" | "verify.md"),
                 "invalid_checks_commit: path"
             );
         }

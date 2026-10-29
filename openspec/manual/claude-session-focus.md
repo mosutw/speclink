@@ -4,7 +4,7 @@ section: Claude Code
 order: 380
 keywords: ["Claude Code", "焦點", "對話標題", "clear", "resume", "worktree", "封存"]
 sources: ["claude-code-session-focus"]
-generated: 2026-10-10T08:25:58+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # Claude Code：目前工作與對話標題

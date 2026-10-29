@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 150
 keywords: [審查, review, 工藝品質, code smell, 工單, 蓋章, 審查規則, 驗證門, 子代理, 首輪, 複驗]
 sources: [review-skill, review-station]
-generated: 2026-10-23T14:19:42+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 審查站
@@ -189,6 +189,8 @@ add-round 會拒絕的內容：
 拒絕時工單零寫入，stderr 點名問題。舊格式的工單（沒有階段與指紋）仍可讀可追加。
 
 stamp 會拒絕的情況：寫碼任務沒全完成（列出計數）；最後一輪還有未解必修且沒帶 `--accept`（提示 `--accept` 或先修正重審）。最後一輪只剩 SUGGESTION 時照常蓋章。
+
+蓋章時引擎同時記下審查輪數：原有的輪數加上這次工單的輪數。例如工單跑了 3 輪就蓋章，記 3；章失效後重開的工單又跑 2 輪，重新蓋章後記 5。帶 `--accept` 也記；守門失敗、或用 discard 放棄審查時不變。規則細節見[品質關卡總覽](quality-stations.md)。
 
 蓋章後工單刪除，fs 模式只剩 git 歷史，remote 模式不可回讀。
 

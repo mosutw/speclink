@@ -4,7 +4,7 @@ section: 桌面 app
 order: 350
 keywords: [檢查更新, 更新頁, 回到前景, 更新日誌, 安裝 CLI, PATH, 技能檔過期, 保留現狀, speclink update, 關於 Speclink, 版本資訊, 第三方授權]
 sources: ["desktop-app#桌面自動更新", "desktop-app#更新日誌彈窗", "desktop-app#安裝 CLI 指令到 PATH", "desktop-app#指令檔過期提示", "desktop-app#指令檔過期提示捲動釘選", "desktop-app#關於頁", "workspace-tools#技能檔過期探測", "workspace-tools#受管檔再生的降級守門", "workspace-tools#引擎版號查詢面", "workspace-tools#產物層版本戳同源", "workspace-tools#內嵌資產版本鎖定紀律", "workspace-tools#update 清除孤兒技能目錄", "desktop-app#更新日誌依介面語言呈現", "desktop-app#更新頁內附資訊不依賴網路成功", "desktop-network-diagnostics"]
-generated: 2026-10-23T14:19:42+08:00
+generated: 2026-10-28T20:20:00+08:00
 ---
 
 # 自動更新、CLI、技能檔過期與關於頁
@@ -186,6 +186,14 @@ PATH 的處理：
 - 「更新 Speclink」（只在較新時出現）：開啟應用程式設定的更新頁。較新代表 app 本體是舊版、專案檔案領先，所以確認框沒有任何改寫專案檔案的按鈕，app 不會用舊版內容改寫領先的專案檔案。
 
 你在終端執行 `speclink update` 把技能檔更新到現版時，app 偵測到檔案變動後重新探測，提示卡自己消失，不用重開專案。
+
+### 既有專案的路徑與資料檔
+
+本 Fork 對只使用 openspec、沒有 spec_dir 的專案，更新時先補寫 `spec_dir: openspec`，再原地更新技能，不提示把資料夾搬走。app 升版不會在背景改寫專案。
+
+已使用 speclink 佈局、未明寫 spec_dir 且仍有舊資料檔時，保留上游的資料檔改名提示；確認框列出檔案數及暫緩原因，更新由同一套 CLI 核心處理。明寫目錄或 remote 專案不做批次改名。完成後重新解析目錄並更新監看目標。
+
+見[規格資料夾與舊佈局遷移](spec-folder.md)。
 
 ### 只更新、不降級
 

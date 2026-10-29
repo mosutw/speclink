@@ -674,7 +674,7 @@ pub fn archive(
 
     // Fail-closed gate: archiving stamps and moves the metadata document —
     // refuse a corrupt one before any validation or file effect.
-    crate::model::require_valid_meta(change)?;
+    crate::model::require_valid_meta(store, change)?;
 
     guard_open_tickets(store, &change.name, opts.carry_review, opts.carry_verify)?;
 
@@ -866,6 +866,32 @@ at least one operation (ADDED, MODIFIED, REMOVED, or RENAMED)"
     checks.canonical_specs = plans.iter()
         .map(|plan| (plan.capability.clone(), plan.content.clone())).collect();
     let caps: Vec<CapCounts> = plans.into_iter().map(|p| p.counts).collect();
+
+    // archived_at lands before the move (process-cost-metrics design D3), from the same
+    // instant as the dated name. A failed move leaves it on the in-progress change; the
+    // retry's `set` replaces it in place, so the document keeps one line. When canonical
+    // specs were already written, a failure names the snapshot location too.
+    let written_meta = crate::model::edit_meta(store, &change.name, |m| {
+        anyhow::ensure!(
+            Some(crate::security::data::sha256(m.text().as_bytes())) == checks.expected_meta,
+            "revision_conflict: change metadata changed"
+        );
+        m.set("archived_at", &stamp)?;
+        Ok(m.text())
+    }).map_err(|e| {
+        let backups = if snapshot_created {
+            format!("; pre-archive backups are under {}", snapshot_dir.display())
+        } else {
+            String::new()
+        };
+        anyhow::anyhow!(
+            "Failed to write archived_at for '{}': {e} — the change was not moved{backups}",
+            change.name
+        )
+    })?;
+    // Keep the archive transaction anchored to the exact bytes just written;
+    // a subsequent concurrent edit still fails its original CAS guard.
+    checks.expected_meta = written_meta.as_ref().map(|text| crate::security::data::sha256(text.as_bytes()));
 
     // Move change into the archive under its dated name. The in-progress marker
     // stays untouched on archive (frozen behavior).

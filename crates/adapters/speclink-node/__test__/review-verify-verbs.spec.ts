@@ -22,7 +22,7 @@ function engineWithActor(actor?: string) {
 }
 
 const metaOf = (store: ReturnType<typeof memoryStore>) =>
-  store.readArtifact(CHANGE, '.openspec.yaml').then((m) => m ?? '')
+  store.readArtifact(CHANGE, '.meta.yaml').then((m) => m ?? '')
 
 describe('review 蓋章鏈', () => {
   it('add-round 建立工單、stamp 以建構期 actor 落 reviewed_by', async () => {

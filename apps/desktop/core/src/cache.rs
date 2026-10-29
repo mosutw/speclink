@@ -22,7 +22,9 @@ use crate::init_core_context;
 /// v5：加 verify_status（封存時的驗證結局，spec client-protocol「已封存清單的驗證結局欄位」）。
 /// v6：加 why_excerpt／created（封存卡描述列與抽屜出身列，spec client-protocol
 ///     「已封存清單的呈現輔助欄位」）。
-const CACHE_VERSION: i64 = 6;
+/// v7：加 doc_lines／lead_days／lead_hours／review_rounds／verify_rounds（已封存頁的
+///     流程成本摘要，spec client-protocol「已封存清單的流程成本欄位」）。
+const CACHE_VERSION: i64 = 7;
 
 /// 回傳歸檔 change 清單：`{ "archived": [ { datedName, date, name } ] }`，按 datedName 排序。
 /// 非專案回傳 `{ "archived": [] }`。
@@ -113,8 +115,12 @@ fn reconcile(db_path: &Path, store: &dyn Store, names: &[String]) -> rusqlite::R
                 .read_archived_artifact(name, "proposal.md")
                 .as_deref()
                 .and_then(crate::query::why_excerpt);
+            // 流程成本（process-cost-metrics D4）：單項由 core 算，缺席存 NULL；
+            // 存不進 SQLite 整數的超大輪數一樣存 NULL（讀出時不插 key）。
+            let cost = speclink_core::cost::archived_cost(store, name);
+            let int = |n: Option<u64>| n.and_then(|n| i64::try_from(n).ok());
             conn.execute(
-                "INSERT OR REPLACE INTO archived_changes (dated_name, meta, tasks_total, tasks_done, spec_count, created_by, from_discussions, review_status, verify_status, why_excerpt, created) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                "INSERT OR REPLACE INTO archived_changes (dated_name, meta, tasks_total, tasks_done, spec_count, created_by, from_discussions, review_status, verify_status, why_excerpt, created, doc_lines, lead_days, lead_hours, review_rounds, verify_rounds) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 rusqlite::params![
                     name,
                     meta,
@@ -127,6 +133,11 @@ fn reconcile(db_path: &Path, store: &dyn Store, names: &[String]) -> rusqlite::R
                     verify_status,
                     why_excerpt,
                     parsed.created,
+                    int(cost.doc_lines),
+                    cost.lead_days,
+                    cost.lead_hours,
+                    int(cost.review_rounds),
+                    int(cost.verify_rounds),
                 ],
             )?;
         }
@@ -147,10 +158,18 @@ fn reconcile(db_path: &Path, store: &dyn Store, names: &[String]) -> rusqlite::R
     }
 
     let mut stmt = conn.prepare(
-        "SELECT dated_name, tasks_total, tasks_done, spec_count, created_by, from_discussions, review_status, verify_status, why_excerpt, created FROM archived_changes ORDER BY dated_name",
+        "SELECT dated_name, tasks_total, tasks_done, spec_count, created_by, from_discussions, review_status, verify_status, why_excerpt, created, doc_lines, lead_days, lead_hours, review_rounds, verify_rounds FROM archived_changes ORDER BY dated_name",
     )?;
     let items: Vec<Value> = stmt
         .query_map([], |r| {
+            // 流程成本欄位：JSON 鍵與 SELECT 欄位編號寫在同一處，缺席（NULL）時為 None。
+            let cost = [
+                ("docLines", r.get::<_, Option<i64>>(10)?.map(Value::from)),
+                ("leadDays", r.get::<_, Option<i64>>(11)?.map(Value::from)),
+                ("leadHours", r.get::<_, Option<f64>>(12)?.map(Value::from)),
+                ("reviewRounds", r.get::<_, Option<i64>>(13)?.map(Value::from)),
+                ("verifyRounds", r.get::<_, Option<i64>>(14)?.map(Value::from)),
+            ];
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, Option<i64>>(1)?,
@@ -162,6 +181,7 @@ fn reconcile(db_path: &Path, store: &dyn Store, names: &[String]) -> rusqlite::R
                 r.get::<_, Option<String>>(7)?,
                 r.get::<_, Option<String>>(8)?,
                 r.get::<_, Option<String>>(9)?,
+                cost,
             ))
         })?
         .flatten()
@@ -177,6 +197,7 @@ fn reconcile(db_path: &Path, store: &dyn Store, names: &[String]) -> rusqlite::R
                 verify_status,
                 why_excerpt,
                 created,
+                cost,
             ) = row;
             let mut item = item_for(&n);
             // 無 tasks.md 的封存項徽章欄位缺席（前端據此不顯示徽章）。
@@ -201,6 +222,12 @@ fn reconcile(db_path: &Path, store: &dyn Store, names: &[String]) -> rusqlite::R
             if let Some(created) = created {
                 item["created"] = json!(created);
             }
+            // 流程成本欄位同規則：缺席不插 key。
+            for (key, value) in cost {
+                if let Some(value) = value {
+                    item[key] = value;
+                }
+            }
             item
         })
         .collect();
@@ -221,7 +248,7 @@ fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
             "DROP TABLE IF EXISTS archived_changes;
              DROP TABLE IF EXISTS schema_version;
              CREATE TABLE schema_version (version INTEGER);
-             CREATE TABLE archived_changes (dated_name TEXT PRIMARY KEY, meta TEXT, tasks_total INTEGER, tasks_done INTEGER, spec_count INTEGER, created_by TEXT, from_discussions TEXT, review_status TEXT, verify_status TEXT, why_excerpt TEXT, created TEXT);",
+             CREATE TABLE archived_changes (dated_name TEXT PRIMARY KEY, meta TEXT, tasks_total INTEGER, tasks_done INTEGER, spec_count INTEGER, created_by TEXT, from_discussions TEXT, review_status TEXT, verify_status TEXT, why_excerpt TEXT, created TEXT, doc_lines INTEGER, lead_days INTEGER, lead_hours REAL, review_rounds INTEGER, verify_rounds INTEGER);",
         )?;
         conn.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -264,17 +291,17 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    /// 建立一個含歸檔 change 的暫存 fixture 專案（openspec/ 使 discover 成功）。
+    /// 建立一個含歸檔 change 的暫存 fixture 專案（speclink/ 使 discover 成功）。
     fn fixture_project(tag: &str, archived: &[&str]) -> PathBuf {
         let root = std::env::temp_dir().join(format!("speclink-cache-{}-{}", tag, std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        let archive = root.join("openspec").join("changes").join("archive");
+        let archive = root.join("speclink").join("changes").join("archive");
         for name in archived {
             let dir = archive.join(name);
             fs::create_dir_all(&dir).unwrap();
             fs::write(dir.join("proposal.md"), "## Why\narchived\n").unwrap();
         }
-        fs::create_dir_all(root.join("openspec").join("specs")).unwrap();
+        fs::create_dir_all(root.join("speclink").join("specs")).unwrap();
         root
     }
 
@@ -296,9 +323,9 @@ mod tests {
             "review",
             &["2026-01-01-plain", "2026-01-02-passed", "2026-01-03-carried"],
         );
-        let archive = root.join("openspec").join("changes").join("archive");
+        let archive = root.join("speclink").join("changes").join("archive");
         fs::write(
-            archive.join("2026-01-02-passed").join(".openspec.yaml"),
+            archive.join("2026-01-02-passed").join(".meta.yaml"),
             "schema: spec-driven\ncreated: 2026-01-01\nreviewed_at: 2026-01-02\nreviewed_by: Rev <r@example.com>\nreviewed_with: claude\nreviewed_tasks_total: 1\nreviewed_scope:\n  - path: src/lib.rs\n    hash: dead\n",
         )
         .unwrap();
@@ -333,14 +360,14 @@ mod tests {
             "verify",
             &["2026-02-01-plain", "2026-02-02-passed", "2026-02-03-carried"],
         );
-        let archive = root.join("openspec").join("changes").join("archive");
+        let archive = root.join("speclink").join("changes").join("archive");
         fs::write(
-            archive.join("2026-02-02-passed").join(".openspec.yaml"),
+            archive.join("2026-02-02-passed").join(".meta.yaml"),
             "schema: spec-driven\ncreated: 2026-02-01\nverified_at: 2026-02-02\nverified_by: Ver <v@example.com>\nverified_with: claude\nverified_tasks_total: 1\nverified_scope:\n  - path: src/lib.rs\n    hash: dead\n",
         )
         .unwrap();
         fs::write(
-            archive.join("2026-02-03-carried").join(".openspec.yaml"),
+            archive.join("2026-02-03-carried").join(".meta.yaml"),
             "schema: spec-driven\ncreated: 2026-02-01\nreviewed_at: 2026-02-02\nreviewed_by: Rev <r@example.com>\nreviewed_tasks_total: 1\nreviewed_scope:\n  - path: src/lib.rs\n    hash: dead\n",
         )
         .unwrap();
@@ -417,7 +444,7 @@ mod tests {
     #[test]
     fn task_counts_converge_once_and_read_zero_parse_afterwards() {
         let root = fixture_project("counts", &["2026-06-06-zeta"]);
-        let dir = root.join("openspec").join("changes").join("archive").join("2026-06-06-zeta");
+        let dir = root.join("speclink").join("changes").join("archive").join("2026-06-06-zeta");
         fs::write(dir.join("tasks.md"), "## 1. G\n\n- [x] 1.1 a\n- [x] 1.2 b\n- [ ] 1.3 c\n").unwrap();
 
         let v = archived_changes_at(&root);
@@ -448,7 +475,7 @@ mod tests {
     #[test]
     fn v1_cache_is_dropped_and_rebuilt_with_counts() {
         let root = fixture_project("v1", &["2026-06-08-theta"]);
-        let dir = root.join("openspec").join("changes").join("archive").join("2026-06-08-theta");
+        let dir = root.join("speclink").join("changes").join("archive").join("2026-06-08-theta");
         fs::write(dir.join("tasks.md"), "- [x] 1.1 done\n").unwrap();
         // 預寫一個 v1 快取（舊表結構、已含該列）——版本升級須整表重建。
         let db_dir = root.join(".speclink");
@@ -478,12 +505,12 @@ mod tests {
     #[test]
     fn archived_items_carry_card_info_fields() {
         // 封存變更卡收合資訊（spec-archive-drawer design D4）：specCount 為 specs/ 下
-        // capability 目錄數、createdBy 取 .openspec.yaml 的 created_by（缺席 null）、
+        // capability 目錄數、createdBy 取 .meta.yaml 的 created_by（缺席 null）、
         // fromDiscussions 為來源討論 slug 陣列（缺席空陣列）；欄位入快取，首次收斂後零解析。
         let root = fixture_project("cardinfo", &["2026-06-10-kappa", "2026-06-11-lambda"]);
-        let dir = root.join("openspec").join("changes").join("archive").join("2026-06-10-kappa");
+        let dir = root.join("speclink").join("changes").join("archive").join("2026-06-10-kappa");
         fs::write(
-            dir.join(".openspec.yaml"),
+            dir.join(".meta.yaml"),
             "schema: spec-driven\ncreated: 2026-06-01\ncreated_by: momo\nfrom_discussion: alpha-search, beta-cache\narchived_at: 2026-06-10\n",
         )
         .unwrap();
@@ -506,7 +533,7 @@ mod tests {
         assert_eq!(lambda["fromDiscussions"], json!([]));
 
         // 首次收斂後零解析：改動 meta 不影響已快取的欄位（封存內容本就不再變動）。
-        fs::write(dir.join(".openspec.yaml"), "created_by: someone-else\n").unwrap();
+        fs::write(dir.join(".meta.yaml"), "created_by: someone-else\n").unwrap();
         let v2 = archived_changes_at(&root);
         let item2 = v2["archived"].as_array().unwrap().iter().find(|i| i["datedName"] == "2026-06-10-kappa").unwrap().clone();
         assert_eq!(item2["createdBy"], "momo", "cached card info served without re-parsing");
@@ -518,8 +545,8 @@ mod tests {
         // 版本遞升（spec-archive-drawer design D5）：新欄位入庫使 CACHE_VERSION 2→3，
         // 舊 v2 快取整表重建、新欄位補齊、版本蓋 3 章。
         let root = fixture_project("v2", &["2026-06-12-mu"]);
-        let dir = root.join("openspec").join("changes").join("archive").join("2026-06-12-mu");
-        fs::write(dir.join(".openspec.yaml"), "created: 2026-06-01\ncreated_by: momo\n").unwrap();
+        let dir = root.join("speclink").join("changes").join("archive").join("2026-06-12-mu");
+        fs::write(dir.join(".meta.yaml"), "created: 2026-06-01\ncreated_by: momo\n").unwrap();
         fs::create_dir_all(dir.join("specs").join("cap-a")).unwrap();
         fs::write(dir.join("specs").join("cap-a").join("spec.md"), "## ADDED Requirements\n").unwrap();
         fs::write(dir.join("tasks.md"), "- [x] 1.1 done\n").unwrap();
@@ -559,7 +586,7 @@ mod tests {
             "whyexcerpt",
             &["2026-07-01-nu", "2026-07-02-xi", "2026-07-03-omicron"],
         );
-        let archive = root.join("openspec").join("changes").join("archive");
+        let archive = root.join("speclink").join("changes").join("archive");
         // 兩欄位俱在。
         fs::write(
             archive.join("2026-07-01-nu").join("proposal.md"),
@@ -567,14 +594,14 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            archive.join("2026-07-01-nu").join(".openspec.yaml"),
+            archive.join("2026-07-01-nu").join(".meta.yaml"),
             "schema: spec-driven\ncreated: 2026-06-20\narchived_at: 2026-07-01\n",
         )
         .unwrap();
         // proposal 缺席（fixture 預設會寫一份，此處移除）——metadata 仍可得。
         fs::remove_file(archive.join("2026-07-02-xi").join("proposal.md")).unwrap();
         fs::write(
-            archive.join("2026-07-02-xi").join(".openspec.yaml"),
+            archive.join("2026-07-02-xi").join(".meta.yaml"),
             "schema: spec-driven\ncreated: 2026-06-21\n",
         )
         .unwrap();
@@ -620,6 +647,101 @@ mod tests {
             nu2["whyExcerpt"], "看板搜尋列缺席，跨卡找東西只能逐欄翻。",
             "cached excerpt served without re-parsing"
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    const COST_KEYS: [&str; 5] = ["docLines", "leadDays", "leadHours", "reviewRounds", "verifyRounds"];
+
+    fn numbered_lines(n: usize) -> String {
+        (1..=n).map(|i| format!("line {i}\n")).collect()
+    }
+
+    #[test]
+    fn archived_items_carry_process_cost_fields() {
+        // spec client-protocol「已封存清單的流程成本欄位」三個情境：新格式帶齊、
+        // 舊格式只帶得出的欄位、沒有 metadata 與文件時全部缺席（不插 key）。
+        let root = fixture_project("cost", &["2026-10-22-demo", "2026-08-14-old", "2026-08-15-empty"]);
+        let archive = root.join("speclink").join("changes").join("archive");
+        let demo = archive.join("2026-10-22-demo");
+        fs::write(
+            demo.join(".meta.yaml"),
+            "schema: spec-driven\ncreated: 2026-10-21T10:00:00+08:00\nreviewed_rounds: 2\nverified_rounds: 3\narchived_at: 2026-10-22T16:30:00+08:00\n",
+        )
+        .unwrap();
+        fs::write(demo.join("proposal.md"), numbered_lines(120)).unwrap();
+        fs::write(demo.join("tasks.md"), numbered_lines(80)).unwrap();
+        fs::create_dir_all(demo.join("specs").join("auth")).unwrap();
+        fs::write(demo.join("specs").join("auth").join("spec.md"), numbered_lines(50)).unwrap();
+        let old = archive.join("2026-08-14-old");
+        fs::write(old.join(".meta.yaml"), "schema: spec-driven\ncreated: 2026-08-12\n").unwrap();
+        fs::write(old.join("tasks.md"), "- [x] 1.1 a\n").unwrap();
+        fs::remove_file(archive.join("2026-08-15-empty").join("proposal.md")).unwrap();
+
+        let v = archived_changes_at(&root);
+        let arr = v["archived"].as_array().unwrap();
+        let by_name = |n: &str| arr.iter().find(|i| i["datedName"] == n).unwrap().clone();
+
+        let demo = by_name("2026-10-22-demo");
+        assert_eq!(demo["docLines"], 250, "{demo}");
+        assert_eq!(demo["leadDays"], 1);
+        assert_eq!(demo["leadHours"], 30.5);
+        assert_eq!(demo["reviewRounds"], 2);
+        assert_eq!(demo["verifyRounds"], 3);
+        assert_eq!(demo["created"], "2026-10-21", "created keeps the date part");
+
+        let old = by_name("2026-08-14-old");
+        assert_eq!(old["docLines"], 3, "fixture proposal (2) + tasks (1): {old}");
+        assert_eq!(old["leadDays"], 2);
+        for key in ["leadHours", "reviewRounds", "verifyRounds"] {
+            assert!(old.get(key).is_none(), "{key} absent: {old}");
+        }
+        assert_eq!(old["tasksTotal"], 1, "existing fields stay");
+
+        let empty = by_name("2026-08-15-empty");
+        for key in COST_KEYS {
+            assert!(empty.get(key).is_none(), "{key} absent: {empty}");
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rounds_too_large_for_sqlite_are_left_out_instead_of_wrapping() {
+        // u64 上限放不進 SQLite 的 i64：存 NULL、讀出不插 key，不會變成負數。
+        let root = fixture_project("huge-rounds", &["2026-07-06-rho"]);
+        let dir = root.join("speclink").join("changes").join("archive").join("2026-07-06-rho");
+        fs::write(dir.join(".meta.yaml"), format!("reviewed_rounds: {}\nverified_rounds: 4\n", u64::MAX))
+            .unwrap();
+        let v = archived_changes_at(&root);
+        let item = &v["archived"].as_array().unwrap()[0];
+        assert!(item.get("reviewRounds").is_none(), "oversized count is absent: {item}");
+        assert_eq!(item["verifyRounds"], 4, "the other count stays");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn v6_cache_is_dropped_and_rebuilt_with_process_cost() {
+        // design D5：五欄入庫使 CACHE_VERSION 6→7，舊 v6 快取整表重建。
+        let root = fixture_project("v6", &["2026-07-05-pi"]);
+        let db_dir = root.join(".speclink");
+        fs::create_dir_all(&db_dir).unwrap();
+        let conn = Connection::open(db_dir.join("desktop-cache.db")).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_version (version INTEGER);
+             INSERT INTO schema_version (version) VALUES (6);
+             CREATE TABLE archived_changes (dated_name TEXT PRIMARY KEY, meta TEXT, tasks_total INTEGER, tasks_done INTEGER, spec_count INTEGER, created_by TEXT, from_discussions TEXT, review_status TEXT, verify_status TEXT, why_excerpt TEXT, created TEXT);
+             INSERT INTO archived_changes (dated_name, meta, spec_count) VALUES ('2026-07-05-pi', '', 0);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let v = archived_changes_at(&root);
+        let item = &v["archived"].as_array().unwrap()[0];
+        assert_eq!(item["docLines"], 2, "v6 cache must be rebuilt so the cost converges: {item}");
+        let conn = Connection::open(db_dir.join("desktop-cache.db")).unwrap();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 7, "schema version stamped to 7 after rebuild");
         let _ = fs::remove_dir_all(&root);
     }
 

@@ -69,7 +69,7 @@ fn canonical_config_yaml_toggles_reach_the_tasks_instruction() {
     // Spec scenario 正典值生效: policy only in openspec/config.yaml.
     let p = TempProject::new(
         "canonical",
-        "tools:\n  - claude\n",
+        "spec_dir: openspec\ntools:\n  - claude\n",
         "tdd: true\naudit: true\n",
     );
     let out = p.instructions("tasks", &[]);
@@ -86,7 +86,7 @@ fn canonical_config_yaml_toggles_reach_the_tasks_instruction() {
 
 #[test]
 fn toggles_off_leave_the_instruction_untouched() {
-    let p = TempProject::new("defaults", "tools:\n  - claude\n", "schema: spec-driven\n");
+    let p = TempProject::new("defaults", "spec_dir: openspec\ntools:\n  - claude\n", "schema: spec-driven\n");
     let payload = json_payload(&p.instructions("tasks", &[]));
     let instr = instruction_text(&payload);
     assert!(!instr.contains("TDD"), "no TDD note when the toggle is off: {instr}");
@@ -119,7 +119,7 @@ fn app_policy_keys_are_inert_and_warning_free() {
     // config.yaml locale ja (tdd unset) → canonical/default values, silent stderr.
     let p = TempProject::new(
         "app-inert",
-        "locale: tw\ntdd: true\ntools:\n  - claude\n",
+        "spec_dir: openspec\nlocale: tw\ntdd: true\ntools:\n  - claude\n",
         "locale: ja\n",
     );
     let out = p.instructions("proposal", &[]);
@@ -161,7 +161,7 @@ fn env_var_overrides_both_files() {
 #[test]
 fn invalid_bool_env_var_falls_through_to_canonical_value() {
     // Spec scenario 非法布林環境變數落到下一層: SPECLINK_AUDIT=yes is ignored.
-    let p = TempProject::new("invalid-env", "tools:\n  - claude\n", "audit: true\n");
+    let p = TempProject::new("invalid-env", "spec_dir: openspec\ntools:\n  - claude\n", "audit: true\n");
     let out = p.instructions("tasks", &[("SPECLINK_AUDIT", "yes")]);
     let payload = json_payload(&out);
     assert!(
@@ -181,7 +181,7 @@ fn apply_payload_carries_effective_policy_values() {
         (Some("true"), "", true),
     ];
     for (i, (env_tdd, wf_yaml, want_tdd)) in rows.iter().enumerate() {
-        let p = TempProject::new(&format!("apply-policy-{i}"), "tools:\n  - claude\n", wf_yaml);
+        let p = TempProject::new(&format!("apply-policy-{i}"), "spec_dir: openspec\ntools:\n  - claude\n", wf_yaml);
         let envs: Vec<(&str, &str)> = env_tdd.iter().map(|v| ("SPECLINK_TDD", *v)).collect();
         let payload = json_payload(&p.instructions("apply", &envs));
         assert_eq!(
@@ -192,7 +192,7 @@ fn apply_payload_carries_effective_policy_values() {
         assert_eq!(payload["audit"].as_bool(), Some(false), "row {i}: audit defaults to false");
     }
     // audit follows the same resolution entry point.
-    let p = TempProject::new("apply-policy-audit", "tools:\n  - claude\n", "audit: true\n");
+    let p = TempProject::new("apply-policy-audit", "spec_dir: openspec\ntools:\n  - claude\n", "audit: true\n");
     let payload = json_payload(&p.instructions("apply", &[]));
     assert_eq!(payload["audit"].as_bool(), Some(true));
 }
@@ -204,7 +204,7 @@ fn update_with_legacy_policy_keys_touches_no_config_and_stays_silent() {
     // and prints no deprecation warning (the warning mechanism is gone).
     let p = TempProject::new(
         "update-legacy",
-        "locale: tw\ntdd: true\ntools:\n  - claude\n",
+        "spec_dir: openspec\nlocale: tw\ntdd: true\ntools:\n  - claude\n",
         "locale: ja\n",
     );
     let app_before = std::fs::read_to_string(p.dir.join(".speclink.yaml")).unwrap();

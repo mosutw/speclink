@@ -120,7 +120,7 @@ impl TempProject {
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("openspec")).unwrap();
+        std::fs::create_dir_all(dir.join("speclink").join("changes")).unwrap();
         TempProject { dir }
     }
 
@@ -184,7 +184,7 @@ fn stdout_of(out: &Output) -> String {
 
 #[test]
 fn remote_validate_aggregates_per_change_endpoints_with_fs_parity_json() {
-    const ERR: &str = "openspec/changes/beta/specs/auth/spec.md: Parse error: Invalid format: Delta spec must contain at least one operation (ADDED, MODIFIED, REMOVED, or RENAMED)";
+    const ERR: &str = "speclink/changes/beta/specs/auth/spec.md: Parse error: Invalid format: Delta spec must contain at least one operation (ADDED, MODIFIED, REMOVED, or RENAMED)";
     let mock = mock_server(vec![
         (
             "GET",
@@ -349,11 +349,11 @@ fn show_change_routes() -> Vec<(&'static str, &'static str, u16, String)> {
 /// 同一份內容的 fs 沙盒。
 fn show_fs_project(tag: &str) -> TempProject {
     let p = TempProject::fs(tag);
-    p.write("openspec/changes/demo/.openspec.yaml", SHOW_META);
-    p.write("openspec/changes/demo/proposal.md", SHOW_PROPOSAL);
-    p.write("openspec/changes/demo/design.md", SHOW_DESIGN);
-    p.write("openspec/changes/demo/tasks.md", SHOW_TASKS);
-    p.write("openspec/changes/demo/specs/auth/spec.md", "## ADDED Requirements\n");
+    p.write("speclink/changes/demo/.meta.yaml", SHOW_META);
+    p.write("speclink/changes/demo/proposal.md", SHOW_PROPOSAL);
+    p.write("speclink/changes/demo/design.md", SHOW_DESIGN);
+    p.write("speclink/changes/demo/tasks.md", SHOW_TASKS);
+    p.write("speclink/changes/demo/specs/auth/spec.md", "## ADDED Requirements\n");
     p
 }
 
@@ -367,7 +367,7 @@ fn remote_show_change_matches_fs_output_byte_for_byte() {
 
     let mock = mock_server(show_change_routes());
     let p = TempProject::remote("show-remote", &mock.base, "backend");
-    assert!(!p.dir.join("openspec").exists(), "remote sandbox has no local store");
+    assert!(!p.dir.join("speclink").exists(), "remote sandbox has no local store");
 
     let remote_human = p.run(&["show", "demo"]);
     assert!(remote_human.status.success(), "remote stderr: {}", stderr_of(&remote_human));
@@ -391,7 +391,7 @@ fn remote_show_change_matches_fs_output_byte_for_byte() {
     assert_eq!(payload["fromDiscussions"][0], "auth-scope");
     assert_eq!(payload["deltaSpecs"][0], "auth/spec.md");
     assert!(
-        !p.dir.join("openspec").exists(),
+        !p.dir.join("speclink").exists(),
         "the remote run never created or read a local store"
     );
 }
@@ -432,7 +432,7 @@ fn remote_history_marks_partial_records_in_human_and_json_output() {
 #[test]
 fn remote_show_spec_matches_fs_output_byte_for_byte() {
     let fs = TempProject::fs("show-spec-fs");
-    fs.write("openspec/specs/user-auth/spec.md", SHOW_SPEC_DOC);
+    fs.write("speclink/specs/user-auth/spec.md", SHOW_SPEC_DOC);
     let fs_human = fs.run(&["show", "user-auth"]);
     assert!(fs_human.status.success(), "fs stderr: {}", stderr_of(&fs_human));
     let fs_json = fs.run(&["show", "user-auth", "--json"]);
@@ -473,8 +473,8 @@ const PARITY_SPEC_BARE: &str =
 #[test]
 fn remote_validate_specs_matches_fs_output_byte_for_byte() {
     let fs = TempProject::fs("validate-specs-fs");
-    fs.write("openspec/specs/alpha/spec.md", PARITY_SPEC_TBD);
-    fs.write("openspec/specs/beta/spec.md", PARITY_SPEC_BARE);
+    fs.write("speclink/specs/alpha/spec.md", PARITY_SPEC_TBD);
+    fs.write("speclink/specs/beta/spec.md", PARITY_SPEC_BARE);
     let fs_human = fs.run(&["validate", "--specs"]);
     let fs_json = fs.run(&["validate", "--specs", "--json"]);
     assert!(!fs_human.status.success(), "缺 Purpose 的規格使 fs 模式非零收尾");
@@ -516,7 +516,7 @@ fn remote_validate_specs_matches_fs_output_byte_for_byte() {
     mock.find("GET", "/specs");
     mock.find("GET", "/specs/alpha/document");
     assert!(
-        !p.dir.join("openspec").exists(),
+        !p.dir.join("speclink").exists(),
         "the remote run never created or read a local store"
     );
 }
@@ -570,9 +570,9 @@ const LIST_TASKS: &str = "- [ ] 1.1 Do the thing\n";
 fn list_fs_project(tag: &str) -> TempProject {
     let p = TempProject::fs(tag);
     for (name, meta) in [("good-change", LIST_GOOD_META), ("broken-change", LIST_BAD_META)] {
-        p.write(&format!("openspec/changes/{name}/.openspec.yaml"), meta);
-        p.write(&format!("openspec/changes/{name}/proposal.md"), LIST_PROPOSAL);
-        p.write(&format!("openspec/changes/{name}/tasks.md"), LIST_TASKS);
+        p.write(&format!("speclink/changes/{name}/.meta.yaml"), meta);
+        p.write(&format!("speclink/changes/{name}/proposal.md"), LIST_PROPOSAL);
+        p.write(&format!("speclink/changes/{name}/tasks.md"), LIST_TASKS);
     }
     p
 }
@@ -608,7 +608,7 @@ fn list_routes() -> Vec<(&'static str, &'static str, u16, String)> {
 
 #[test]
 fn remote_list_matches_fs_output_byte_for_byte_including_the_invalid_marker() {
-    // wire 一直帶著 metaError，只有 fs 側渲染 `(invalid .openspec.yaml)`——
+    // wire 一直帶著 metaError，只有 fs 側渲染 `(invalid .meta.yaml)`——
     // 同一份事實兩種輸出，正是渲染寫兩份養出來的漂移。
     let fs = list_fs_project("list-fs");
     let args = ["list", "--sort", "name", "--no-color"];
@@ -626,7 +626,7 @@ fn remote_list_matches_fs_output_byte_for_byte_including_the_invalid_marker() {
         "human output is byte-identical to fs mode, invalid marker included"
     );
     assert!(
-        !p.dir.join("openspec").exists(),
+        !p.dir.join("speclink").exists(),
         "the remote run never created or read a local store"
     );
 }
@@ -639,11 +639,11 @@ const CONCLUSION: &str = "**Decision**: ship it\n";
 fn conclude_fs_project(tag: &str) -> TempProject {
     let p = TempProject::fs(tag);
     p.write(
-        "openspec/discussions/auth-scope.md",
+        "speclink/discussions/auth-scope.md",
         "---\ntopic: Auth scope\nslug: auth-scope\nstatus: promoted\npromoted_to: add-auth\n---\n\n## Context\n\nx\n\n## Rounds\n\n## Conclusion\n\nold\n",
     );
     p.write(
-        "openspec/changes/add-auth/.openspec.yaml",
+        "speclink/changes/add-auth/.meta.yaml",
         "schema: spec-driven\ncreated: 2026-07-01\nfrom_discussion: auth-scope\n",
     );
     p
@@ -849,7 +849,7 @@ fn remote_discuss_promote_prints_one_line_and_drops_the_path_pair() {
     // 一起不印——首行則兩模式同文本。
     let fs = TempProject::fs("discuss-promote-fs");
     fs.write(
-        "openspec/discussions/auth-scope.md",
+        "speclink/discussions/auth-scope.md",
         "---\ntopic: Auth scope\nslug: auth-scope\nstatus: concluded\n---\n\n## Context\n\nx\n\n## Rounds\n\n## Conclusion\n\n**Decision**: go\n",
     );
     let fs_out = fs.run(&["discuss", "promote", "auth-scope"]);
@@ -884,7 +884,7 @@ fn remote_discuss_promote_last_sends_the_flag_and_prints_like_fs_mode() {
     // `last: true`，人眼輸出與 fs 模式的首行同文本（旗標從不進輸出）。
     let fs = TempProject::fs("discuss-promote-last-fs");
     fs.write(
-        "openspec/discussions/auth-scope.md",
+        "speclink/discussions/auth-scope.md",
         "---\ntopic: Auth scope\nslug: auth-scope\nstatus: concluded\nhold: true\n---\n\n## Context\n\nx\n\n## Rounds\n\n## Conclusion\n\n**Decision**: go\n",
     );
     let fs_out = fs.run(&["discuss", "promote", "auth-scope", "--last"]);
@@ -892,7 +892,7 @@ fn remote_discuss_promote_last_sends_the_flag_and_prints_like_fs_mode() {
     let fs_stdout = stdout_of(&fs_out);
     let fs_first = fs_stdout.lines().next().expect("fs prints the promoted line");
     assert!(
-        !std::fs::read_to_string(fs.dir.join("openspec/discussions/auth-scope.md"))
+        !std::fs::read_to_string(fs.dir.join("speclink/discussions/auth-scope.md"))
             .unwrap()
             .contains("hold"),
         "fs 模式 --last 解除旗標"
@@ -930,7 +930,7 @@ fn remote_in_progress_remove_reports_the_idempotent_noop_like_fs_mode() {
     // 說「已移除」——同一個引擎結果，兩種說法。
     let fs = TempProject::fs("inprogress-fs");
     fs.write(
-        "openspec/changes/add-auth/.openspec.yaml",
+        "speclink/changes/add-auth/.meta.yaml",
         "schema: spec-driven\ncreated: 2026-07-01\n",
     );
     let args = ["in-progress", "remove", "add-auth"];
@@ -964,17 +964,17 @@ fn remote_in_progress_remove_reports_the_idempotent_noop_like_fs_mode() {
 fn archive_fs_project(tag: &str) -> TempProject {
     let p = TempProject::fs(tag);
     p.write(
-        "openspec/changes/add-auth/.openspec.yaml",
+        "speclink/changes/add-auth/.meta.yaml",
         "schema: spec-driven\ncreated: 2026-07-01\nfrom_discussion: auth-scope\n",
     );
-    p.write("openspec/changes/add-auth/tasks.md", "- [x] 1.1 done\n");
+    p.write("speclink/changes/add-auth/tasks.md", "- [x] 1.1 done\n");
     p.write(
-        "openspec/changes/add-auth/specs/user-auth/spec.md",
+        "speclink/changes/add-auth/specs/user-auth/spec.md",
         // 新開 capability 的 delta 自帶合格 Purpose，否則封存被 Purpose 守門擋下。
         "## Purpose\n\n本 capability 負責使用者登入與登出的可觀察行為，涵蓋工作階段的建立、續期與撤銷三段流程。\n\n## ADDED Requirements\n\n### Requirement: R1\n\nIt SHALL work.\n\n#### Scenario: ok\n\n- **WHEN** used\n- **THEN** works\n",
     );
     p.write(
-        "openspec/discussions/auth-scope.md",
+        "speclink/discussions/auth-scope.md",
         "---\ntopic: Auth scope\nslug: auth-scope\nstatus: promoted\npromoted_to: add-auth\n---\n\n## Conclusion\n\nGo.\n",
     );
     p
@@ -1156,11 +1156,11 @@ fn remote_verify_add_round_checks_against_the_round_scope_without_a_ticket() {
 
     let good = p.run_stdin(
         &["verify", "add-round", "demo", "--stdin"],
-        "**Scope**: src/lib.rs\n\n- [CRITICAL] openspec/changes/demo/specs/a/spec.md — Completeness: missing\n",
+        "**Scope**: src/lib.rs\n\n- [CRITICAL] speclink/changes/demo/specs/a/spec.md — Completeness: missing\n",
     );
     assert!(good.status.success(), "stderr: {}", stderr_of(&good));
     let cap = mock.find("POST", "/changes/demo/verify/rounds");
-    assert!(cap.body.contains("openspec/changes/demo/specs/a/spec.md"), "{}", cap.body);
+    assert!(cap.body.contains("speclink/changes/demo/specs/a/spec.md"), "{}", cap.body);
 }
 
 #[test]
@@ -1215,12 +1215,12 @@ fn remote_review_show_json_matches_fs_key_set() {
     // fs 模式逐 key 相等。
     let fs = TempProject::fs("ticket-json-fs");
     fs.write(
-        "openspec/changes/demo/.openspec.yaml",
+        "speclink/changes/demo/.meta.yaml",
         "schema: spec-driven\ncreated: 2026-07-01\n",
     );
-    fs.write("openspec/changes/demo/tasks.md", "- [x] 1.1 done\n");
+    fs.write("speclink/changes/demo/tasks.md", "- [x] 1.1 done\n");
     fs.write(
-        "openspec/changes/demo/review.md",
+        "speclink/changes/demo/review.md",
         "# Review — demo\n\n## Round 1\n\n**Scope**: src/lib.rs\n\n- [WARNING] src/lib.rs — possible Feature Envy\n",
     );
     let fs_json = fs.run(&["review", "show", "demo", "--json"]);
@@ -1257,12 +1257,12 @@ fn remote_review_show_json_rules_match_fs_mode() {
     // 的同一份輪次，remote CLI 的 rounds／lastRound（含 rules 物件與 null）逐項相同。
     let fs = TempProject::fs("ticket-rules-fs");
     fs.write(
-        "openspec/changes/demo/.openspec.yaml",
+        "speclink/changes/demo/.meta.yaml",
         "schema: spec-driven\ncreated: 2026-07-01\n",
     );
-    fs.write("openspec/changes/demo/tasks.md", "- [x] 1.1 done\n");
+    fs.write("speclink/changes/demo/tasks.md", "- [x] 1.1 done\n");
     fs.write(
-        "openspec/changes/demo/review.md",
+        "speclink/changes/demo/review.md",
         &format!(
             "# Review — demo\n\n## Round 1\n\n**Phase**: discovery\n**Patch**: sha256:{}\n\
              **Rules**: extend\n**Rule**: CRITICAL 所有 SQL 一律用參數化查詢，不得用字串拼接\n\
@@ -1622,10 +1622,10 @@ fn remote_review_scope_json_matches_fs_mode_field_for_field() {
     // 逐位元相同。
     let fs = TempProject::fs("review-scope-fs");
     fs.write(
-        "openspec/changes/demo/.openspec.yaml",
+        "speclink/changes/demo/.meta.yaml",
         "schema: spec-driven\ncreated: 2026-07-01\n",
     );
-    fs.write("openspec/changes/demo/tasks.md", "- [x] 1.1 first\n");
+    fs.write("speclink/changes/demo/tasks.md", "- [x] 1.1 first\n");
     seed_git_src(&fs);
     let prepared = fs.run(&["review", "prepare", "demo"]);
     assert!(prepared.status.success(), "fs prepare: {}", stderr_of(&prepared));
@@ -1678,10 +1678,10 @@ fn remote_verify_scope_json_matches_fs_mode_field_for_field() {
     // 且 server 收不到 patch 或 snapshot。
     let fs = TempProject::fs("verify-scope-fs");
     fs.write(
-        "openspec/changes/demo/.openspec.yaml",
+        "speclink/changes/demo/.meta.yaml",
         "schema: spec-driven\ncreated: 2026-07-01\n",
     );
-    fs.write("openspec/changes/demo/tasks.md", "- [x] 1.1 first\n");
+    fs.write("speclink/changes/demo/tasks.md", "- [x] 1.1 first\n");
     seed_git_src(&fs);
     let prepared = fs.run(&["review", "prepare", "demo"]);
     assert!(prepared.status.success(), "fs prepare: {}", stderr_of(&prepared));
@@ -1731,7 +1731,7 @@ fn remote_verify_add_round_offline_changes_nothing() {
     let out = p.run(&["verify", "show", "demo", "--json"]);
     assert!(!out.status.success(), "offline read must be non-zero");
     assert!(
-        !p.dir.join("openspec").join("changes").join("demo").join("verify.md").exists(),
+        !p.dir.join("speclink").join("changes").join("demo").join("verify.md").exists(),
         "no local projection effects on the offline path"
     );
     let out = p.run(&["verify", "scope", "demo", "--json"]);
@@ -2092,14 +2092,14 @@ fn remote_review_write_round_trips_through_show_like_fs_mode() {
     );
 
     let fs = TempProject::fs("review-write-fs");
-    fs.write("openspec/config.yaml", REVIEW_BASE_YAML);
+    fs.write("speclink/config.yaml", REVIEW_BASE_YAML);
     let fs_out = fs.run_stdin(
         &["workflow-config", "review", "critical", "--stdin", "--no-color"],
         "rule one\nrule two\n",
     );
     assert!(fs_out.status.success(), "stderr: {}", stderr_of(&fs_out));
     assert_eq!(stdout_of(&fs_out), stdout_of(&out), "same success line in both modes");
-    let fs_written = std::fs::read_to_string(fs.dir.join("openspec/config.yaml")).unwrap();
+    let fs_written = std::fs::read_to_string(fs.dir.join("speclink/config.yaml")).unwrap();
     assert_eq!(fs_written, written, "both modes write the same document");
     let fs_shown = fs.run(&["workflow-config", "show", "--json"]);
     assert_eq!(stdout_of(&fs_shown), stdout_of(&shown), "show --json is identical");
@@ -2134,4 +2134,62 @@ fn remote_review_revision_conflict_asks_for_a_rerun_without_overwriting() {
         .filter(|c| c.method == "PUT")
         .count();
     assert_eq!(puts, 1, "exactly one guarded write attempt — no retry, no forced overwrite");
+}
+
+// --- change schema：兩模式同一支渲染、守門訊息逐字相同（change-schema-verb D4／D5）---
+
+const SCHEMA_META: &str = "schema: spec-driven\ncreated: 2026-07-01\n\
+verified_at: 2026-07-02T10:00:00+08:00\nverified_tasks_total: 1\nverified_rounds: 1\n";
+
+fn schema_fs_project(tag: &str) -> TempProject {
+    let p = TempProject::fs(tag);
+    p.write("speclink/changes/add-auth/.meta.yaml", SCHEMA_META);
+    p
+}
+
+#[test]
+fn remote_change_schema_matches_fs_output_byte_for_byte() {
+    // 清章行也在遠端印出：回應的 verifyStampCleared 帶回這個事實。
+    let args = ["change", "schema", "add-auth", "no-spec-change"];
+    let fs_human = schema_fs_project("schema-fs-human").run(&args);
+    assert!(fs_human.status.success(), "fs stderr: {}", stderr_of(&fs_human));
+    assert!(stdout_of(&fs_human).contains("verify stamp cleared"), "{}", stdout_of(&fs_human));
+    let json_args = ["change", "schema", "add-auth", "no-spec-change", "--json"];
+    let fs_json = schema_fs_project("schema-fs-json").run(&json_args);
+    assert!(fs_json.status.success(), "fs stderr: {}", stderr_of(&fs_json));
+
+    let mock = mock_server(vec![(
+        "POST",
+        "/changes/add-auth/schema",
+        200,
+        r#"{"change":"add-auth","schema":"no-spec-change","previous":"spec-driven","changed":true,"verifyStampCleared":true}"#
+            .to_string(),
+    )]);
+    let p = TempProject::remote("schema-remote", &mock.base, "backend");
+    let remote_human = p.run(&args);
+    assert!(remote_human.status.success(), "remote stderr: {}", stderr_of(&remote_human));
+    assert_eq!(stdout_of(&remote_human), stdout_of(&fs_human), "human output matches fs mode");
+    let remote_json = p.run(&json_args);
+    assert_eq!(stdout_of(&remote_json), stdout_of(&fs_json), "--json matches fs mode");
+    assert_eq!(mock.find("POST", "/changes/add-auth/schema").body, r#"{"schema":"no-spec-change"}"#);
+}
+
+#[test]
+fn remote_change_schema_refusal_prints_the_fs_stderr_verbatim() {
+    let args = ["change", "schema", "add-auth", "no-such-flow"];
+    let fs = schema_fs_project("schema-fs-refused").run(&args);
+    assert!(!fs.status.success());
+    let message = "Schema not found: Schema 'no-such-flow' not found in project, user, or built-in locations";
+    assert_eq!(stderr_of(&fs), format!("Error: {message}\n"));
+
+    let mock = mock_server(vec![(
+        "POST",
+        "/changes/add-auth/schema",
+        409,
+        format!(r#"{{"status":409,"reason":"refused","message":"{message}"}}"#),
+    )]);
+    let p = TempProject::remote("schema-remote-refused", &mock.base, "backend");
+    let out = p.run(&args);
+    assert!(!out.status.success());
+    assert_eq!(stderr_of(&out), stderr_of(&fs), "stderr matches fs mode");
 }

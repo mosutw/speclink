@@ -146,6 +146,17 @@ export interface ArchivedItem {
   /** 建立日期 YYYY-MM-DD（封存目錄 metadata 的 created）；缺席＝抽屜出身列的
    * 建立日期欄位不顯示。 */
   created?: string;
+  /** 流程成本欄位（spec client-protocol「已封存清單的流程成本欄位」），只由桌面 core
+   * 產出、來源缺席時缺席：proposal／design／tasks／delta spec 行數總和。 */
+  docLines?: number;
+  /** 封存目錄日期減建立日期（天）。 */
+  leadDays?: number;
+  /** 封存時戳減建立時戳（小時、一位小數）；兩端都是時戳時才有。 */
+  leadHours?: number;
+  /** 歷次蓋章累加的審查回合數。 */
+  reviewRounds?: number;
+  /** 歷次蓋章累加的驗證回合數。 */
+  verifyRounds?: number;
 }
 
 /** 品質站站別——工單分頁的資料定址（`review.md`／`verify.md`）。 */
@@ -221,10 +232,15 @@ export interface DiscussionItem {
   hold?: boolean;
 }
 
+/** 預設規格資料夾（資料來源沒帶出時用它組路徑；desktop-spec-dir-migration D4）。 */
+export const DEFAULT_SPEC_DIR = "speclink";
+
 /** 討論清單兩節：看板討論欄（active）與已封存頁討論節（archived）。 */
 export interface DiscussionLists {
   active: DiscussionItem[];
   archived: DiscussionItem[];
+  /** 規格資料夾的專案根相對路徑——詳情頁的記錄路徑由它組成；缺席（遠端）時用 speclink。 */
+  specDir?: string;
 }
 
 /** 手冊索引的一頁（desktop-manual-page design D2；欄位 camelCase，由 desktop core

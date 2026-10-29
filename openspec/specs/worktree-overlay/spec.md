@@ -74,9 +74,9 @@ updated: 2026-08-04
 
 ##### Example: 計數與欄位形狀
 
-- **GIVEN** worktree 位於 /repos/speclink.worktrees/add-dark-mode、分支 speclink/add-dark-mode，副本內 tasks.md 勾 3／5
+- **GIVEN** worktree 位於 /repos/speclink.worktrees/add-dark-mode、分支 openspec/add-dark-mode，副本內 tasks.md 勾 3／5
 - **WHEN** 於主 checkout 執行 speclink list --json
-- **THEN** 該條目含 "completedTasks": 3、"totalTasks": 5、"worktree": { "path": "/repos/speclink.worktrees/add-dark-mode", "branch": "speclink/add-dark-mode" }
+- **THEN** 該條目含 "completedTasks": 3、"totalTasks": 5、"worktree": { "path": "/repos/speclink.worktrees/add-dark-mode", "branch": "openspec/add-dark-mode" }
 
 #### Scenario: 人眼輸出的標示
 
@@ -90,12 +90,13 @@ updated: 2026-08-04
 
 #### Scenario: worktree 副本中介資料損壞如實診斷
 
-- **WHEN** 映射成立，但 worktree 副本內該 change 的 .openspec.yaml 為無法解析的 YAML，執行 speclink list --json
+- **WHEN** 映射成立，但 worktree 副本內該 change 的 .meta.yaml 為無法解析的 YAML，執行 speclink list --json
 - **THEN** 該條目呈現 metaError 欄位（與主副本損壞時同款行為）
 
+
 <!-- @trace
-source: worktree-parallel-apply
-updated: 2026-08-04
+source: merge-upstream-0-11-0
+updated: 2026-10-29T05:48:54+08:00
 -->
 
 ---

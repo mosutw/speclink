@@ -7,10 +7,26 @@ use crate::store::Store;
 use serde::Deserialize;
 use std::path::PathBuf;
 
-/// `.openspec.yaml` — per-change metadata.
+/// The per-change data file inside every change directory, active or archived.
+pub const META_FILE: &str = ".meta.yaml";
+/// The data file's name before the rename — read only when [`META_FILE`] is
+/// absent, never written.
+pub const LEGACY_META_FILE: &str = ".openspec.yaml";
+/// The order every reader tries the data file's names in. Remote data is never
+/// re-keyed, so archives written before the rename are reached the same way.
+pub const META_READ_ORDER: [&str; 2] = [META_FILE, LEGACY_META_FILE];
+
+/// `.meta.yaml` — per-change metadata. 建構要經過時間欄位收斂：文字走
+/// [`ChangeMeta::from_text`]、已結構化的欄位走 [`ChangeMeta::from_fields`]。
+/// `#[non_exhaustive]` 讓 core 以外的字面值建構編譯不過；`Default` 只當讀檔失敗時
+/// 的空白後備，不在它上面逐欄填值。
 #[derive(Debug, Clone, Default, Deserialize)]
+#[non_exhaustive]
 pub struct ChangeMeta {
     pub schema: Option<String>,
+    /// 建立日期。寫入的是 RFC 3339 時戳，解析時收斂成日期部分——對外輸出點直接
+    /// 拿來用（process-cost-metrics design D2）；完整時戳只有流程成本
+    /// （lifecycle/cost.rs）逐鍵讀原文取得。
     pub created: Option<String>,
     pub created_by: Option<String>,
     #[serde(default)]
@@ -62,6 +78,10 @@ pub struct ChangeMeta {
     /// 內容指紋錨：範圍檔 path＋hash 清單（缺席讀作空）。
     #[serde(default)]
     pub reviewed_scope: Vec<ReviewedScopeEntry>,
+    /// 歷次蓋章累加的審查回合數（process-cost-metrics D1）。不是非負整數時整份
+    /// meta 解析失敗——蓋章走 fail-closed 拒絕。
+    #[serde(default)]
+    pub reviewed_rounds: Option<u64>,
     /// The "verified" quality station（`verify stamp` 蓋章；design D2）。與
     /// `reviewed_*` 同形、同錨、同失效規則，兩站互不遮蔽；全部
     /// `#[serde(default)]`——缺席讀作未驗證，pre-migration metadata 照常解析。
@@ -77,6 +97,11 @@ pub struct ChangeMeta {
     /// 內容指紋錨：範圍檔 path＋hash 清單（缺席讀作空）。
     #[serde(default)]
     pub verified_scope: Vec<ReviewedScopeEntry>,
+    /// 歷次蓋章累加的驗證回合數；與 `reviewed_rounds` 同規則。
+    #[serde(default)]
+    pub verified_rounds: Option<u64>,
+    // `archived_at`（封存時戳）刻意不是欄位：只有流程成本讀它、逐鍵讀原文，舊版在
+    // 殘留值之後再追加一行時也不會讓整份 meta 因重複鍵解析失敗。
 }
 
 /// `reviewed_scope` 清單項：path 為 repo-root 相對、`/` 分隔（Windows 路徑
@@ -93,9 +118,40 @@ impl ChangeMeta {
     /// parser's reason (fail-closed, never defaults). Store implementations
     /// carry that reason as [`Change::meta_error`] so listing never breaks.
     pub fn from_text(text: Option<&str>) -> Result<ChangeMeta, String> {
-        match text {
-            Some(s) => crate::config::parse_lenient_or_reason(s),
-            None => Ok(ChangeMeta::default()),
+        let Some(s) = text else {
+            return Ok(ChangeMeta::default());
+        };
+        let mut meta: ChangeMeta = crate::config::parse_lenient_or_reason(s)?;
+        meta.collapse_time_fields();
+        Ok(meta)
+    }
+
+    /// 由已結構化的欄位（SDK store bridge、remote drift）組一份 meta：`fill` 填欄位，
+    /// 收尾時跑與 [`Self::from_text`] 同一道時間欄位收斂。`ChangeMeta` 帶
+    /// `#[non_exhaustive]`，core 以外不能用字面值建構；從 `default()` 逐欄填值會
+    /// 跳過收斂，填欄位一律走這裡。
+    pub fn from_fields(fill: impl FnOnce(&mut ChangeMeta)) -> ChangeMeta {
+        let mut meta = ChangeMeta::default();
+        fill(&mut meta);
+        meta.collapse_time_fields();
+        meta
+    }
+
+    /// Time fields written as RFC 3339 stamps collapse to their date part, so every
+    /// output point keeps emitting `YYYY-MM-DD` (process-cost-metrics design D2);
+    /// plain dates and unrecognised values stay verbatim. Idempotent.
+    fn collapse_time_fields(&mut self) {
+        let time_fields = [
+            &mut self.created,
+            &mut self.started_at,
+            &mut self.claimed_at,
+            &mut self.reviewed_at,
+            &mut self.verified_at,
+        ];
+        for value in time_fields.into_iter().flatten() {
+            if chrono::DateTime::parse_from_rfc3339(value).is_ok() {
+                value.truncate(10);
+            }
         }
     }
     pub fn schema_name(&self) -> String {
@@ -119,6 +175,15 @@ impl ChangeMeta {
                 tasks_total: self.verified_tasks_total,
                 scope: &self.verified_scope,
             },
+        }
+    }
+
+    /// 一個品質站歷次蓋章累加的回合數（process-cost-metrics D1）。與 [`Self::anchors`]
+    /// 同樣對 `StationId` 窮舉 match——第三站來時漏補臂是編譯錯誤。
+    pub fn stamp_rounds(&self, st: &Station) -> Option<u64> {
+        match st.id {
+            StationId::Review => self.reviewed_rounds,
+            StationId::Verify => self.verified_rounds,
         }
     }
 
@@ -161,7 +226,12 @@ fn comma_list(value: Option<&str>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// A change's `.openspec.yaml` exists but cannot be parsed. Fail-closed
+/// Workspace-relative display path of `change`'s data file `file` under `spec_dir`.
+pub fn change_meta_file(spec_dir: &str, change: &str, file: &str) -> String {
+    format!("{spec_dir}/changes/{change}/{file}")
+}
+
+/// A change's `.meta.yaml` exists but cannot be parsed. Fail-closed
 /// (design 決策二): every flow that reads or writes the change's metadata
 /// semantics refuses with this error instead of proceeding on defaults.
 /// Display mirrors [`crate::config::ConfigError`] (`invalid <path>: <reason>`);
@@ -169,20 +239,26 @@ fn comma_list(value: Option<&str>) -> Vec<String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MetaError {
     pub change: String,
+    /// Workspace-relative display path of the broken metadata document.
+    pub file: String,
     /// Parse-failure reason as reported by the YAML parser.
     pub reason: String,
 }
 
 impl MetaError {
-    /// Workspace-relative display path of the broken metadata document.
-    pub fn file(&self) -> String {
-        format!("openspec/changes/{}/.openspec.yaml", self.change)
+    /// The error for `change`'s data file in `store`.
+    pub fn new(store: &dyn Store, change: &str, reason: String) -> MetaError {
+        MetaError {
+            change: change.to_string(),
+            file: store.change_meta_display(change),
+            reason,
+        }
     }
 }
 
 impl std::fmt::Display for MetaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid {}: {}", self.file(), self.reason)
+        write!(f, "invalid {}: {}", self.file, self.reason)
     }
 }
 
@@ -190,27 +266,23 @@ impl std::error::Error for MetaError {}
 
 /// The fail-closed gate shared by every flow that holds a resolved [`Change`]:
 /// corrupt metadata refuses with [`MetaError`], valid or absent metadata passes.
-pub fn require_valid_meta(change: &Change) -> Result<(), MetaError> {
+pub fn require_valid_meta(store: &dyn Store, change: &Change) -> Result<(), MetaError> {
     match &change.meta_error {
-        Some(reason) => Err(MetaError {
-            change: change.name.clone(),
-            reason: reason.clone(),
-        }),
+        Some(reason) => Err(MetaError::new(store, &change.name, reason.clone())),
         None => Ok(()),
     }
 }
 
 /// Text-level twin of [`require_valid_meta`] for flows that operate on the raw
 /// metadata document (text surgery paths): existing-but-unparsable text refuses
-/// with [`MetaError`]; missing text keeps its default semantics and passes.
-pub fn check_meta_text(change: &str, text: Option<&str>) -> Result<(), MetaError> {
-    match ChangeMeta::from_text(text) {
-        Ok(_) => Ok(()),
-        Err(reason) => Err(MetaError {
-            change: change.to_string(),
-            reason,
-        }),
-    }
+/// with [`MetaError`]; missing text keeps its default semantics and passes. The
+/// parsed metadata comes back for callers that also read it.
+pub fn check_meta_text(
+    store: &dyn Store,
+    change: &str,
+    text: Option<&str>,
+) -> Result<ChangeMeta, MetaError> {
+    ChangeMeta::from_text(text).map_err(|reason| MetaError::new(store, change, reason))
 }
 
 /// A discovered change.
@@ -221,7 +293,7 @@ pub struct Change {
     /// human output; content access goes through the [`Store`]).
     pub dir: PathBuf,
     pub meta: ChangeMeta,
-    /// Parse-failure reason when `.openspec.yaml` exists but is corrupt — the
+    /// Parse-failure reason when `.meta.yaml` exists but is corrupt — the
     /// change is listed with default `meta` for display, and every verb that
     /// needs metadata semantics must refuse (fail-closed). `None` = valid or
     /// absent metadata.
@@ -310,7 +382,7 @@ pub fn edit_meta<T>(
     let Some(meta) = store.read_change_meta(name) else {
         return Ok(None);
     };
-    check_meta_text(name, Some(&meta))?;
+    check_meta_text(store, name, Some(&meta))?;
     let mut lines = KeyLines::whole(&meta);
     let out = edit(&mut lines)?;
     let edited = lines.text();
@@ -719,7 +791,7 @@ mod tests {
         let store = TestStore::with_meta("demo", BAD);
         let err = super::set_board_rank(&store, "demo", "n").unwrap_err();
         assert!(
-            err.to_string().contains("openspec/changes/demo/.openspec.yaml"),
+            err.to_string().contains("speclink/changes/demo/.meta.yaml"),
             "error must name the metadata file: {err}"
         );
         assert_eq!(store.meta("demo"), BAD, "meta byte-identical");
@@ -801,6 +873,94 @@ mod tests {
         assert!(meta.started_at.is_none());
         assert!(meta.started_by.is_none());
         assert!(meta.started_with.is_none());
+    }
+
+    // --- 時間欄位：寫入時戳、對外輸出日期（process-cost-metrics design D2）---
+
+    #[test]
+    fn meta_collapses_rfc3339_time_fields_to_their_date_part() {
+        // spec「change metadata 時間欄位寫入時戳、對外輸出日期」：解析層把時戳收斂成
+        // 前 10 個字元；完整時戳只有流程成本（lifecycle/cost.rs）逐鍵讀原文取得。
+        let text = "schema: spec-driven\ncreated: 2026-10-21T14:05:00+08:00\nstarted_at: 2026-10-22T09:00:00+08:00\nclaimed_at: 2026-10-23T10:00:00+00:00\nreviewed_at: 2026-10-24T23:59:59-05:00\nverified_at: 2026-10-25T00:00:01+08:00\narchived_at: 2026-10-26T16:30:00+08:00\n";
+        let meta = ChangeMeta::from_text(Some(text)).expect("meta parses");
+        assert_eq!(meta.created.as_deref(), Some("2026-10-21"));
+        assert_eq!(meta.started_at.as_deref(), Some("2026-10-22"));
+        assert_eq!(meta.claimed_at.as_deref(), Some("2026-10-23"));
+        assert_eq!(meta.reviewed_at.as_deref(), Some("2026-10-24"));
+        assert_eq!(meta.verified_at.as_deref(), Some("2026-10-25"));
+    }
+
+    #[test]
+    fn collapsing_an_already_collapsed_meta_changes_nothing() {
+        // 收斂是冪等的：日期部分再收斂一次仍是同一個日期。
+        let text = "created: 2026-10-21T14:05:00+08:00\nstarted_at: someday\nreviewed_at: 2026-10-24\n";
+        let mut meta = ChangeMeta::from_text(Some(text)).expect("meta parses");
+        let once = format!("{meta:?}");
+        meta.collapse_time_fields();
+        assert_eq!(format!("{meta:?}"), once);
+    }
+
+    #[test]
+    fn duplicate_archived_at_lines_do_not_break_the_meta() {
+        // `archived_at` 不是 ChangeMeta 的欄位：舊版在殘留的 archived_at 之後再追加
+        // 一行時，整份 meta 照常解析，不會因重複鍵讀成預設值。
+        let text = "schema: spec-driven\ncreated: 2026-10-21T14:05:00+08:00\narchived_at: 2026-10-21T16:00:00+08:00\narchived_at: 2026-10-22\n";
+        let meta = ChangeMeta::from_text(Some(text)).expect("duplicate archived_at must not fail the parse");
+        assert_eq!(meta.created.as_deref(), Some("2026-10-21"));
+    }
+
+    #[test]
+    fn meta_keeps_plain_dates_and_unrecognised_time_values_verbatim() {
+        // 純日期與既不是日期也不是時戳的值原樣保留（現行行為）。
+        let meta = ChangeMeta::from_text(Some("created: 2026-07-29\nstarted_at: someday\n"))
+            .expect("meta parses");
+        assert_eq!(meta.created.as_deref(), Some("2026-07-29"));
+        assert_eq!(meta.started_at.as_deref(), Some("someday"));
+        let meta = ChangeMeta::from_text(Some("created: someday\n")).expect("meta parses");
+        assert_eq!(meta.created.as_deref(), Some("someday"));
+        // 偏移量超出範圍、少了秒的寫法都不是 RFC 3339——原樣保留，不截成日期。
+        for odd in ["2026-10-21T14:05:00+25:00", "2026-10-21T14:05+08:00"] {
+            let meta = ChangeMeta::from_text(Some(&format!("created: {odd}\n"))).expect("meta parses");
+            assert_eq!(meta.created.as_deref(), Some(odd));
+        }
+    }
+
+    #[test]
+    fn from_fields_collapses_time_fields_like_from_text() {
+        // SDK store bridge 與 remote drift 由已結構化的欄位組 ChangeMeta、不經
+        // from_text——from_fields 收尾時跑同一道收斂，輸出點拿到的一樣是日期部分。
+        let meta = ChangeMeta::from_fields(|m| {
+            m.created = Some("2026-10-21T14:05:00+08:00".into());
+            m.started_at = Some("2026-10-22T09:00:00+08:00".into());
+            m.claimed_at = Some("someday".into());
+        });
+        assert_eq!(meta.created.as_deref(), Some("2026-10-21"));
+        assert_eq!(meta.started_at.as_deref(), Some("2026-10-22"));
+        assert_eq!(meta.claimed_at.as_deref(), Some("someday"));
+    }
+
+    #[test]
+    fn meta_parses_station_rounds_as_non_negative_integers() {
+        let meta = ChangeMeta::from_text(Some("reviewed_rounds: 3\nverified_rounds: 0\n"))
+            .expect("meta parses");
+        assert_eq!(meta.reviewed_rounds, Some(3));
+        assert_eq!(meta.verified_rounds, Some(0));
+        let meta = ChangeMeta::from_text(Some("schema: spec-driven\n")).expect("meta parses");
+        assert!(meta.reviewed_rounds.is_none() && meta.verified_rounds.is_none());
+    }
+
+    #[test]
+    fn meta_with_non_integer_station_rounds_fails_closed() {
+        // spec「原有輪數不是整數時拒絕」：輪數欄位不是非負整數 → metadata 無法解析。
+        for bad in [
+            "reviewed_rounds: many\n",
+            "verified_rounds: -1\n",
+            "reviewed_rounds: 2.5\n",
+            "reviewed_rounds: \"3\"\n",
+            "verified_rounds: 18446744073709551616\n",
+        ] {
+            ChangeMeta::from_text(Some(bad)).expect_err(&format!("{bad:?} must fail closed"));
+        }
     }
 
     #[test]

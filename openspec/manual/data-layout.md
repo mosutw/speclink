@@ -4,16 +4,16 @@ section: 開始使用
 order: 40
 keywords: [openspec, 變更, 討論, 規格, 生命週期, 封存, 廢棄]
 sources: ["change-lifecycle#in-progress 標記真相存於 change meta", "change-lifecycle#任務完成蘊含開工標記", "change-lifecycle#變更以 discard 動詞廢棄", "change-lifecycle#必要安全驗收的封存判定", "change-lifecycle#封存時按類別保留完成紀錄", discussion-docs, user-documentation]
-generated: 2026-10-23T14:19:42+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 認識資料：變更、討論與規格
 
-Speclink 的資料都是純文字檔，放在專案的 `openspec/` 資料夾。你不用打開 Speclink 也能讀寫它們，每一次變動都會出現在 git diff 裡。這一頁介紹資料夾長什麼樣、一個變更會經過哪些狀態、討論記錄與變更怎麼連在一起。
+Speclink 的資料都是純文字檔，放在專案的規格資料夾（預設是 `openspec/`）。你不用打開 Speclink 也能讀寫它們，每一次變動都會出現在 git diff 裡。這一頁介紹資料夾長什麼樣、一個變更會經過哪些狀態、討論記錄與變更怎麼連在一起。
 
-## openspec 資料夾
+## 規格資料夾
 
-本地模式的 `openspec/` 沿用 OpenSpec 的目錄結構，內容全是 Markdown 與 YAML：
+本地模式的 `openspec/` 內容全是 Markdown 與 YAML：
 
 | 路徑 | 放什麼 |
 | --- | --- |
@@ -23,22 +23,24 @@ Speclink 的資料都是純文字檔，放在專案的 `openspec/` 資料夾。�
 | `changes/archive/` | 已封存的變更 |
 | `config.yaml` | 工作流政策與專案設定，見[工作流政策與設定](policy-config.md) |
 
-Speclink 在這個結構上多加了兩樣東西：
+Speclink 在這些產物之外多加了兩樣東西：
 
 - `discussions/`：討論記錄，每份一個 `.md` 檔。已封存的討論在 `discussions/archive/`。
-- 每個變更資料夾裡的 `.openspec.yaml`：這個變更的狀態檔。
+- 每個變更資料夾裡的 `.meta.yaml`：這個變更的狀態檔。
 
 > [!NOTE]
-> 這個相容性只適用本地模式。Remote 模式的正式規格存在 server 的 Store，本機只有唯讀投影。見 [remote 模式總覽](remote-overview.md)。
+> 這種可攜性只適用本地模式。Remote 模式的正式規格存在 server 的 Store，本機只有唯讀投影。見 [remote 模式總覽](remote-overview.md)。
+
+本 Fork 可原地沿用 OpenSpec 的 openspec 資料夾，預設明寫 `spec_dir: openspec`。新資料檔為 `.meta.yaml`，缺席才讀舊 `.openspec.yaml`。保持純文字與目錄結構並不保證完整 OpenSpec CLI 互通，見[規格資料夾與舊佈局遷移](spec-folder.md)。
 
 ## 變更的生命週期
 
-變更的狀態真相只有一個地方：它自己資料夾裡的 `.openspec.yaml`。這個檔案記錄三站的章：
+變更的狀態真相只有一個地方：它自己資料夾裡的 `.meta.yaml`。這個檔案記錄三站的章：
 
 | 站 | 記錄什麼 | 何時寫入 |
 | --- | --- | --- |
 | 建立 | 建立時間、建立者、建立工具 | 變更建立時 |
-| 開工 | 開工日期、開工者 | 第一次標記開工、或第一次完成任務時 |
+| 開工 | 開工時間、開工者 | 第一次標記開工、或第一次完成任務時 |
 | 封存 | 封存時間、封存者 | 封存時 |
 
 封存不會剝掉開工站的欄位。三站的章會一起留在封存目錄裡。
@@ -110,7 +112,7 @@ discard 會刪掉整個變更資料夾與它的觸及記錄檔，並解開它與
 
 ### 狀態檔壞掉時
 
-`.openspec.yaml` 存在但無法解析時，所有會改狀態的動作都會拒絕，並指出檔案位置與解析原因：標記開工、認領、完成任務、取消完成、新增產物、封存、廢棄。壞掉的狀態檔不會被當成「未開工」處理，discard 帶 `--force` 也一樣拒絕。修好檔案再重試。
+`.meta.yaml` 存在但無法解析時，所有會改狀態的動作都會拒絕，並指出檔案位置與解析原因：標記開工、認領、完成任務、取消完成、新增產物、封存、廢棄。壞掉的狀態檔不會被當成「未開工」處理，discard 帶 `--force` 也一樣拒絕。修好檔案再重試。
 
 ## 討論記錄
 
@@ -157,4 +159,4 @@ promote、seal 與 `speclink new change --from-discussion` 都可以帶 `--last`
 
 操作細節見[討論：需求還模糊時](discuss.md)。
 
-**出處**：`change-lifecycle`、`discussion-docs`、`user-documentation`
+**出處**：`change-lifecycle`、`discussion-docs`、`user-documentation`、`spec-dir-migration`

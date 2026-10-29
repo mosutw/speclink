@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.50.5"
+  version: "v1.53.1"
   generatedBy: "Speclink"
 ---
 
@@ -63,7 +63,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
    ```
 
    Parse the JSON to understand:
-   - `schemaName`: The workflow being used (e.g., "spec-driven")
+   - `schemaName`: The workflow being used (e.g., "spec-driven"). Remember it: when `schemaName` is `no-spec-change`, step 8 runs the behavior check in place of the delta-spec checks
    - Which artifacts exist for this change
 
 3. **Load the artifacts and read the task progress**
@@ -100,7 +100,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
 
 6. **Branch on `phase`**
 
-   Run the checking pass (steps 7–10) in ONE read-only sub-agent call (e.g. the Agent tool with a read-only agent) so its exploration stays out of the main thread's context. The sub-agent MUST NOT modify any file. If your harness cannot spawn sub-agents, run the checking pass yourself and keep its report separate from the triage that follows. The brief carries the resolved `locale` (step 3): finding descriptions are written in that language; severity labels, dimension prefixes, file paths, and command lines stay in English. When accepted findings exist in the ticket's last round (the `(accepted)` token), the brief also carries that list with a hard instruction: do not re-report these items or near-variants of them — they are already adjudicated.
+   Run the checking pass (steps 7–10) in ONE read-only sub-agent call (e.g. the Agent tool with a read-only agent) so its exploration stays out of the main thread's context. The sub-agent MUST NOT modify any file. If your harness cannot spawn sub-agents, run the checking pass yourself and keep its report separate from the triage that follows. The brief carries the resolved `locale` (step 3): finding descriptions are written in that language; severity labels, dimension prefixes, file paths, and command lines stay in English. It also carries step 2's `schemaName`, so the checking pass knows whether step 8's behavior check applies. When accepted findings exist in the ticket's last round (the `(accepted)` token), the brief also carries that list with a hard instruction: do not re-report these items or near-variants of them — they are already adjudicated.
 
    Inside the `/speclink-quality` timeline, compose the brief exactly as this step says; `/speclink-quality` sends it in one message together with the review station's two briefs, so three sub-agents run at once. Continue with step 10 once it reports.
 
@@ -124,7 +124,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
      - Add CRITICAL issue for each incomplete task
      - Recommendation: "Complete task: <description>" or "Mark as done if already implemented"
 
-   **Spec Coverage**:
+   **Spec Coverage** (skip it when `schemaName` is `no-spec-change` — step 8's behavior check takes its place):
    - If delta specs exist in `openspec/changes/<name>/specs/`:
      - Extract all requirements (marked with "### Requirement:")
      - For each requirement:
@@ -136,6 +136,15 @@ Report which test commands ran and which scope was skipped, and say that CI guar
        - Recommendation: "Implement requirement X: <description>"
 
 8. **Verify Correctness**
+
+   **Behavior check** (only when `schemaName` is `no-spec-change` — the change has no delta specs, so it replaces Requirement Implementation Mapping, Scenario Coverage and Example Traceability below):
+   - Start from the canonical specs the proposal's Why lists as checked.
+   - Take the concrete names in the frozen patch — commands, flags, `--json` fields, file names, screen text — and search the canonical specs for the requirements that cover those code areas.
+   - For each such requirement, compare: does the patch change the observable behavior the requirement promises?
+   - A promised behavior changed:
+     - Add WARNING: "Behavior change in a no-spec-change change: <capability> / <requirement>" — it is must-fix (step 11) and blocks a clean stamp
+     - Recommendation, in this order: abandon this verify ticket with `speclink verify discard <name>`; switch the change back with `speclink change schema <name> spec-driven`; add the delta spec for this requirement with `/speclink-ingest <name>`; then run verify again. Do not suggest `--accept` to pass this WARNING — the change would archive with no delta for a behavior it changed
+   - No behavior change found → list the canonical specs you compared in the report.
 
    **Requirement Implementation Mapping**:
    - For each requirement from delta specs:
@@ -281,6 +290,7 @@ Report which test commands ran and which scope was skipped, and say that CI guar
 **Graceful Degradation**
 
 - If only tasks.md exists: verify task completion only, skip spec/design checks
+- If the schema is `no-spec-change`: the missing delta specs are by design — run the behavior check (step 8) instead of skipping the spec checks
 - If tasks + specs exist: verify completeness and correctness, skip design
 - If full artifacts: verify all three dimensions
 - Always note which checks were skipped and why
@@ -321,6 +331,7 @@ Suggestions only. This skill NEVER invokes any of them — report where things s
 - The verify stamp landed in the main checkout → `/speclink-archive <change-name>`
 - The verify stamp landed inside a worktree → commit the stamp's meta changes first, then `/speclink-worktree-merge <change-name>` (archive runs only from the main checkout)
 - Findings were left unfixed on purpose → they stay in the ticket; say which ones before suggesting anything downstream
+- A no-spec-change change got a behavior-change WARNING → the repair steps in its recommendation: `speclink verify discard <change-name>`, `speclink change schema <change-name> spec-driven`, `/speclink-ingest <change-name>`, then verify again — not `--accept`
 
 
 **Preliminary security review boundary**

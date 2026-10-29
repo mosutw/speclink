@@ -151,12 +151,12 @@ test('CRLF 與 LF 行尾的判定結果相同', () => {
   assert.deepEqual(lf, ['docs/x.md:3 「抽屜」']);
 });
 
-test('LANGUAGE.md 正典自身與 openspec/specs 的存量不在掃描面內', () => {
+test('LANGUAGE.md 正典自身與 speclink/specs 的存量不在掃描面內', () => {
   const scanned = surface();
   assert.ok(!scanned.includes('openspec/LANGUAGE.md'), '正典自身入面會使 avoid 欄違規');
   assert.ok(
-    !scanned.some((relative) => relative.startsWith('openspec/')),
-    'openspec/ 底下的規格散文與封存內容不在掃描面內',
+    !scanned.some((relative) => relative.startsWith('speclink/')),
+    'speclink/ 底下的規格散文與封存內容不在掃描面內',
   );
   // 正典與規格散文都還帶著存量舊詞——它們被排除，不是剛好乾淨。
   assert.ok(scanText('openspec/LANGUAGE.md', read('openspec/LANGUAGE.md'), TERMS).length > 0);

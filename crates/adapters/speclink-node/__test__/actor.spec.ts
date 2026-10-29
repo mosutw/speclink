@@ -17,7 +17,7 @@ let fsFixture: string
 
 /** fs 形式的 change metadata 原文。 */
 function fsMeta(change: string): string {
-  return readFileSync(join(fsFixture, 'openspec', 'changes', change, '.openspec.yaml'), 'utf8')
+  return readFileSync(join(fsFixture, 'speclink', 'changes', change, '.meta.yaml'), 'utf8')
 }
 
 /** metadata 中的 created_by 整行（無則 null）——逐位元比對用。 */
@@ -71,7 +71,7 @@ describe('createEngine actor — 宿主 Store 形式', () => {
     const store = memoryStore(fixtureProject())
     const engine = createEngine({ store, actor: 'Bob <bob@example.com>' })
     await engine.dispatch(['new', 'change', 'demo3'])
-    const meta = (await store.readArtifact('demo3', '.openspec.yaml')) ?? ''
+    const meta = (await store.readArtifact('demo3', '.meta.yaml')) ?? ''
     expect(createdByLine(meta)).toBe('created_by: Bob <bob@example.com>')
   })
 
@@ -79,7 +79,7 @@ describe('createEngine actor — 宿主 Store 形式', () => {
     const store = memoryStore(fixtureProject())
     const engine = createEngine({ store })
     await engine.dispatch(['new', 'change', 'demo4'])
-    const meta = (await store.readArtifact('demo4', '.openspec.yaml')) ?? ''
+    const meta = (await store.readArtifact('demo4', '.meta.yaml')) ?? ''
     expect(createdByLine(meta)).toBeNull()
   })
 
@@ -87,7 +87,7 @@ describe('createEngine actor — 宿主 Store 形式', () => {
     const store = memoryStore(fixtureProject())
     const engine = createEngine({ store, actor: ' ' })
     await engine.dispatch(['new', 'change', 'demo5'])
-    const meta = (await store.readArtifact('demo5', '.openspec.yaml')) ?? ''
+    const meta = (await store.readArtifact('demo5', '.meta.yaml')) ?? ''
     expect(createdByLine(meta)).toBeNull()
   })
 })

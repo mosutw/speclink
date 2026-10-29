@@ -64,7 +64,7 @@ impl TempProject {
         let _ = std::fs::remove_dir_all(&dir);
         let change = dir.join("openspec").join("changes").join("demo");
         std::fs::create_dir_all(&change).unwrap();
-        std::fs::write(change.join(".openspec.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
+        std::fs::write(change.join(".meta.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
             .unwrap();
         std::fs::write(change.join("tasks.md"), tasks).unwrap();
         std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -160,7 +160,7 @@ impl TempProject {
 
     fn meta(&self) -> String {
         std::fs::read_to_string(
-            self.dir.join("openspec").join("changes").join("demo").join(".openspec.yaml"),
+            self.dir.join("openspec").join("changes").join("demo").join(".meta.yaml"),
         )
         .unwrap()
     }
@@ -438,6 +438,11 @@ fn stamp_allows_a_suggestion_only_round() {
     for key in ["verified_at:", "verified_tasks_total:", "verified_scope:", "verified_with:"] {
         assert!(meta.contains(key), "missing {key}: {meta}");
     }
+    // spec「蓋章記錄驗證輪數」：一輪的工單蓋章寫入 verified_rounds: 1，蓋章時間是 RFC 3339。
+    assert_eq!(meta.matches("verified_rounds: ").count(), 1, "{meta}");
+    assert!(meta.contains("verified_rounds: 1\n"), "{meta}");
+    let at = meta.lines().find_map(|l| l.strip_prefix("verified_at: ")).expect("verified_at");
+    assert!(chrono::DateTime::parse_from_rfc3339(at).is_ok(), "verified_at is RFC 3339: {meta}");
 }
 
 #[test]
@@ -692,7 +697,7 @@ fn verify_scope_dirty_at_start_and_active_overlap_fail_closed() {
     // 故改以另一個 active change 認領同一路徑觸發 overlap。
     let other = dirty.dir.join("openspec").join("changes").join("other");
     std::fs::create_dir_all(&other).unwrap();
-    std::fs::write(other.join(".openspec.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
+    std::fs::write(other.join(".meta.yaml"), "schema: spec-driven\ncreated: 2026-07-01\n")
         .unwrap();
     std::fs::write(other.join("tasks.md"), "- [ ] 1.1 x\n").unwrap();
     dirty.touched("other", &["src/lib.rs"]);

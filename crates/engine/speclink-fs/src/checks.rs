@@ -179,7 +179,7 @@ fn recover_locked(root: &Path) -> Result<()> {
     for (index, (path, backup)) in journal.before.iter().enumerate() {
         ensure!(
             valid_check_path(path)
-                || matches!(path.as_str(), ".openspec.yaml" | "review.md" | "verify.md"),
+                || matches!(path.as_str(), ".meta.yaml" | ".openspec.yaml" | "review.md" | "verify.md"),
             "history_recovery_required: unsafe target"
         );
         let original = if let Some(backup) = backup {
@@ -301,7 +301,7 @@ pub(crate) fn commit(store: &FsStore, change: &str, commit: &ChecksCommit) -> Re
             for (index, path) in commit
                 .writes
                 .keys()
-                .filter(|p| !matches!(p.as_str(), INDEX | ".openspec.yaml"))
+                .filter(|p| !matches!(p.as_str(), INDEX | ".meta.yaml"))
                 .enumerate()
             {
                 publish(path)?;
@@ -317,8 +317,8 @@ pub(crate) fn commit(store: &FsStore, change: &str, commit: &ChecksCommit) -> Re
                 publish(INDEX)?;
                 fault("index")?;
             }
-            if commit.writes.contains_key(".openspec.yaml") {
-                publish(".openspec.yaml")?;
+            if commit.writes.contains_key(".meta.yaml") {
+                publish(".meta.yaml")?;
                 fault("metadata")?;
             }
             io::sync_directory(&root)?;
@@ -342,6 +342,45 @@ thread_local! { static FAULTS: std::cell::RefCell<Vec<String>> = const { std::ce
 mod tests {
     use super::*;
     #[test]
+    fn legacy_metadata_stamp_is_atomic_and_rejects_new_file_races() {
+        use speclink_core::station::{self, REVIEW};
+        for scenario in ["success", "metadata", "concurrent"] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = crate::FsStore::new(dir.path(), "openspec");
+            let change = store.layout().change_dir("demo");
+            fs::create_dir_all(&change).unwrap();
+            let original_meta = "schema: spec-driven\n";
+            fs::write(change.join(".openspec.yaml"), original_meta).unwrap();
+            store.write_artifact("demo", "tasks.md", "- [x] 1.1 Done\n").unwrap();
+            station::add_round(&REVIEW, &store, "demo", "**Scope**: app.rs\n").unwrap();
+            let ticket = store.read_artifact("demo", "review.md").unwrap();
+            if scenario == "metadata" {
+                FAULTS.with(|faults| *faults.borrow_mut() = vec!["metadata".into()]);
+            }
+            let result = station::stamp(&REVIEW, &store, "demo", false, None, None, &|_| {
+                if scenario == "concurrent" {
+                    fs::write(change.join(".meta.yaml"), "schema: spec-driven\nboard_rank: 5\n").unwrap();
+                }
+                Some(b"fn main() {}\n".to_vec())
+            }, &|_| true);
+            if scenario == "success" {
+                result.unwrap();
+                assert!(!change.join(".openspec.yaml").exists());
+                assert!(store.read_change_meta("demo").unwrap().contains("reviewed_rounds: 1"));
+                assert_eq!(speclink_core::history::index(&store, "demo").unwrap().entries.len(), 1);
+                assert!(!change.join("review.md").exists());
+            } else {
+                let error = result.unwrap_err().to_string();
+                assert!(!error.contains("history_recovery_required"), "{error}");
+                assert_eq!(fs::read_to_string(change.join(".openspec.yaml")).unwrap(), original_meta);
+                assert_eq!(store.read_artifact("demo", "review.md").unwrap(), ticket);
+                assert!(!change.join("checks/index.json").exists());
+                if scenario == "metadata" { assert!(!change.join(".meta.yaml").exists()); }
+                else { assert!(store.read_change_meta("demo").unwrap().contains("board_rank: 5")); }
+            }
+        }
+    }
+    #[test]
     fn checked_check_reads_distinguish_absence_from_invalid_utf8_for_active_and_archive() {
         let (_root, store, _) = setup();
         let missing = "checks/review/01M5CP8YW64XQ0Y57ACZRH3PPE.md";
@@ -356,7 +395,7 @@ mod tests {
         let dated = "2026-10-21-demo";
         let archived = store.layout().archived_change_dir(dated);
         fs::create_dir_all(archived.join("checks/review")).unwrap();
-        fs::write(archived.join(".openspec.yaml"), "schema: spec-driven\n").unwrap();
+        fs::write(archived.join(".meta.yaml"), "schema: spec-driven\n").unwrap();
         fs::write(archived.join(invalid), [0xff]).unwrap();
         assert_eq!(store.read_check_document(dated, missing, true).unwrap(), None);
         assert!(store.read_check_document(dated, invalid, true).is_err());
@@ -483,7 +522,7 @@ mod tests {
                     "{\"formatVersion\":1,\"entries\":[]}".into(),
                 ),
                 (
-                    ".openspec.yaml".into(),
+                    ".meta.yaml".into(),
                     "schema: spec-driven\nreviewed_at: 2026-10-20\n".into(),
                 ),
             ]),
@@ -492,7 +531,7 @@ mod tests {
                 (path.into(), None),
                 ("checks/index.json".into(), None),
                 (
-                    ".openspec.yaml".into(),
+                    ".meta.yaml".into(),
                     Some(sha256(b"schema: spec-driven\n")),
                 ),
                 ("review.md".into(), Some(sha256(b"original ticket"))),
@@ -610,7 +649,7 @@ mod tests {
         let held = std::fs::OpenOptions::new()
             .read(true)
             .share_mode(0)
-            .open(store.layout().change_dir("demo").join(".openspec.yaml"))
+            .open(store.layout().change_dir("demo").join(".meta.yaml"))
             .unwrap();
         assert!(store.commit_checks("demo", &commit).is_err());
         drop(held);

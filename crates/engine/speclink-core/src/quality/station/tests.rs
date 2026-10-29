@@ -192,6 +192,125 @@ fn freshness_takes_meta_and_reads_only_its_own_station() {
     );
 }
 
+/// 蓋章記錄輪數（spec review-station「蓋章記錄審查輪數」、verify-station「蓋章記錄
+/// 驗證輪數」）：兩站同一條規則，每個測試都對兩站各跑一次。
+mod stamp_rounds {
+    use super::*;
+
+    const CLEAN: &str = "**Scope**: crates/a/src/lib.rs\n";
+    const MUST_FIX: &str =
+        "**Scope**: crates/a/src/lib.rs\n\n- [WARNING] crates/a/src/lib.rs — possible Feature Envy\n";
+    const CRITICAL: &str =
+        "**Scope**: crates/a/src/lib.rs\n\n- [CRITICAL] crates/a/src/lib.rs — requirement R2 has no implementation\n";
+
+    /// 任務全勾的 change，`st` 站工單有 `rounds` 輪：前面幾輪帶必修，末輪為 `last`。
+    fn ticketed(st: &Station, meta: &str, rounds: usize, last: &str) -> TestStore {
+        let store = TestStore::with_meta("demo", meta);
+        store.put_artifact("demo", "tasks.md", "- [x] 1 a\n");
+        for _ in 1..rounds {
+            add_round(st, &store, "demo", MUST_FIX).expect("earlier round");
+        }
+        add_round(st, &store, "demo", last).expect("last round");
+        store
+    }
+
+    fn stamp_at(st: &Station, store: &TestStore, accept: bool) -> Result<()> {
+        let files =
+            |p: &str| REPO.iter().find(|(k, _)| *k == p).map(|(_, v)| v.as_bytes().to_vec());
+        let present = |p: &str| REPO.iter().any(|(k, _)| *k == p);
+        stamp(st, store, "demo", accept, None, None, &files, &present)
+    }
+
+    /// meta 原文裡 `<prefix>_<suffix>: ` 開頭的每一行的值。
+    fn values<'a>(st: &Station, suffix: &str, raw: &'a str) -> Vec<&'a str> {
+        let key = format!("{}_{suffix}: ", st.meta_prefix);
+        raw.lines().filter_map(|l| l.strip_prefix(key.as_str())).collect()
+    }
+
+    #[test]
+    fn first_stamp_records_the_ticket_round_count() {
+        // Scenario「首次蓋章記錄回合數」：審查 3 輪、驗證 2 輪。
+        for (st, rounds) in [(&REVIEW, 3), (&VERIFY, 2)] {
+            let store = ticketed(st, META, rounds, CLEAN);
+            stamp_at(st, &store, false).expect("clean stamp");
+            let raw = store.meta("demo");
+            assert_eq!(values(st, "rounds", &raw), [rounds.to_string()], "{}: {raw}", st.noun);
+            let at = values(st, "at", &raw);
+            assert!(
+                at.len() == 1 && crate::util::is_offset_stamp(at[0]),
+                "{}: the stamp time is an offset stamp: {raw}",
+                st.noun
+            );
+            assert!(!store.artifact_exists("demo", st.doc), "{}: ticket deleted", st.noun);
+        }
+    }
+
+    #[test]
+    fn restamp_adds_the_new_ticket_rounds_to_the_recorded_count() {
+        // Scenario「章失效後重新蓋章累加輪數」：3＋2 與 2＋3 都是 5，只留一行。
+        for (st, before, rounds) in [(&REVIEW, 3, 2), (&VERIFY, 2, 3)] {
+            let meta = format!("{META}{}_rounds: {before}\n", st.meta_prefix);
+            let store = ticketed(st, &meta, rounds, CLEAN);
+            stamp_at(st, &store, false).expect("re-stamp");
+            let raw = store.meta("demo");
+            assert_eq!(values(st, "rounds", &raw), ["5"], "{}: {raw}", st.noun);
+        }
+    }
+
+    #[test]
+    fn restamp_on_the_largest_recorded_count_saturates_instead_of_wrapping() {
+        for st in [&REVIEW, &VERIFY] {
+            let meta = format!("{META}{}_rounds: {}\n", st.meta_prefix, u64::MAX);
+            let store = ticketed(st, &meta, 2, CLEAN);
+            stamp_at(st, &store, false).expect("re-stamp");
+            let raw = store.meta("demo");
+            assert_eq!(values(st, "rounds", &raw), [u64::MAX.to_string()], "{}: {raw}", st.noun);
+        }
+    }
+
+    #[test]
+    fn stamp_with_accept_records_the_rounds_too() {
+        for st in [&REVIEW, &VERIFY] {
+            let store = ticketed(st, META, 2, MUST_FIX);
+            stamp_at(st, &store, true).expect("--accept stamps");
+            assert_eq!(values(st, "rounds", &store.meta("demo")), ["2"], "{}", st.noun);
+        }
+    }
+
+    #[test]
+    fn refused_stamp_and_discard_leave_the_rounds_untouched() {
+        // Scenario「守門失敗不改輪數」（審查末輪 WARNING、驗證末輪 CRITICAL）＋放棄工單不改輪數。
+        for (st, last) in [(&REVIEW, MUST_FIX), (&VERIFY, CRITICAL)] {
+            let meta = format!("{META}{}_rounds: 4\n", st.meta_prefix);
+            let store = ticketed(st, &meta, 2, last);
+            stamp_at(st, &store, false).expect_err("must-fix last round refuses");
+            assert_eq!(store.meta("demo"), meta, "{}: refusal writes nothing", st.noun);
+            assert!(store.artifact_exists("demo", st.doc), "{}: ticket survives", st.noun);
+            discard(st, &store, "demo").expect("discard");
+            assert_eq!(store.meta("demo"), meta, "{}: discard writes nothing", st.noun);
+            assert_eq!(*store.meta_writes.borrow(), 0, "{}", st.noun);
+        }
+    }
+
+    #[test]
+    fn non_integer_recorded_rounds_refuse_the_stamp_with_zero_writes() {
+        // Scenario「原有輪數不是整數時拒絕」：審查 many、驗證 -1。
+        for (st, bad) in [(&REVIEW, "many"), (&VERIFY, "-1")] {
+            let meta = format!("{META}{}_rounds: {bad}\n", st.meta_prefix);
+            let store = ticketed(st, &meta, 1, CLEAN);
+            let err = stamp_at(st, &store, false).expect_err("unparsable meta refuses");
+            assert!(
+                err.to_string().contains("speclink/changes/demo/.meta.yaml"),
+                "{}: the error names the metadata file: {err}",
+                st.noun
+            );
+            assert_eq!(store.meta("demo"), meta, "{}", st.noun);
+            assert_eq!(*store.meta_writes.borrow(), 0, "{}", st.noun);
+            assert!(store.artifact_exists("demo", st.doc), "{}: ticket survives", st.noun);
+        }
+    }
+}
+
 /// add-round 寫入前的 finding 路徑檢查（quality-gate-speedup）：兩站同一條規則，
 /// 前綴由呼叫端給（規格目錄名來自本機設定）。
 mod finding_paths {
@@ -495,7 +614,7 @@ mod review {
 
     #[test]
     fn discard_deletes_ticket_and_leaves_meta_untouched() {
-        // spec Scenario「放棄既有工單」：工單刪除、`.openspec.yaml` 位元級不變。
+        // spec Scenario「放棄既有工單」：工單刪除、`.meta.yaml` 位元級不變。
         let store = store_with_change();
         add_round(&REVIEW, &store, "demo", ROUND_1).expect("round 1");
         discard(&REVIEW, &store, "demo").expect("discard");
@@ -753,7 +872,7 @@ mod review {
         add_round(&REVIEW, &store, "demo", CLEAN_ROUND).expect("round");
         let err = stamp_demo(&store, false).expect_err("corrupt meta must refuse");
         assert!(
-            err.to_string().contains("openspec/changes/demo/.openspec.yaml"),
+            err.to_string().contains("speclink/changes/demo/.meta.yaml"),
             "error must name the metadata file: {err}"
         );
         assert_eq!(store.meta("demo"), BAD);
@@ -891,7 +1010,7 @@ mod review {
     #[test]
     fn stamp_quotes_scope_scalars_so_yaml_metacharacters_survive() {
         // path 以未引號純量寫出時，「空白＋#」會被當註解截斷（該檔永遠 stale），
-        // 而 `@`／`*`／`&`／`!` 開頭讓整份 .openspec.yaml 解析失敗——之後所有
+        // 而 `@`／`*`／`&`／`!` 開頭讓整份 .meta.yaml 解析失敗——之後所有
         // 動詞對該 change fail-closed。寫入端負責引號。
         let store = store_with_change();
         store.put_artifact("demo", "tasks.md", TASKS_5_DONE);
@@ -1756,7 +1875,7 @@ mod verify {
 
     #[test]
     fn discard_deletes_the_verify_ticket_and_leaves_meta_untouched() {
-        // spec Scenario「放棄既有工單」：工單刪除、`.openspec.yaml` 位元級不變。
+        // spec Scenario「放棄既有工單」：工單刪除、`.meta.yaml` 位元級不變。
         let store = finished_change();
         add_round(&VERIFY, &store, "demo", ROUND_1).expect("round 1");
         discard(&VERIFY, &store, "demo").expect("discard");
@@ -2084,7 +2203,7 @@ mod verify {
         add_round(&VERIFY, &corrupt, "demo", CLEAN_ROUND).expect("round");
         let err = stamp_demo(&corrupt, false).expect_err("corrupt meta must refuse");
         assert!(
-            err.to_string().contains("openspec/changes/demo/.openspec.yaml"),
+            err.to_string().contains("speclink/changes/demo/.meta.yaml"),
             "error must name the metadata file: {err}"
         );
         assert_eq!(corrupt.meta("demo"), BAD);
@@ -2190,5 +2309,28 @@ mod verify {
         const REVIEWED_ONLY: &str = "schema: spec-driven\nreviewed_at: 2026-08-01\nreviewed_tasks_total: 5\nreviewed_scope:\n  - path: crates/a/src/lib.rs\n    hash: dead\n";
         let meta = crate::model::ChangeMeta::from_text(Some(REVIEWED_ONLY)).expect("parses");
         assert_eq!(freshness(&VERIFY, &meta, &code_counts(5, 5), &files(REPO)), Freshness::Unknown);
+    }
+}
+
+#[test]
+fn legacy_stamp_cas_uses_the_metadata_used_to_build_the_stamp() {
+    // Simulate a legacy file changed between the effective-meta read and the
+    // second legacy-artifact read. The stamp must compare its original source.
+    for source in [Some(META), None] {
+        let store = store_with_round("**Scope**: crates/a/src/lib.rs\n");
+        let mut gate = stamp_gate(&VERIFY, &store, "demo", false).unwrap();
+        gate.raw_meta = source.map(str::to_owned);
+        let ticket = gate.ticket_text.clone();
+        let concurrent = format!("{META}board_rank: 7\n");
+        store.put_artifact("demo", crate::model::LEGACY_META_FILE, &concurrent);
+        gate.legacy_source = true;
+        gate.legacy_meta = Some(concurrent.clone());
+        *store.missing_meta.borrow_mut() = Some("demo".into());
+        let result = write_stamp(&VERIFY, &store, "demo", &gate, None, None, &[], None);
+        assert!(result.unwrap_err().to_string().contains("revision_conflict"));
+        assert_eq!(*store.meta_writes.borrow(), 0);
+        assert_eq!(store.read_artifact("demo", VERIFY.doc).unwrap(), ticket);
+        assert_eq!(store.read_artifact("demo", crate::model::LEGACY_META_FILE).unwrap(), concurrent);
+        assert!(!store.artifact_exists("demo", "checks/index.json"));
     }
 }

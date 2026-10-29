@@ -20,8 +20,14 @@ const zhWrapper = ({ children }: { children: ReactNode }) => (
     {children}
   </I18nProvider>
 );
+const enWrapper = ({ children }: { children: ReactNode }) => (
+  <I18nProvider locale="en" messages={APP_MESSAGES}>{children}</I18nProvider>
+);
 function render(ui: ReactElement) {
   return rtlRender(ui, { wrapper: zhWrapper });
+}
+function renderEnglish(ui: ReactElement) {
+  return rtlRender(ui, { wrapper: enWrapper });
 }
 
 /** 引擎提供的 12 個 smell 名稱（快照 reviewBaselineSmells 的測試值）。 */
@@ -29,6 +35,8 @@ const SMELLS = ["Mysterious Name", "Duplicated Code", "Feature Envy", "Data Clum
 
 function snapshot(over: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
   return {
+    specDir: over.specDir ?? "speclink",
+    ...(over.specDirConversion === undefined ? {} : { specDirConversion: over.specDirConversion }),
     app: { tools: ["claude"], customTools: [], parseError: null, ...(over.app ?? {}) },
     workflow: {
       locale: "tw",
@@ -76,11 +84,15 @@ function Harness({
   initial = "context",
   onParseErrors,
   onDirtyChange,
+  onConfigFile,
+  onSpecDirConverted,
 }: {
   settings: WorkspaceSettingsProvider;
   initial?: ProjectSettingsSection;
   onParseErrors?: (errors: { config: boolean; speclink: boolean }) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onConfigFile?: (file: string | null) => void;
+  onSpecDirConverted?: () => Promise<void>;
 }) {
   const [section, setSection] = useState<ProjectSettingsSection>(initial);
   nav.goto = setSection;
@@ -90,6 +102,8 @@ function Harness({
       section={section}
       onParseErrors={onParseErrors}
       onDirtyChange={onDirtyChange}
+      onConfigFile={onConfigFile}
+      onSpecDirConverted={onSpecDirConverted}
     />
   );
 }
@@ -269,6 +283,121 @@ describe("政策下拉未知值顯性呈現", () => {
 });
 
 describe("ProjectSettingsView 寫入", () => {
+  it("規格資料夾選取先警告；取消與 Escape 都不轉換", async () => {
+    const ws = fakeSettings(snapshot({ specDir: "openspec" }));
+    ws.convertSpecDirToSpeclink = vi.fn().mockResolvedValue(snapshot({ specDir: "speclink" }));
+    render(<Harness settings={ws} initial="speclink" />);
+    const select = await screen.findByTestId("spec-dir-select");
+    fireEvent.click(select);
+    fireEvent.click(await screen.findByRole("option", { name: /Speclink/ }));
+    expect(await screen.findByText(/轉換後無法轉回 OpenSpec 模式/)).toBeTruthy();
+    expect(select.textContent).toContain("OpenSpec");
+    expect(ws.convertSpecDirToSpeclink).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(ws.convertSpecDirToSpeclink).not.toHaveBeenCalled();
+
+    fireEvent.click(select);
+    fireEvent.click(await screen.findByRole("option", { name: /Speclink/ }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(ws.convertSpecDirToSpeclink).not.toHaveBeenCalled();
+  });
+
+  it("英文介面顯示等義的不可逆警告", async () => {
+    const ws = fakeSettings(snapshot({ specDir: "openspec" }));
+    ws.convertSpecDirToSpeclink = vi.fn();
+    renderEnglish(<Harness settings={ws} initial="speclink" />);
+    fireEvent.click(await screen.findByTestId("spec-dir-select"));
+    fireEvent.click(await screen.findByRole("option", { name: /Speclink/ }));
+    expect(await screen.findByText("This moves the spec folder from openspec/ to speclink/. After conversion, you cannot switch back to OpenSpec mode.")).toBeTruthy();
+    expect(ws.convertSpecDirToSpeclink).not.toHaveBeenCalled();
+  });
+
+  it("確認只送出一次；成功後顯示 Speclink 並保留未儲存工作流草稿", async () => {
+    let resolveConversion!: (value: SettingsSnapshot) => void;
+    const afterConversion = vi.fn().mockResolvedValue(undefined);
+    const ws = fakeSettings(snapshot({ specDir: "openspec" }));
+    ws.convertSpecDirToSpeclink = vi.fn(() => new Promise<SettingsSnapshot>((resolve) => { resolveConversion = resolve; }));
+    render(<Harness settings={ws} initial="workflow" onSpecDirConverted={afterConversion} />);
+    fireEvent.click(await screen.findByLabelText("audit"));
+    goto("speclink");
+    fireEvent.click(await screen.findByTestId("spec-dir-select"));
+    fireEvent.click(await screen.findByRole("option", { name: /Speclink/ }));
+    const confirm = await screen.findByRole("button", { name: "轉換成 Speclink 模式" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(ws.convertSpecDirToSpeclink).toHaveBeenCalledTimes(1);
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    resolveConversion(snapshot({ specDir: "speclink" }));
+    await waitFor(() => expect(screen.getByTestId("spec-dir-select").textContent).toContain("Speclink"));
+    expect((screen.getByTestId("spec-dir-select") as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(afterConversion).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/無法切回/)).toBeTruthy();
+    goto("workflow");
+    expect((await screen.findByLabelText("audit")).getAttribute("data-state")).toBe("checked");
+  });
+
+  it("轉換失敗維持實際模式並允許同向重試", async () => {
+    const ws = fakeSettings(snapshot({ specDir: "openspec" }));
+    ws.convertSpecDirToSpeclink = vi.fn()
+      .mockRejectedValueOnce(new Error("injected conversion failure"))
+      .mockResolvedValueOnce(snapshot({ specDir: "speclink" }));
+    render(<Harness settings={ws} initial="speclink" />);
+    const choose = async () => {
+      fireEvent.click(await screen.findByTestId("spec-dir-select"));
+      fireEvent.click(await screen.findByRole("option", { name: /Speclink/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "轉換成 Speclink 模式" }));
+    };
+    await choose();
+    expect(await screen.findByText(/injected conversion failure/)).toBeTruthy();
+    expect(screen.getByTestId("spec-dir-select").textContent).toContain("OpenSpec");
+    await choose();
+    await waitFor(() => expect(screen.getByTestId("spec-dir-select").textContent).toContain("Speclink"));
+    expect(ws.convertSpecDirToSpeclink).toHaveBeenCalledTimes(2);
+  });
+
+  it("重開後收到未完成標記，只提供同向續作按鈕", async () => {
+    const pending = snapshot({ specDir: "speclink", specDirConversion: { pending: true } });
+    const ws = fakeSettings(pending);
+    ws.convertSpecDirToSpeclink = vi.fn().mockResolvedValue(snapshot({ specDir: "speclink" }));
+    const view = render(<Harness settings={ws} initial="speclink" />);
+    expect(await screen.findByText(/規格資料夾已轉換，但後續步驟尚未完成/)).toBeTruthy();
+    expect((await screen.findByTestId("spec-dir-select")).getAttribute("disabled")).not.toBeNull();
+    fireEvent.click(screen.getByTestId("retry-spec-dir-conversion"));
+    await waitFor(() => expect(ws.convertSpecDirToSpeclink).toHaveBeenCalledTimes(1));
+    view.unmount();
+  });
+
+  it("未儲存工具、自訂路徑、壞設定與 remote 不提供轉換", async () => {
+    const local = fakeSettings(snapshot({ specDir: "openspec" }));
+    local.convertSpecDirToSpeclink = vi.fn();
+    const localView = render(<Harness settings={local} initial="speclink" />);
+    fireEvent.click(await screen.findByLabelText("codex [.agents]"));
+    expect((screen.getByTestId("spec-dir-select") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/先儲存或放棄/)).toBeTruthy();
+    localView.unmount();
+
+    const custom = fakeSettings(snapshot({ specDir: "docs/specs" }));
+    custom.convertSpecDirToSpeclink = vi.fn();
+    const view = render(<Harness settings={custom} initial="speclink" />);
+    expect((await screen.findByTestId("spec-dir-custom-path")).textContent).toContain("docs/specs");
+    expect(custom.convertSpecDirToSpeclink).not.toHaveBeenCalled();
+    view.unmount();
+
+    const broken = fakeSettings(snapshot({ specDir: "openspec", app: { tools: [], customTools: [], parseError: "bad yaml" } }));
+    broken.convertSpecDirToSpeclink = vi.fn();
+    const brokenView = render(<Harness settings={broken} initial="speclink" />);
+    expect((await screen.findByTestId("spec-dir-select")).getAttribute("disabled")).not.toBeNull();
+    expect(broken.convertSpecDirToSpeclink).not.toHaveBeenCalled();
+    brokenView.unmount();
+
+    const remote = { ...fakeSettings(snapshot({ specDir: "openspec" })), kind: "remote" as const };
+    const remoteView = render(<Harness settings={remote} initial="speclink" />);
+    await waitFor(() => expect(screen.queryByTestId("spec-dir-select")).toBeNull());
+    expect(remote.convertSpecDirToSpeclink).toBeUndefined();
+    remoteView.unmount();
+  });
+
   it("tools 加選 codex 後儲存 → writeAppTools 收到完整選集", async () => {
     const ws = renderView(snapshot(), "speclink");
     fireEvent.click(await screen.findByLabelText("codex [.agents]"));
@@ -409,7 +538,7 @@ describe("ProjectSettingsView 寫入", () => {
   it("寫入失敗：顯示單行錯誤訊息", async () => {
     const ws = renderView(snapshot(), "workflow");
     (ws.writeWorkflowConfig as ReturnType<typeof vi.fn>).mockRejectedValue(
-      "openspec/config.yaml: write failed: denied",
+      "speclink/config.yaml: write failed: denied",
     );
     fireEvent.click(await screen.findByLabelText("tdd"));
     fireEvent.click(screen.getByTestId("save-workflow"));
@@ -419,20 +548,38 @@ describe("ProjectSettingsView 寫入", () => {
 
 // ---- 分類頁組織（spec 需求「設定頁圖形化讀寫兩層設定」；desktop-settings-mode design D8）----
 
+describe("檔案註記依實際規格資料夾（spec「畫面依實際規格資料夾與資料檔名顯示」）", () => {
+  it("暫緩遷移的舊佈局專案：產出規則頁註記為 openspec/config.yaml · rules，並回報給分類欄", async () => {
+    const onConfigFile = vi.fn();
+    const ws = fakeSettings({ ...projectSnap(), specDir: "openspec" });
+    render(<Harness settings={ws} initial="rules" onConfigFile={onConfigFile} />);
+    await screen.findByTestId("rules-page");
+    expect(screen.getByTestId("file-note-config").textContent).toBe("openspec/config.yaml · rules");
+    await waitFor(() => expect(onConfigFile).toHaveBeenLastCalledWith("openspec/config.yaml"));
+  });
+
+  it("明寫 spec_dir：註記為該路徑", async () => {
+    renderView({ ...projectSnap(), specDir: "docs/specs" }, "workflow");
+    await screen.findByTestId("file-note-config");
+    expect(screen.getByTestId("file-note-config").textContent).toMatch(/^docs\/specs\/config\.yaml · /);
+  });
+});
+
 describe("專案設定分類頁（spec Scenario「兩種設定模式與預設分類」）", () => {
   it("專案說明頁標題下等寬註記檔案與鍵；產出流程頁依序為產出政策卡與產出流程卡；.speclink.yaml 頁有檔案列與 AI 工具卡", async () => {
     renderView(projectSnap());
     const page = await screen.findByTestId("context-page");
     expect(within(page).getByRole("heading", { level: 2, name: "專案說明" })).toBeTruthy();
+    // spec Scenario「新佈局專案的檔案註記」。
     const note = screen.getByTestId("file-note-config");
-    expect(note.textContent).toBe("openspec/config.yaml · context");
+    expect(note.textContent).toBe("speclink/config.yaml · context");
     expect(note.className).toContain("font-mono");
     // 其他頁的內容不在畫面上。
     expect(screen.queryByTestId("policy-card")).toBeNull();
     expect(screen.queryByLabelText("claude [.claude]")).toBeNull();
 
     goto("rules");
-    expect(screen.getByTestId("file-note-config").textContent).toBe("openspec/config.yaml · rules");
+    expect(screen.getByTestId("file-note-config").textContent).toBe("speclink/config.yaml · rules");
 
     goto("workflow");
     const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
@@ -912,7 +1059,7 @@ describe("拆卡獨立編輯態（spec 需求「設定頁編輯專案說明與�
   it("寫入失敗：顯示單行錯誤並維持編輯態不遺失輸入（design 契約失敗模式）", async () => {
     const ws = renderView(projectSnap());
     (ws.writeWorkflowContext as ReturnType<typeof vi.fn>).mockRejectedValue(
-      "openspec/config.yaml: write failed: denied",
+      "speclink/config.yaml: write failed: denied",
     );
     const card = await screen.findByTestId("context-page");
     fireEvent.click(within(card).getByTestId("context-edit"));
@@ -1182,6 +1329,18 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
     path: null,
     error: null,
   };
+  const NO_SPEC_CHANGE_ENTRY: SchemaEntry = {
+    name: "no-spec-change",
+    source: "package",
+    artifactIds: ["proposal", "design", "tasks"],
+    artifacts: [
+      { id: "proposal", description: "提案文件", instruction: "寫提案", template: "# Proposal template" },
+      { id: "design", description: "設計文件", instruction: "寫設計", template: "# Design template" },
+      { id: "tasks", description: "任務清單", instruction: "寫任務", template: "# Tasks template" },
+    ],
+    path: null,
+    error: null,
+  };
   const CUSTOM_ENTRY: SchemaEntry = {
     name: "my-flow",
     source: "project",
@@ -1189,7 +1348,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
     artifacts: [
       { id: "plan", description: "計畫文件", instruction: "先寫計畫", template: "# 計畫模板" },
     ],
-    path: "/proj/openspec/schemas/my-flow",
+    path: "/proj/speclink/schemas/my-flow",
     error: null,
   };
 
@@ -1286,7 +1445,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
   it("切換寫入失敗：錯誤浮出於表單，不靜默", async () => {
     const ws = schemaSettings(projectSnap());
     (ws.writeWorkflowSchema as ReturnType<typeof vi.fn>).mockRejectedValue(
-      "openspec/config.yaml: write failed: denied",
+      "speclink/config.yaml: write failed: denied",
     );
     render(<Harness settings={ws} />);
     await openSchemasTab();
@@ -1421,7 +1580,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
   it("同名跨層項目只有解析命中的那層有 fork 按鈕（review R8）", async () => {
     // 引擎 fork 以 project→user 第一命中解析：被 shadow 的 user 層項若給 fork，
     // 複製到的會是專案層同名內容——不給入口。
-    const dupProject: SchemaEntry = { ...CUSTOM_ENTRY, name: "dup", path: "/proj/openspec/schemas/dup" };
+    const dupProject: SchemaEntry = { ...CUSTOM_ENTRY, name: "dup", path: "/proj/speclink/schemas/dup" };
     const dupUser: SchemaEntry = {
       ...CUSTOM_ENTRY,
       name: "dup",
@@ -1442,7 +1601,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
       source: "project",
       artifactIds: ["plan", "tasks"],
       artifacts: [],
-      path: "/proj/openspec/schemas/my-new-flow",
+      path: "/proj/speclink/schemas/my-new-flow",
       error: null,
     };
     const ws = schemaSettings(projectSnap());
@@ -1469,7 +1628,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
     expect(screen.queryByTestId("schema-reveal-spec-driven")).toBeNull();
     fireEvent.click(screen.getByTestId("schema-reveal-my-flow"));
     await waitFor(() =>
-      expect(ws.revealSchema).toHaveBeenCalledWith("/proj/openspec/schemas/my-flow"),
+      expect(ws.revealSchema).toHaveBeenCalledWith("/proj/speclink/schemas/my-flow"),
     );
   });
 
@@ -1567,7 +1726,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
   it("切換失敗後下拉退回現值，不謊報活躍 schema（review N2）", async () => {
     const ws = schemaSettings(projectSnap());
     (ws.writeWorkflowSchema as ReturnType<typeof vi.fn>).mockRejectedValue(
-      "openspec/config.yaml: write failed: denied",
+      "speclink/config.yaml: write failed: denied",
     );
     render(<Harness settings={ws} />);
     await openSchemasTab();
@@ -1585,7 +1744,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
       source: "project",
       artifactIds: [],
       artifacts: [],
-      path: "/proj/openspec/schemas/dup",
+      path: "/proj/speclink/schemas/dup",
       error: "Schema parse error: bad yaml",
     };
     const dupUser: SchemaEntry = {
@@ -1626,7 +1785,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
       schemaArtifacts: [],
       rules: {},
     } as Partial<SettingsSnapshot["workflow"]>);
-    const ws = schemaSettings(snap, [BUILTIN_ENTRY], { kind: "remote" });
+    const ws = schemaSettings(snap, [BUILTIN_ENTRY, NO_SPEC_CHANGE_ENTRY], { kind: "remote" });
     render(<Harness settings={ws} />);
     await screen.findByTestId("context-page");
     // 不猜固定鍵：產出規則頁無任何分節內容。
@@ -1650,6 +1809,7 @@ describe("產出流程頁（spec「產出流程頁」）", () => {
     ).toEqual([
       ["their-flow", true],
       ["spec-driven", false],
+      ["no-spec-change", false],
     ]);
   });
 });
@@ -1675,7 +1835,7 @@ describe("審查規則頁（spec 需求「設定頁編輯審查規則」）", ()
     renderView(reviewSnap(), "review");
     const page = await screen.findByTestId("review-page");
     expect(within(page).getByRole("heading", { level: 2, name: "審查規則" })).toBeTruthy();
-    expect(screen.getByTestId("file-note-config").textContent).toBe("openspec/config.yaml · review");
+    expect(screen.getByTestId("file-note-config").textContent).toBe("speclink/config.yaml · review");
     expect(within(page).getByTestId("review-baseline-mode").textContent).toBe("沿用並追加");
     const expected = {
       critical: ["CRITICAL", "2 條", "擋蓋章；要接受放行須逐條再確認"],

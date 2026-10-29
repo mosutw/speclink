@@ -14,9 +14,10 @@ use crate::context::SpeclinkExecutionContext;
 use speclink_core::command::{
     execute as engine_execute, Command, CommandError, CommandOutcome, DomainEvent, ExecutionContext,
 };
-use speclink_core::model::{Change, ChangeMeta};
+use speclink_core::model::{Change, ChangeMeta, META_FILE, META_READ_ORDER};
 use speclink_core::store::{DiscussionDoc, Store};
 use speclink_core::history::valid_check_path;
+use speclink_core::workspace::DEFAULT_SPEC_DIR;
 use speclink_store::{
     DocumentId, ExpectedRevision, Revision, Scope, StagedOp, StoreError, TeamStore,
 };
@@ -140,6 +141,7 @@ fn command_label(outcome: &CommandOutcome) -> String {
         CommandOutcome::InProgressAdd(_) => "in-progress-add",
         CommandOutcome::InProgressRemove(_) => "in-progress-remove",
         CommandOutcome::ChangeDepends(_) => "change-depends",
+        CommandOutcome::ChangeSchema(_) => "change-schema",
         CommandOutcome::Archive(_) => "archive",
         CommandOutcome::Discard(_) => "discard",
         CommandOutcome::DiscussNew(_) => "discuss-new",
@@ -273,7 +275,7 @@ impl BridgeStore {
             meta_error,
             // fs adapter 的 workspace 相對形狀：引擎以 dir 組錯誤訊息與
             // 路徑輸出，remote 模式必須與 fs 模式逐位元一致（verb-contract）。
-            dir: PathBuf::from(format!("openspec/changes/{name}")),
+            dir: PathBuf::from(format!("{DEFAULT_SPEC_DIR}/changes/{name}")),
         }
     }
 
@@ -345,7 +347,7 @@ impl Store for BridgeStore {
 
     fn create_change(&self, name: &str, meta_text: &str) -> anyhow::Result<PathBuf> {
         self.put(DocumentId::ChangeMeta { change: name.to_string() }, meta_text.to_string());
-        Ok(PathBuf::from(format!("openspec/changes/{name}")))
+        Ok(PathBuf::from(format!("{DEFAULT_SPEC_DIR}/changes/{name}")))
     }
 
     fn updated_at_secs(&self, _name: &str) -> u64 {
@@ -413,7 +415,7 @@ impl Store for BridgeStore {
             },
             content.to_string(),
         );
-        Ok(PathBuf::from(format!("openspec/changes/{change}/{artifact}")))
+        Ok(PathBuf::from(format!("{DEFAULT_SPEC_DIR}/changes/{change}/{artifact}")))
     }
 
     fn artifact_exists(&self, change: &str, artifact: &str) -> bool {
@@ -435,11 +437,11 @@ impl Store for BridgeStore {
     fn commit_checks(&self, change: &str, commit: &speclink_core::history::ChecksCommit) -> anyhow::Result<()> {
         commit.validate()?;
         for (path, expected) in &commit.expected {
-            let content = if path == ".openspec.yaml" { self.read_change_meta(change) } else { self.read_artifact(change, path) };
+            let content = if path == META_FILE { self.read_change_meta(change) } else { self.read_artifact(change, path) };
             anyhow::ensure!(content.map(|text| speclink_core::security::data::sha256(text.as_bytes())) == *expected, "revision_conflict");
         }
         for (path, content) in &commit.writes {
-            if path == ".openspec.yaml" { self.write_change_meta(change, content)?; }
+            if path == META_FILE { self.write_change_meta(change, content)?; }
             else { self.write_artifact(change, path, content)?; }
         }
         for path in &commit.deletes { self.delete_artifact(change, path)?; }
@@ -533,7 +535,7 @@ impl Store for BridgeStore {
 
     fn archive_change(&self, name: &str, dated_name: &str) -> anyhow::Result<()> {
         // Move every document of the active change to the archive: metadata to
-        // `.openspec.yaml`, each artifact to its own relative name. Reads the
+        // `.meta.yaml`, each artifact to its own relative name. Reads the
         // read-after-write view so an earlier write in the same flow (the
         // mark-tasks-complete pre-write) travels into the archive.
         let moves: Vec<(DocumentId, DocumentId, String)> = self
@@ -545,7 +547,7 @@ impl Store for BridgeStore {
                     id.clone(),
                     DocumentId::ArchivedChange {
                         change: dated_name.to_string(),
-                        doc: ".openspec.yaml".to_string(),
+                        doc: META_FILE.to_string(),
                     },
                     content.clone(),
                 )),
@@ -583,14 +585,16 @@ impl Store for BridgeStore {
         self.archive_change(name,dated)?;
         let omitted=self.view.borrow().keys().filter(|id|matches!(id,DocumentId::ArchivedChange{change,doc} if change==dated&&!plan.retains(doc))).cloned().collect::<Vec<_>>();
         for doc in omitted{self.del(doc);}
-        for (path,content) in [(speclink_core::history::INDEX,&plan.index),("checks/acceptance.json",&plan.receipt),(".openspec.yaml",&plan.archived_meta)]{if let Some(content)=content{self.put(DocumentId::ArchivedChange{change:dated.into(),doc:path.into()},content.clone());}}
+        for (path,content) in [(speclink_core::history::INDEX,&plan.index),("checks/acceptance.json",&plan.receipt),(META_FILE,&plan.archived_meta)]{if let Some(content)=content{self.put(DocumentId::ArchivedChange{change:dated.into(),doc:path.into()},content.clone());}}
         Ok(())
     }
 
     fn read_archived_meta(&self, dated_name: &str) -> Option<String> {
-        self.read_doc(&DocumentId::ArchivedChange {
-            change: dated_name.to_string(),
-            doc: ".openspec.yaml".to_string(),
+        META_READ_ORDER.into_iter().find_map(|doc| {
+            self.read_doc(&DocumentId::ArchivedChange {
+                change: dated_name.to_string(),
+                doc: doc.to_string(),
+            })
         })
     }
 
@@ -598,7 +602,7 @@ impl Store for BridgeStore {
         self.put(
             DocumentId::ArchivedChange {
                 change: dated_name.to_string(),
-                doc: ".openspec.yaml".to_string(),
+                doc: META_FILE.to_string(),
             },
             content.to_string(),
         );
@@ -939,6 +943,57 @@ mod tests {
             "the archived document set carries the evidence byte-for-byte"
         );
         assert_eq!(bridge.read_evidence("demo"), None, "the active record moved, not copied");
+    }
+
+    #[test]
+    fn archiving_keys_the_data_file_under_the_new_name() {
+        // spec store-abstraction「新封存寫新鍵」。
+        let store = MemoryStore::new();
+        let binding = local_default_binding();
+        let scope = Scope::new(binding.project, binding.repo);
+        seeded(
+            &store,
+            &scope,
+            &[(DocumentId::ChangeMeta { change: "demo".to_string() }, "schema: spec-driven\n")],
+        );
+
+        let bridge = BridgeStore::materialize(&store, &scope).expect("materialize bridge");
+        bridge.archive_change("demo", "2026-10-23-demo").expect("archive change");
+
+        assert_eq!(
+            bridge.read_archived_artifact("2026-10-23-demo", ".meta.yaml").as_deref(),
+            Some("schema: spec-driven\n")
+        );
+        assert_eq!(bridge.read_archived_artifact("2026-10-23-demo", ".openspec.yaml"), None);
+        bridge
+            .write_archived_meta("2026-10-23-demo", "schema: spec-driven\narchived_at: x\n")
+            .expect("stamp archived meta");
+        assert_eq!(bridge.read_archived_artifact("2026-10-23-demo", ".openspec.yaml"), None);
+    }
+
+    #[test]
+    fn archived_data_files_read_the_new_key_first_and_the_legacy_key_as_a_fallback() {
+        // spec store-abstraction「舊鍵照常讀取」：遠端資料不搬，讀取順序帶到舊鍵。
+        let store = MemoryStore::new();
+        let binding = local_default_binding();
+        let scope = Scope::new(binding.project, binding.repo);
+        let archived = |change: &str, doc: &str| DocumentId::ArchivedChange {
+            change: change.to_string(),
+            doc: doc.to_string(),
+        };
+        seeded(
+            &store,
+            &scope,
+            &[
+                (archived("2026-07-01-old", ".openspec.yaml"), "created_by: Old\n"),
+                (archived("2026-07-02-both", ".openspec.yaml"), "created_by: Old\n"),
+                (archived("2026-07-02-both", ".meta.yaml"), "created_by: New\n"),
+            ],
+        );
+
+        let bridge = BridgeStore::materialize(&store, &scope).expect("materialize bridge");
+        assert_eq!(bridge.read_archived_meta("2026-07-01-old").as_deref(), Some("created_by: Old\n"));
+        assert_eq!(bridge.read_archived_meta("2026-07-02-both").as_deref(), Some("created_by: New\n"));
     }
 
     #[test]

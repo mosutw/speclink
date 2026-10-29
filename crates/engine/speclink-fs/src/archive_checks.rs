@@ -274,7 +274,7 @@ pub(crate) fn archive(
                 replace(&stage, "checks/acceptance.json", receipt)?;
             }
             if let Some(meta) = &plan.archived_meta {
-                replace(&stage, ".openspec.yaml", meta)?;
+                replace(&stage, ".meta.yaml", meta)?;
             }
             validate_tree(&stage)?;
             fault("staged")?;
@@ -326,7 +326,7 @@ mod tests {
         let store = FsStore::new(root.path(), "openspec");
         let dir = store.layout().change_dir("demo");
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join(".openspec.yaml"), "schema: spec-driven\n").unwrap();
+        fs::write(dir.join(".meta.yaml"), "schema: spec-driven\n").unwrap();
         fs::write(dir.join("tasks.md"), "- [x] 1.1 Done\n").unwrap();
         fs::write(
             root.path().join("openspec/config.yaml"),

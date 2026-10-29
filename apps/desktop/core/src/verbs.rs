@@ -16,8 +16,10 @@ pub fn validate_at(root: &Path, change: &str) -> Result<Value, String> {
     let ctx = crate::require_context_for_change(root, change)?;
     let store: &dyn Store = &ctx.store;
     let change = find(store, change)?;
-    // 與 CLI 一致：validate 不解析 change 的 schema，一律用 spec_driven。
-    let schema = speclink_core::schema::spec_driven();
+    // 與 CLI 一致：以 change 自己的 schema 驗證，解析不到時以 spec-driven 代之。
+    let user_dir = speclink_host::context::global_config_dir();
+    let schema =
+        speclink_core::validate::change_schema(Some(&ctx.workspace), Some(&user_dir), &change);
     let result = speclink_core::validate::validate_change(store, &change, &schema, false);
     serde_json::to_value(&result).map_err(|e| e.to_string())
 }
@@ -118,7 +120,7 @@ mod tests {
         let fx = FixtureRoot::new(tag);
         fx.add_change("demo", "schema: spec-driven\ncreated: 2026-07-01\n");
         fx.write(
-            "openspec/changes/demo/specs/cap-x/spec.md",
+            "speclink/changes/demo/specs/cap-x/spec.md",
             "## Purpose\n\n本 capability 是測試用的示範能力，涵蓋一個可觀察行為與其成功路徑，專供桌面動詞的測試取用。\n\n## ADDED Requirements\n\n### Requirement: Demo works\n\nIt SHALL work.\n\n#### Scenario: works\n\n- **WHEN** used\n- **THEN** it works\n",
         );
         fx
@@ -190,7 +192,7 @@ mod tests {
         let fx = valid_fixture("v-analyze-wt");
         // 主 checkout 的 delta spec 退化成無場景版（validate 判不合格、零 Ambiguity）。
         fx.write(
-            "openspec/changes/demo/specs/cap-x/spec.md",
+            "speclink/changes/demo/specs/cap-x/spec.md",
             "## Purpose\n\n本 capability 是測試用的示範能力，涵蓋一個可觀察行為與其成功路徑，專供桌面動詞的測試取用。\n\n## ADDED Requirements\n\n### Requirement: Demo works\n\nIt SHALL work.\n",
         );
         let wt = fx.attach_worktree("demo");

@@ -120,7 +120,7 @@ fn security_remote_patch_uses_cas_and_the_shared_read_shape() {
     let put: serde_json::Value = serde_json::from_str(&mock.find("PUT", "/config").body).unwrap();
     assert_eq!(put["expectedRevision"], 7);
     assert!(put["content"].as_str().unwrap().contains("enabled: true"));
-    assert!(!p.dir.join("openspec").exists());
+    assert!(!p.dir.join("speclink").exists());
     for (i, status, error) in [
         (
             0,
@@ -420,6 +420,26 @@ fn set_worktree_true_lands_in_the_file_and_in_show() {
     let text = stdout_of(&p.run(&["workflow-config", "show"]));
     let line = text.lines().find(|l| l.contains("worktree")).unwrap_or_default();
     assert!(line.contains("on"), "human output shows worktree on: {text}");
+}
+
+#[test]
+fn set_worktree_on_a_legacy_layout_syncs_skills_without_moving_the_folder() {
+    // spec「技能足跡同步不遷移規格資料夾」Scenario「CLI 切換 worktree 不遷移」：不在 git 裡，
+    // 遷移沒有暫緩條件，`speclink update` 會搬——設定寫入的同步不得搬。
+    let p = TempProject::new("set-worktree-legacy", WF_YAML);
+    std::fs::create_dir_all(p.dir.join("openspec/changes/demo")).unwrap();
+    std::fs::write(p.dir.join("openspec/changes/demo/.openspec.yaml"), "schema: spec-driven\n").unwrap();
+
+    let out = p.run(&["workflow-config", "set", "worktree", "true"]);
+    assert!(out.status.success(), "stderr: {}", stderr_of(&out));
+    assert!(p.dir.join("openspec/changes/demo/.openspec.yaml").is_file(), "openspec/ 原封不動");
+    assert!(!p.dir.join("speclink").exists());
+    let skill = std::fs::read_to_string(p.dir.join(".claude/skills/speclink-apply-with-worktree/SKILL.md"))
+        .expect("worktree skill generated");
+    assert!(skill.contains("openspec/changes"), "技能檔以 openspec/ 同步");
+    assert!(p.dir.join(".claude/skills/speclink-worktree-merge/SKILL.md").is_file(), "兩顆 worktree 技能都生成");
+    let stdout = stdout_of(&out);
+    assert!(!stdout.contains("Migrated") && !stdout.contains("migration"), "沒有遷移提示: {stdout}");
 }
 
 #[test]
@@ -888,7 +908,7 @@ fn show_prints_the_review_line_after_rules() {
     assert!(out.status.success(), "stderr: {}", stderr_of(&out));
     assert_eq!(
         stdout_of(&out),
-        "Workflow config: openspec/config.yaml\n\n  locale       tw\n  spec_locale  unset (system language)\n  tdd          on\n  audit        unset (off)\n  worktree     unset (off)\n  context      2 lines\n  rules        design 2, tasks 1\n  review       none\n  security_verification  disabled\n"
+        "Workflow config: openspec/config.yaml\n\n  schema       spec-driven\n  locale       tw\n  spec_locale  unset (system language)\n  tdd          on\n  audit        unset (off)\n  worktree     unset (off)\n  context      2 lines\n  rules        design 2, tasks 1\n  review       none\n  security_verification  disabled\n"
     );
     // Spec Example review 行的值.
     for (tag, review, value) in [
@@ -913,6 +933,33 @@ fn show_prints_the_review_line_after_rules() {
             lines[lines.len() - 3].starts_with("  rules "),
             "review follows rules: {text}"
         );
+    }
+}
+
+#[test]
+fn show_prints_the_project_default_schema() {
+    // Spec scenario 顯示專案預設 schema ＋ Example schema 的值：人眼輸出在 locale 行之前
+    // 恰一行 schema、標籤欄寬與 locale 行相同；--json 的 schema 未設定為 null。
+    for (tag, schema_line, human, json) in [
+        ("unset", "", "unset (spec-driven)", serde_json::Value::Null),
+        ("builtin", "schema: spec-driven\n", "spec-driven", serde_json::json!("spec-driven")),
+        ("custom", "schema: my-flow\n", "my-flow", serde_json::json!("my-flow")),
+    ] {
+        let p = TempProject::new(&format!("show-schema-{tag}"), &format!("{schema_line}locale: tw\n"));
+        let out = p.run(&["workflow-config", "show", "--no-color"]);
+        assert!(out.status.success(), "{tag}: stderr: {}", stderr_of(&out));
+        let text = stdout_of(&out);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[2], format!("  schema       {human}"), "{tag}: {text}");
+        assert_eq!(lines[3], "  locale       tw", "{tag}: schema precedes locale: {text}");
+        assert_eq!(
+            lines.iter().filter(|l| l.trim_start().starts_with("schema ")).count(),
+            1,
+            "{tag}: exactly one schema line: {text}"
+        );
+
+        let payload = json_of(&p.run(&["workflow-config", "show", "--json"]));
+        assert_eq!(payload["schema"], json, "{tag}: {payload}");
     }
 }
 
@@ -951,7 +998,7 @@ fn a_review_typo_fails_show_and_instructions_closed() {
     let p = TempProject::new("review-typo-instructions", "review:\n  baseline: keep\n");
     let change = p.dir.join("openspec").join("changes").join("any-change");
     std::fs::create_dir_all(&change).unwrap();
-    std::fs::write(change.join(".openspec.yaml"), "schema: spec-driven\ncreated: 2026-10-14\n").unwrap();
+    std::fs::write(change.join(".meta.yaml"), "schema: spec-driven\ncreated: 2026-10-14\n").unwrap();
     let out = p.run(&["instructions", "proposal", "--change", "any-change", "--json"]);
     assert!(!out.status.success(), "instructions must exit non-zero");
     let err = stderr_of(&out);
@@ -1222,7 +1269,7 @@ fn mock_server(mut routes: Vec<(&'static str, &'static str, u16, String)>) -> Mo
     }
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind mock server"));
     let port = server.server_addr().to_ip().expect("ip").port();
-    let base = format!("http://127.0.0.1:{port}/api/speclink/v1/projects/demo");
+    let base = format!("http://127.0.0.1:{port}/api/openspec/v1/projects/demo");
     let captured = Arc::new(Mutex::new(Vec::new()));
     let looper = Arc::clone(&server);
     let sink = Arc::clone(&captured);
@@ -1238,7 +1285,7 @@ fn mock_server(mut routes: Vec<(&'static str, &'static str, u16, String)>) -> Mo
             });
             let hit = routes.iter().find(|(m, suffix, _, _)| {
                 req.method().to_string() == *m
-                    && path == format!("/api/speclink/v1/projects/demo{suffix}")
+                    && path == format!("/api/openspec/v1/projects/demo{suffix}")
             });
             let (status, body) = match hit {
                 Some((_, _, status, body)) => (*status, body.clone()),
@@ -1266,7 +1313,7 @@ impl MockServer {
         caps.iter()
             .find(|c| {
                 c.method == method
-                    && c.path == format!("/api/speclink/v1/projects/demo{path_suffix}")
+                    && c.path == format!("/api/openspec/v1/projects/demo{path_suffix}")
             })
             .unwrap_or_else(|| panic!("no captured {method} {path_suffix}; got {caps:?}"))
             .clone()
@@ -1275,7 +1322,7 @@ impl MockServer {
     fn none(&self, method: &str, path_suffix: &str) -> bool {
         let caps = self.captured.lock().unwrap();
         !caps.iter().any(|c| {
-            c.method == method && c.path == format!("/api/speclink/v1/projects/demo{path_suffix}")
+            c.method == method && c.path == format!("/api/openspec/v1/projects/demo{path_suffix}")
         })
     }
 }
@@ -1382,7 +1429,7 @@ fn remote_languages_uses_the_server_response_and_never_client_overrides() {
         assert!(out.status.success(), "{}", stderr_of(&out));
         assert_eq!(json_of(&out), serde_json::json!({"locale":"Japanese (日本語)","specLocale":"ja"}));
         assert!(mock.none("PUT", "/config"));
-        assert!(!p.dir.join("openspec").exists());
+        assert!(!p.dir.join("speclink").exists());
     }
 }
 
@@ -1646,7 +1693,7 @@ fn git_init(p: &TempProject) {
     git(&["commit", "-qm", "seed"]);
 }
 
-/// Attach a linked worktree on `speclink/<change>` with that change present in
+/// Attach a linked worktree on `openspec/<change>` with that change present in
 /// both copies — the three conditions discovery requires for a mapping.
 fn attach_worktree(p: &TempProject, change: &str) -> PathBuf {
     let change_dir = p.dir.join("openspec").join("changes").join(change);

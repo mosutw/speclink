@@ -99,7 +99,7 @@ This step does three things:
 
 It does not change your `CLAUDE.md`, `AGENTS.md`, or `.github/copilot-instructions.md`. The agent reads the description in each skill file to choose the right skill.
 
-`openspec/` uses the OpenSpec folder layout:
+`openspec/` has this folder layout:
 
 ```text
 openspec/
@@ -110,9 +110,9 @@ openspec/
 └── discussions/                 discussion records (added by Speclink)
 ```
 
-All files are plain Markdown and YAML. You can read and edit them without Speclink, and each change shows in the Git diff. Speclink adds only two items: `discussions/`, and a `.openspec.yaml` file in each change folder. That file keeps lifecycle data, such as the start time and the source discussion.
+All files are plain Markdown and YAML. You can read and edit them without Speclink, and each change shows in the Git diff. Speclink adds only two items: `discussions/`, and a `.meta.yaml` file in each change folder. That file keeps lifecycle data, such as the start time and the source discussion.
 
-This compatibility applies to Local mode only. After you connect a remote server, the specs live in the Store. Your machine keeps only a read-only projection (`.speclink/context/`).
+This applies to Local mode only. After you connect a remote server, the specs live in the Store. Your machine keeps only a read-only projection (`.speclink/context/`).
 
 Make sure that you start from an empty state:
 
@@ -312,6 +312,16 @@ Do not use `--mark-tasks-complete` or `--no-validate` to skip work that is not d
 | `.speclink/` | Local work data (not in Git) |
 
 For the settings, see [Configuration](configuration.md).
+
+## <a id="upgrade"></a>Upgrade an older project or use an OpenSpec folder
+
+After upgrading the CLI, run `speclink update` in the project root. This Fork keeps `openspec/` in place and records `spec_dir: openspec` in `.speclink.yaml` when the key is missing and that is the actual local folder. It preserves tools, comments, and unknown keys. Explicit custom directories and projects already using `speclink/` retain their paths. Repeating the update does not add duplicate keys. Invalid settings or a failed config write stop the update before migration or skill generation.
+
+For an OpenSpec project without `.speclink.yaml`, run `speclink init --tools claude,codex` in the project root. Speclink adopts `openspec/` in place, keeps your config, schemas, specs, and changes, and adds the workspace config and selected skill files. No clean Git state or removal of other worktrees is required for this in-place setup. An existing workspace can be filled in by the desktop app's adoption action.
+
+To use `speclink/` instead, open the local project's `.speclink.yaml` settings and choose Speclink under **Spec folder**. The app asks you to confirm before moving anything; canceling makes no changes. After conversion, the settings page does not offer a way back to OpenSpec. If finishing the conversion is interrupted, reopen the project and use **Retry conversion**. The ordinary `speclink update` keeps the OpenSpec default in this Fork. Custom folders and remote projects do not have this conversion control.
+
+New lifecycle writes use `.meta.yaml`; reads prefer it and fall back to `.openspec.yaml`. Keeping the folder layout supports moving the plain-text content between tools, but full OpenSpec CLI interoperability has not been verified. Back up the workspace, including completed check history, before using an older Speclink version with new data.
 
 ## <a id="next"></a>What to do next
 

@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 170
 keywords: [封存, archive, 正式規格, 守門, Purpose, 證據, 手冊, 封存順序, 同名衝突]
 sources: [archive-skill, archive-merge, change-lifecycle, verify-evidence, spec-validation, "change-plan#archive 技能以 plan 建議封存順序"]
-generated: 2026-10-23T14:19:42+08:00
+generated: 2026-10-29T05:54:00+08:00
 ---
 
 # 封存
@@ -46,11 +46,11 @@ generated: 2026-10-23T14:19:42+08:00
 
 ### 1. metadata 完整
 
-變更的 .openspec.yaml 存在但解析不了時，封存拒絕並指出檔案位置與原因。
+變更的 .meta.yaml 存在但解析不了時，封存拒絕並指出檔案位置與原因。
 
 ### 2. 不在 linked worktree 內
 
-工作區的 .git 是檔案（linked worktree 的特徵），且目前分支以 `speclink/` 開頭時拒絕。stderr 說明封存不得在 linked worktree 內執行，並指路 worktree-merge。git 不可用、分支名取不到、或分支不以 `speclink/` 開頭時放行。
+工作區的 .git 是檔案（linked worktree 的特徵），且目前分支以 `speclink/` 開頭時拒絕。stderr 說明封存不得在 linked worktree 內執行，並指路 worktree-merge。git 不可用、分支名取不到、或分支不以 `openspec/` 開頭時放行。
 
 ### 3. 任務完成度
 
@@ -132,7 +132,8 @@ delta 新開一個正式規格還沒有的 capability 時，delta 檔頂部要�
 ## 封存後會留下什麼
 
 - **正式規格裡的 trace 區塊**：每條 ADDED 或 MODIFIED 的需求後面，引擎一律注入一個 trace 區塊，只有兩欄：來源變更名與封存時戳。時戳帶時區偏移量、精確到秒（例如 `2026-09-05T23:17:28+08:00`），它的日曆日與這次封存目錄名的日期前綴相同，因為兩者取自同一個當下。正式規格裡其他需求原本只有純日期的時戳，封存不會回改。不含檔案清單。
-- **變更的三站欄位**：封存目錄裡的 .openspec.yaml 同時保留建立、開工、封存三站的時間與人；開工欄位不會被剝掉。
+- **變更的三站欄位**：封存目錄裡的 .meta.yaml 同時保留建立、開工、封存三站的時間與人；開工欄位不會被剝掉。
+- **封存時間**：封存成功時，.meta.yaml 多一行封存時間，是帶時區偏移量的秒級時戳。它與封存目錄名的日期前綴、trace 區塊的時戳取自同一個當下。例如 2026-10-21 封存的變更，目錄名以 `2026-10-21-` 開頭，封存時間以 `2026-10-21T` 開頭。引擎在守門全數通過之後、搬目錄之前寫這一行；守門拒絕時不寫。搬目錄失敗時，變更留在進行中、帶著這一行，下次封存成功會換成新的時間，檔內只留一行。沒有 .meta.yaml 的舊式變更照常封存，不會為了這一行新建檔案。
 - **任務證據**：變更目錄的 .evidence.json 跟著搬進封存區。
 - **蓋章的變更不含工單檔**：蓋章時工單已刪除。只有帶 `--carry-*` 搬走的未結工單會出現在封存目錄裡。
 

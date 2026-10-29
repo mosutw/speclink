@@ -165,7 +165,7 @@ fn copilot_native_selections_match_across_worktree_and_language_policies() {
 #[test]
 fn claude_rendering_is_bit_identical_to_golden() {
     let root = TempRoot::new("claude");
-    init::init(&root.dir, &[Tool::Claude], true, "openspec").unwrap();
+    init::init(&root.dir, &[Tool::Claude], true, "speclink").unwrap();
     assert_matches_golden(
         "claude.snapshot.md",
         &snapshot(&root.dir, ".claude/skills"),
@@ -175,7 +175,7 @@ fn claude_rendering_is_bit_identical_to_golden() {
 #[test]
 fn codex_rendering_is_bit_identical_to_golden() {
     let root = TempRoot::new("codex");
-    init::init(&root.dir, &[Tool::Codex], true, "openspec").unwrap();
+    init::init(&root.dir, &[Tool::Codex], true, "speclink").unwrap();
     assert_matches_golden(
         "codex.snapshot.md",
         &snapshot(&root.dir, ".agents/skills"),
@@ -185,7 +185,7 @@ fn codex_rendering_is_bit_identical_to_golden() {
 #[test]
 fn copilot_rendering_is_bit_identical_to_golden() {
     let root = TempRoot::new("copilot");
-    init::init(&root.dir, &[Tool::Copilot], true, "openspec").unwrap();
+    init::init(&root.dir, &[Tool::Copilot], true, "speclink").unwrap();
     assert_matches_golden(
         "copilot.snapshot.md",
         &snapshot(&root.dir, ".github/skills"),
@@ -200,9 +200,9 @@ fn copilot_rendering_is_bit_identical_to_golden() {
 #[test]
 fn claude_rendering_with_the_worktree_policy_on_is_bit_identical_to_golden() {
     let root = TempRoot::new("claude-worktree");
-    init::init(&root.dir, &[Tool::Claude], true, "openspec").unwrap();
+    init::init(&root.dir, &[Tool::Claude], true, "speclink").unwrap();
     std::fs::write(
-        root.dir.join("openspec").join("config.yaml"),
+        root.dir.join("speclink").join("config.yaml"),
         "schema: spec-driven\nworktree: true\n",
     )
     .unwrap();
@@ -227,7 +227,7 @@ fn commit_skill_confirmation_gate_sees_plan_and_message() {
     ];
     for (tag, tool, skills_dir) in cases {
         let root = TempRoot::new(tag);
-        init::init(&root.dir, &[tool], true, "openspec").unwrap();
+        init::init(&root.dir, &[tool], true, "speclink").unwrap();
         let rel = format!("{skills_dir}/speclink-commit/SKILL.md");
         let content = std::fs::read_to_string(root.dir.join(rel.split('/').collect::<PathBuf>()))
             .expect(&rel);
@@ -357,7 +357,7 @@ fn trace_skill_keeps_degradations_invisible_and_archaeology_in_format() {
 fn commit_skill_attributes_files_from_the_change_directory_record() {
     for (rel, content) in skill_for_both_tools("commit-evidence", "commit") {
         for needle in [
-            "openspec/changes/<change-name>/.evidence.json",
+            "speclink/changes/<change-name>/.evidence.json",
             "the pre-move location `.speclink/touched/<change-name>.json`",
             "belongs to this change's commit",
         ] {
@@ -545,7 +545,7 @@ fn review_skill_binds_locale_across_output_chain() {
     ];
     for (tag, tool, skills_dir) in cases {
         let root = TempRoot::new(tag);
-        init::init(&root.dir, &[tool], true, "openspec").unwrap();
+        init::init(&root.dir, &[tool], true, "speclink").unwrap();
         let rel = format!("{skills_dir}/speclink-review/SKILL.md");
         let content = std::fs::read_to_string(root.dir.join(rel.split('/').collect::<PathBuf>()))
             .expect(&rel);
@@ -835,9 +835,9 @@ fn worktree_skill_for_both_tools(tag: &str, skill: &str) -> Vec<(String, String)
 /// written and the skills are regenerated from it.
 fn workspace_for(tag: &str, tool: Tool, config: Option<&str>) -> TempRoot {
     let root = TempRoot::new(tag);
-    init::init(&root.dir, &[tool], true, "openspec").unwrap();
+    init::init(&root.dir, &[tool], true, "speclink").unwrap();
     if let Some(config) = config {
-        std::fs::write(root.dir.join("openspec").join("config.yaml"), config).unwrap();
+        std::fs::write(root.dir.join("speclink").join("config.yaml"), config).unwrap();
         init::update(&root.dir, false).unwrap();
     }
     root
@@ -1144,6 +1144,129 @@ fn verify_skill_keeps_fixes_on_the_main_thread() {
     }
 }
 
+// --- schema choice: propose picks it, verify checks a no-spec-change change ---
+
+/// Byte offset of `needle` in a generated skill, or a panic naming the skill.
+fn position(rel: &str, content: &str, needle: &str) -> usize {
+    content
+        .find(needle)
+        .unwrap_or_else(|| panic!("{rel}: missing {needle:?}"))
+}
+
+/// Spec propose-skill「依是否改到正式規格選擇 schema」: the choice comes after the
+/// spec scan and before the change exists, its four rules run in order, an
+/// undecidable case asks with two options, and the chosen schema reaches
+/// `new change`, the proposal and the summary.
+#[test]
+fn propose_skill_chooses_schema() {
+    for (rel, content) in skill_for_both_tools("propose-schema", "propose") {
+        let scan = position(&rel, &content, "**Scan existing specs for relevance**");
+        let choose = position(&rel, &content, "**Choose the schema**");
+        let create = position(&rel, &content, "**Create the change directory**");
+        assert!(scan < choose && choose < create, "{rel}: choose the schema between the scan and the create step");
+
+        let rules = [
+            "**The user named a schema**",
+            "**The project default is a custom schema**",
+            "**The requirement comes from a discussion**",
+            "**Otherwise**",
+        ];
+        let at: Vec<usize> = rules.iter().map(|r| position(&rel, &content, r)).collect();
+        assert!(at.windows(2).all(|w| w[0] < w[1]), "{rel}: the four rules run in order");
+        for needle in [
+            "`speclink workflow-config show --json`",
+            "A bug fix defaults to `spec-driven`",
+            "with two options",
+            "the recommended one first",
+            "speclink new change \"<name>\" --schema <chosen>",
+            "no Capabilities section",
+            "list the canonical specs you checked",
+            "「不改規格（no-spec-change）」",
+        ] {
+            assert!(content.contains(needle), "{rel}: missing {needle:?}");
+        }
+    }
+}
+
+/// Spec verify-skill「不改規格變更的行為檢查」: a no-spec-change change gets the
+/// behavior check in place of the delta-spec checks, starting from the specs the
+/// proposal lists; a promised behavior that moved is a WARNING, and a clean
+/// check lists the compared specs.
+#[test]
+fn verify_skill_checks_behavior_for_no_spec_change() {
+    for (rel, content) in skill_for_both_tools("verify-no-spec-change", "verify") {
+        for needle in [
+            "`schemaName` is `no-spec-change`",
+            "the canonical specs the proposal's Why lists",
+            "Behavior change in a no-spec-change change: <capability> / <requirement>",
+            "list the canonical specs you compared",
+            // 檢查段由子代理執行：簡報要帶 schemaName，它才知道要不要做行為檢查。
+            "It also carries step 2's `schemaName`",
+            // spec-driven 變更維持現行流程。
+            "**Requirement Implementation Mapping**",
+            "**Scenario Coverage**",
+        ] {
+            assert!(content.contains(needle), "{rel}: missing {needle:?}");
+        }
+    }
+}
+
+/// Spec ingest-skill「新需求改到承諾行為時切回 spec-driven」: the schema check opens
+/// the Update artifacts step — a no-spec-change change switches back before any
+/// artifact is touched, a refused switch stops the run, and the skill never
+/// switches a spec-driven change to no-spec-change on its own.
+#[test]
+fn ingest_skill_switches_schema_on_behavior_change() {
+    for (rel, content) in skill_for_both_tools("ingest-schema-switch", "ingest") {
+        let update = position(&rel, &content, "**Update artifacts**");
+        let check = position(&rel, &content, "**Check the schema first.**");
+        let instructions = position(&rel, &content, "For each artifact, get instructions first");
+        assert!(update < check && check < instructions, "{rel}: the schema check opens the step");
+        let step = &content[check..instructions];
+        for needle in [
+            "`schemaName`",
+            "speclink change schema \"<name>\" spec-driven",
+            "add a Capabilities section to the proposal",
+            "speclink new artifact spec",
+            "report the stderr reason",
+            "Do not write a delta around the refusal",
+            "keeps the schema as it is",
+            "Never switch a `spec-driven` change to `no-spec-change` on your own",
+        ] {
+            assert!(step.contains(needle), "{rel}: missing {needle:?}");
+        }
+    }
+}
+
+/// Spec verify-skill「不改規格變更改到行為時的修正步驟」: the behavior-change
+/// WARNING's recommendation lists discard → switch → ingest → verify again, warns
+/// off `--accept`, and the Next steps point at the same steps; a clean behavior
+/// check suggests no switch.
+#[test]
+fn verify_skill_lists_schema_fix_steps() {
+    for (rel, content) in skill_for_both_tools("verify-schema-fix", "verify") {
+        let changed = position(&rel, &content, "- A promised behavior changed:");
+        let clean = position(&rel, &content, "- No behavior change found");
+        let fix = &content[changed..clean];
+        let steps = [
+            "speclink verify discard <name>",
+            "speclink change schema <name> spec-driven",
+            "speclink-ingest <name>",
+            "run verify again",
+        ];
+        let at: Vec<usize> = steps.iter().map(|s| position(&rel, fix, s)).collect();
+        assert!(at.windows(2).all(|w| w[0] < w[1]), "{rel}: the four repair steps run in order");
+        assert!(fix.contains("Do not suggest `--accept`"), "{rel}: warns off --accept");
+        let clean_line = content[clean..].lines().next().unwrap_or_default();
+        assert!(!clean_line.contains("change schema"), "{rel}: a clean check suggests no switch");
+        let next_steps = &content[position(&rel, &content, "## Next steps")..];
+        assert!(
+            next_steps.contains("speclink change schema <change-name> spec-driven"),
+            "{rel}: the Next steps point at the repair steps"
+        );
+    }
+}
+
 // --- remote init: no instruction file is generated at all ---
 
 /// Spec Scenario「指令檔零受管區塊」in remote mode: the managed set is skills only,
@@ -1179,7 +1302,7 @@ fn remote_init_writes_no_instruction_file() {
 
 fn neutral_project(tag: &str, invocation: &str) -> TempRoot {
     let root = TempRoot::new(tag);
-    std::fs::create_dir_all(root.dir.join("openspec").join("changes")).unwrap();
+    std::fs::create_dir_all(root.dir.join("speclink").join("changes")).unwrap();
     std::fs::write(
         root.dir.join(".speclink.yaml"),
         format!(
@@ -1380,7 +1503,7 @@ records the old fingerprint.\n{}",
 /// The apply asset as the tool of the generated file `rel` renders it.
 fn rendered_apply_body(rel: &str) -> String {
     let tool = if rel.starts_with(".claude") { Tool::Claude } else { Tool::Codex };
-    skills::substitute(skills::skill_body("apply").expect("apply body"), tool, "openspec")
+    skills::substitute(skills::skill_body("apply").expect("apply body"), tool, "speclink")
 }
 
 /// Spec「apply-with-worktree 技能的生成與組合」: both tool targets generate the
@@ -2396,6 +2519,80 @@ fn quality_skill_pauses_after_every_round_for_the_user() {
     }
 }
 
+/// Spec quality-skill「蓋章前的預防提醒」: before the first round freezes a scope, a
+/// branch other than the main branch is compared with it, and files both sides
+/// changed pause the run with a rebase recommendation; the closing-stamps option
+/// carries a CI note when the repository has CI configuration. The skill itself
+/// never rebases, merges, pushes or checks CI.
+#[test]
+fn quality_skill_warns_before_stale_stamps() {
+    for (rel, content) in skill_for_both_tools("quality-stale-stamps", "quality") {
+        // The comparison opens step 1, ahead of the stations' own preparation —
+        // which is where the first round's scopes freeze.
+        let prepare = position(&rel, &content, "**Prepare both stations**");
+        let compare = position(&rel, &content, "**Compare with the main branch first — first round only.**");
+        let walk = position(&rel, &content, "steps 1–4 (choose the change");
+        assert!(prepare < compare && compare < walk, "{rel}: the comparison runs before the scopes freeze");
+        let check = &content[compare..walk];
+        for needle in [
+            // where the comparison is skipped: a ticket on either station binds the
+            // starting point, and later rounds already froze theirs
+            "either station already has a ticket",
+            "The current branch (`git branch --show-current`) is the main branch, or no main branch can be found → continue without a pause.",
+            // a worktree lands on the branch the main checkout is on
+            "`git -C <main-checkout> branch --show-current`",
+            // the two file lists and their intersection
+            "`git merge-base HEAD <main>`",
+            "`git diff --name-only --no-renames -z <fork-point> <main>`",
+            "`git diff --name-only --no-renames -z <fork-point>`",
+            "`git ls-files --others --exclude-standard -z`",
+            "The two lists share no file → continue without a pause.",
+            // shared files: list them, say why, recommend, wait
+            "list the shared files",
+            "say that a rebase after the stamps would turn them stale",
+            "a new stamp re-runs both stations from a first round",
+            "recommend rebasing onto the main branch (or merging it in) first",
+            "Wait for the user's answer",
+            // after the user's rebase: the change's files are committed before the
+            // starting point moves, by the user or on the user's say-so
+            "with the change's files committed beforehand (new files included)",
+            "before you run `speclink review prepare`, make sure the change's files, new files included, are committed",
+            "ask the user to commit them, or commit them on the user's say-so",
+            "`speclink review prepare \"<change-name>\" --base \"<new-fork-point>\"`",
+            "If it fails, report its error",
+            // the skill reminds; the user acts
+            "it never rebases, merges or pushes on its own",
+        ] {
+            assert!(check.contains(needle), "{rel}: missing {needle:?}");
+        }
+
+        // The skill's own description of what it owns and of its pauses names the
+        // step-1 pause as the exception, so the rules do not contradict each other.
+        for needle in [
+            "and the main-branch comparison before the first round (step 1) — nothing else",
+            "apart from step 1's main-branch comparison, which runs before any station starts, this skill's only pause is step 4",
+        ] {
+            assert!(content.contains(needle), "{rel}: missing {needle:?}");
+        }
+
+        // The CI note rides the closing-stamps option of the round's pause.
+        let closing = position(&rel, &content, "- **Go to the closing stamps**");
+        let rest = position(&rel, &content, "Options with nothing to act on");
+        assert!(closing < rest, "{rel}: the closing-stamps option comes before the menu's closing line");
+        let option = &content[closing..rest];
+        for needle in [
+            "When the repository has CI configuration",
+            "`.github/workflows/`",
+            "commit and push first, then confirm that CI passed on every platform for that commit",
+            "a fix for CI after the stamps turns them stale",
+            "This adds no question and no option",
+            "the skill neither pushes nor checks CI status itself",
+        ] {
+            assert!(option.contains(needle), "{rel}: missing {needle:?}");
+        }
+    }
+}
+
 /// Spec「worktree-merge 技能的生成」＋「收尾流程指示」: a standalone template whose
 /// preflight, conflict and cleanup stop points are all stated.
 #[test]
@@ -2650,7 +2847,7 @@ fn skill_references_render_per_tool() {
         ),
     ] {
         let root = TempRoot::new(tag);
-        init::init(&root.dir, &[tool], true, "openspec").unwrap();
+        init::init(&root.dir, &[tool], true, "speclink").unwrap();
         let files = generated_files(&root.dir, skills_dir);
         let (rel, drift) = files
             .iter()
@@ -2810,4 +3007,65 @@ fn security_verify_skill_preserves_five_states_and_advisory_boundary() {
     assert!(body.contains("does not create a verify/review ticket item"));
     assert!(body.contains("security report <ID>"));
     assert!(body.contains("If disabled with no report, add no section"));
+}
+
+// --- spec-dir-migration「技能檔依實際規格資料夾渲染」 ---
+
+/// A project with `.speclink.yaml` (claude, plus `extra` lines) and a legacy
+/// `openspec/` holding one change, synced by `update`.
+fn layout_project(tag: &str, extra: &str, git_init: bool) -> TempRoot {
+    let root = TempRoot::new(tag);
+    std::fs::write(root.dir.join(".speclink.yaml"), format!("tools: [claude]\n{extra}")).unwrap();
+    let change = root.dir.join("openspec").join("changes").join("demo");
+    std::fs::create_dir_all(&change).unwrap();
+    std::fs::write(change.join(".openspec.yaml"), "schema: spec-driven\n").unwrap();
+    if git_init {
+        // An untracked openspec/ counts as uncommitted: the migration waits.
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root.dir)
+            .args(["init", "-q"])
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(ok, "git init");
+    }
+    init::update(&root.dir, false).unwrap();
+    root
+}
+
+fn commit_skill(root: &TempRoot) -> String {
+    std::fs::read_to_string(root.dir.join(".claude/skills/speclink-commit/SKILL.md")).unwrap()
+}
+
+#[test]
+fn skills_render_effective_spec_dir() {
+    // 遷移後：規格資料夾為 speclink/。
+    let migrated = layout_project("effective-migrated", "", false);
+    assert!(migrated.dir.join("openspec").is_dir(), "the legacy layout migrated");
+    let commit = commit_skill(&migrated);
+    assert!(commit.contains("M  openspec/changes/<name>/proposal.md"), "{commit}");
+    assert!(!commit.contains("speclink/changes"), "no openspec/ left in speclink-commit");
+    let manual =
+        std::fs::read_to_string(migrated.dir.join(".claude/skills/speclink-manual/SKILL.md")).unwrap();
+    let description = manual.lines().find(|l| l.starts_with("description:")).unwrap();
+    assert!(description.contains("openspec/manual/"), "{description}");
+
+    // 暫緩中：仍是 openspec/。
+    let deferred = layout_project("effective-deferred", "", true);
+    assert!(deferred.dir.join("openspec").is_dir() && !deferred.dir.join("speclink").exists());
+    assert!(commit_skill(&deferred).contains("M  openspec/changes/<name>/proposal.md"));
+
+    // 自訂 spec_dir：docs/specs/。
+    let custom = layout_project("effective-custom", "spec_dir: docs/specs\n", false);
+    assert!(commit_skill(&custom).contains("M  docs/specs/changes/<name>/proposal.md"));
+
+    // 原稿不寫死舊資料夾或舊資料檔名。
+    let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets").join("skills");
+    for entry in std::fs::read_dir(&assets).unwrap() {
+        let path = entry.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        for needle in ["openspec/", ".openspec.yaml"] {
+            assert!(!text.contains(needle), "{} still names {needle}", path.display());
+        }
+    }
 }
