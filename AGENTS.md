@@ -3,6 +3,7 @@
 ## 專案慣例
 
 - **Commit 用 `conventional-commit` 技能**：description 與 body 寫繁體中文。例：`feat(auth): 新增 GitHub OAuth 登入`、`fix(collab): 修正 Y.js 同步衝突`。
+- **PR 預設目標（Base Repository）**：建立 Pull Request 時，**base repository 必須固定為 `mosutw/speclink` 的 `main` 分支**，嚴禁合向上游原作者（`MomoChenisMe/speclink`）。
 - **查資料順序**：專案內既有規格與程式碼（搭配對應 Skills）→ `context7` 等已接的 MCP → 最後才網路搜尋。不要憑印象猜 API 簽名。
 
 ## 程式碼取捨
