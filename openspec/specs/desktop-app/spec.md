@@ -1282,7 +1282,7 @@ updated: 2026-10-13T15:43:46+08:00
 各欄位的畫法 SHALL 為：
 
 - 決定：第一段散文為定論句，SHALL 以大於內文的字級呈現；其後的頂層列點為定案細節，SHALL 以細線列呈現且預設只展開前 4 條，其餘以「展開其餘 N 項定案細節」鈕一次展開；區段標題右端 SHALL 顯示細節總數。
-- 分刀：決定的列點中，首行以粗體開頭、粗體內（去掉反引號片段後）以 `cut <編號>`、「刀」或「第 N 刀」起頭的列 SHALL 自細節列抽出，成為「分刀」區段（有任一刀時才出現、位於決定之後）；每刀一張卡，卡頭為刀的識別籤（粗體內去掉反引號片段後開頭的 `cut <編號>`、「刀…」或「第 N 刀」）、範圍句與該刀的變更數。範圍句：粗體內在識別籤之後還有文字時為該文字，否則為粗體之後（去掉開頭冒號）、第一個「——」之前的文字；首行其餘的文字（範圍句取自粗體時為粗體之後的全部文字、外圍整組括號拿掉，否則為「——」之後的文字）SHALL 為卡內第一條細線列，不丟內容。粗體內的反引號片段為該刀的變更名籤，粗體內沒有反引號片段時取同一行粗體之後的反引號片段（含空白的片段不算）——名稱在 `promoted_to` 中時籤 SHALL 附階段籤（階段派生與配色同「討論於看板第 0 欄兩級呈現」）且點擊 SHALL 開啟該變更的詳情頁（已封存者開啟已封存詳情頁），不在 `promoted_to` 中時為不可點籤；列的巢狀子項 SHALL 接在其後為卡內的細線列。刀是否轉出 SHALL 只依該刀粗體內的變更名籤是否在 `promoted_to` 判定（變更名只寫在粗體之後的刀列，反引號片段可能是識別字或檔名，視同沒有變更名籤）：刀至少有一個變更名籤且全部不在 `promoted_to` 時為「整刀未轉出」，卡 SHALL 以橄欖色（手動任務語意色）虛線外框與淡橄欖底呈現，卡頭的識別籤之後 SHALL 有橄欖色「尚未轉出」籤；變更名籤部分在、部分不在 `promoted_to` 時，每個不在其中的變更名籤之後 SHALL 有同款「尚未轉出」籤，卡的外框照舊；刀沒有任何變更名籤時 SHALL NOT 有任何轉出標示。
+- 分刀：決定的頂層 `- ` 列點中，首行以粗體開頭、粗體內（去掉反引號片段後）以 `cut <編號>`、「刀」或「第 N 刀」起頭的列 SHALL 自細節列抽出，成為「分刀」區段（有任一刀時才出現、位於決定之後）；每刀一張卡，卡頭為刀的識別籤（粗體內去掉反引號片段後開頭的 `cut <編號>`、「刀…」或「第 N 刀」）、範圍句與該刀的變更數。範圍句：粗體內在識別籤之後還有文字時為該文字，否則為粗體之後（去掉開頭冒號）、第一個「——」之前的文字；首行其餘的文字（範圍句取自粗體時為粗體之後的全部文字、外圍整組括號拿掉，否則為「——」之後的文字）SHALL 為卡內第一條細線列，不丟內容。粗體內的反引號片段為該刀的變更名籤，粗體內沒有反引號片段時取同一行粗體之後的反引號片段（含空白的片段不算）——名稱在 `promoted_to` 中時籤 SHALL 附階段籤（階段派生與配色同「討論於看板第 0 欄兩級呈現」）且點擊 SHALL 開啟該變更的詳情頁（已封存者開啟已封存詳情頁），不在 `promoted_to` 中時為不可點籤；列的巢狀子項 SHALL 接在其後為卡內的細線列。刀是否轉出 SHALL 只依該刀粗體內的變更名籤是否在 `promoted_to` 判定（變更名只寫在粗體之後的刀列，反引號片段可能是識別字或檔名，視同沒有變更名籤）：刀至少有一個變更名籤且全部不在 `promoted_to` 時為「整刀未轉出」，卡 SHALL 以橄欖色（手動任務語意色）虛線外框與淡橄欖底呈現，卡頭的識別籤之後 SHALL 有橄欖色「尚未轉出」籤；變更名籤部分在、部分不在 `promoted_to` 時，每個不在其中的變更名籤之後 SHALL 有同款「尚未轉出」籤，卡的外框照舊；刀沒有任何變更名籤時 SHALL NOT 有任何轉出標示。上述判定（哪些列是刀、識別籤、範圍句、首行其餘的文字、變更名籤與尚未轉出的變更名）SHALL 取自引擎對該記錄的分刀解析（與 change-plan「plan 列出討論結論中尚未轉出的刀」同一套規則；local 經桌面的討論記錄查詢，remote 與已封存記錄經 client-protocol「討論詳情回應的分刀 payload」的 `cuts`），桌面 SHALL NOT 自行解析分刀；以 `*`、`+`、編號起頭的列點與列點之外的粗體段落 SHALL 留在定案細節。討論記錄的回應沒有分刀資料（缺 `cuts` 的舊 server）時 SHALL NOT 呈現「分刀」區段、「分刀」數字磚與「N 刀尚未轉出」提示框，刀列 SHALL 留在定案細節。
 - 理由：照 markdown 呈現。
 - 否決替代案與擱置：內文有列點時每條列點一列、否則以「；」切列；每列以第一個分隔號（「——」或前後帶空白的「 — 」，取先出現者；discuss 技能檔的寫法為「方案 — 理由」）拆成「方案」與「落敗理由」兩行，切不到時整條為方案；擱置的每列 SHALL 帶時鐘圖示；兩個區段標題右端 SHALL 顯示列數。
 - 記錄去向：內文以「、」或逗號切成籤；籤文字為正式規格名時 SHALL 為可點籤，點擊開啟該規格的規格詳情頁；其餘為不可點籤；切不出籤時照 markdown 呈現。
@@ -1324,6 +1324,12 @@ updated: 2026-10-13T15:43:46+08:00
 | `**刀三**：系統匣面板` | 刀三 | （無） | 系統匣面板 |
 | `**cut 2 外殼**（propose 期拆兩個 change：\`desktop-shell-redesign\` 外殼結構、\`desktop-native-menu\` 原生選單）` | cut 2 | desktop-shell-redesign、desktop-native-menu | 外殼（卡內第一條細線列為括號內的說明） |
 | `**範圍與驗收**：只改 UI 渲染` | （不是分刀，留在定案細節） | — | — |
+| `* **cut 3 \`add-x\`**: 範圍`（以 `*` 起頭的列點） | （不是分刀，留在定案細節） | — | — |
+
+#### Scenario: 舊 server 沒有分刀資料時刀列留在定案細節
+
+- **WHEN** remote 專案的 server 對 GET /discussions/{slug} 的回應沒有 `cuts` 鍵，使用者開啟一份 Decision 有 3 條分刀列與 5 條其他細節的討論結論文件
+- **THEN** 結論文件沒有「分刀」區段、「分刀」數字磚與「N 刀尚未轉出」提示框；「決定」區段計數為 8，3 條分刀列以一般細線列呈現
 
 #### Scenario: 否決與擱置拆方案與理由
 
@@ -1367,8 +1373,8 @@ updated: 2026-10-13T15:43:46+08:00
 
 
 <!-- @trace
-source: discussion-stage-and-unpromoted-cuts
-updated: 2026-10-13T22:22:52+08:00
+source: merge-upstream-0-12-0
+updated: 2026-11-05T23:11:44+08:00
 -->
 
 ---
@@ -4611,4 +4617,116 @@ updated: 2026-10-29T05:48:54+08:00
 <!-- @trace
 source: merge-upstream-0-11-0
 updated: 2026-10-29T05:48:54+08:00
+-->
+
+---
+### Requirement: 以 speclink 網址開啟詳情頁
+
+桌面 app SHALL 註冊 `speclink` 網址格式，接受四種網址：`speclink://change/<變更名稱>?project=<專案資料夾絕對路徑>` 開啟變更詳情頁，`speclink://discussion/<討論 slug>?project=<專案資料夾絕對路徑>` 開啟討論詳情頁，`speclink://roadmap?project=<專案資料夾絕對路徑>` 開啟該專案的路線圖（依 desktop-roadmap「看板頁的路線圖檢視」），`speclink://project?project=<專案資料夾絕對路徑>` 切到該專案並顯示看板；名稱與路徑 SHALL 以百分比編碼傳遞並在處理前解碼。網址的 host SHALL 只接受 `change`、`discussion`、`roadmap` 與 `project`；`change` 與 `discussion` 的 path SHALL 恰為一段非空名稱，`roadmap` 與 `project` 的 path SHALL 為空（可帶單一 `/`），`project` SHALL 為絕對路徑（POSIX 以 `/` 開頭，Windows 以磁碟代號加 `:\` 或 `:/` 開頭）；不符者 SHALL 視為格式錯誤。
+
+處理一個網址時，桌面 app SHALL 依序：顯示主視窗並取得焦點（自最小化亦還原）；以與「開啟專案」相同的探測流程開啟 `project`——已是分頁的專案成為活躍分頁，未開過的加成分頁；探測結果進入專案且該專案的資料載入完成後，`change` 與 `discussion` 開啟目標的詳情頁，詳情頁的互斥與宿主規則與系統匣的「開啟此變更」「開啟此討論」相同（依「詳情頁互斥」「變更與討論詳情頁的宿主為看板」）；`roadmap` SHALL 關閉開著的詳情頁並把主區切到該專案看板頁的路線圖檢視，沒有找不到目標的情形；`project` SHALL 關閉開著的詳情頁與可取消的浮層，並把主區切到該專案看板頁的卡片檢視（上次選的是路線圖時也一樣），SHALL NOT 開啟詳情頁或路線圖，沒有找不到目標的情形。探測結果為未初始化、未啟用或帶 remote 標記的資料夾時，SHALL 沿用「開啟專案」的既有對話框或選擇器，SHALL NOT 開啟詳情頁，`roadmap` 與 `project` SHALL NOT 切換主區，確認前 SHALL NOT 寫入任何檔案。
+
+網址 SHALL 只能開啟與檢視：處理流程 SHALL NOT 觸發任何寫入動詞（勾任務、封存、轉出、刪除等）。格式錯誤時 SHALL 顯示主視窗並以 toast 說明網址無法開啟，SHALL NOT 切換專案；目標不在該專案已載入的清單內時 SHALL 停在已切換的專案並以 toast 說明找不到該變更或討論。
+
+app 未執行時，網址 SHALL 啟動 app，並在分頁列還原完成後才處理；還原前收到的網址 SHALL 依到達順序排隊，逐一處理。app 已執行時，網址 SHALL 由執行中的 app 處理，SHALL NOT 出現第二個 app。於 Windows 與 Linux，不帶網址再次啟動 app 時 SHALL 把既有主視窗帶到前景並取得焦點，SHALL NOT 開啟第二個 app。
+
+#### Scenario: 以網址開啟已開專案的變更詳情
+
+- **WHEN** app 執行中且專案 /Users/dev/speclink 已是分頁，外部程式送出 `speclink://change/desktop-deep-link?project=%2FUsers%2Fdev%2Fspeclink`
+- **THEN** 主視窗顯示於前景並取得焦點，活躍分頁為 speclink，主區為看板且開著變更 desktop-deep-link 的詳情頁
+
+#### Scenario: 以網址開啟討論詳情
+
+- **WHEN** app 執行中，外部程式送出 `speclink://discussion/herdr-speclink-panel?project=%2FUsers%2Fdev%2Fspeclink`
+- **THEN** 主視窗顯示於前景並取得焦點，主區為看板且開著討論 herdr-speclink-panel 的詳情頁
+
+#### Scenario: 專案尚未開啟時加成分頁再開詳情
+
+- **WHEN** 分頁列沒有 /Users/dev/other，外部程式送出 `speclink://change/add-search?project=%2FUsers%2Fdev%2Fother`，該資料夾是已啟用的專案且含變更 add-search
+- **THEN** 分頁列多出 other 並成為活躍分頁，資料載入完成後開著變更 add-search 的詳情頁
+
+#### Scenario: app 未執行時由網址啟動
+
+- **WHEN** app 未執行，外部程式送出 `speclink://change/desktop-deep-link?project=%2FUsers%2Fdev%2Fspeclink`
+- **THEN** app 啟動並還原上次的分頁列，之後切到 speclink 並開著變更 desktop-deep-link 的詳情頁
+
+#### Scenario: 執行中再收到網址不另開 app
+
+- **WHEN** app 執行中，外部程式先後送出兩個合法網址
+- **THEN** 兩個網址都由同一個 app 依序處理，最後開著第二個網址的詳情頁，畫面上沒有第二個 app 視窗、Dock 或工作列沒有第二個圖示
+
+#### Scenario: 格式錯誤的網址
+
+- **WHEN** 外部程式送出 `speclink://spec/desktop-app?project=%2FUsers%2Fdev%2Fspeclink`
+- **THEN** 主視窗顯示並取得焦點，toast 說明網址無法開啟，活躍分頁維持原本的專案
+
+##### Example: 網址解析
+
+| 網址 | 結果 |
+| ---- | ---- |
+| `speclink://change/add-search?project=%2FUsers%2Fdev%2Fspeclink` | 變更 add-search，專案 /Users/dev/speclink |
+| `speclink://discussion/board-search-bar?project=C%3A%5Cwork%5Capp` | 討論 board-search-bar，專案 C:\work\app |
+| `speclink://change/add-search?project=C%3A%2Fwork%2Fapp` | 變更 add-search，專案 C:/work/app |
+| `speclink://roadmap?project=%2FUsers%2Fdev%2Fspeclink` | 路線圖，專案 /Users/dev/speclink |
+| `speclink://roadmap/?project=%2Fa` | 路線圖，專案 /a |
+| `speclink://project?project=%2FUsers%2Fdev%2Fspeclink` | 切到專案 /Users/dev/speclink |
+| `speclink://project/?project=%2Fa` | 切到專案 /a |
+| `speclink://roadmap/waves?project=%2Fa` | 格式錯誤（路線圖不帶名稱） |
+| `speclink://project/board?project=%2Fa` | 格式錯誤（專案網址不帶名稱） |
+| `speclink://project` | 格式錯誤（缺 project） |
+| `speclink://spec/desktop-app?project=%2Fa` | 格式錯誤（未知種類） |
+| `speclink://change/a/b?project=%2Fa` | 格式錯誤（名稱多於一段） |
+| `speclink://change/?project=%2Fa` | 格式錯誤（名稱為空） |
+| `speclink://change/add-search` | 格式錯誤（缺 project） |
+| `speclink://change/add-search?project=work%2Fapp` | 格式錯誤（project 不是絕對路徑） |
+| `https://change/add-search?project=%2Fa` | 格式錯誤（不是 speclink 網址） |
+
+#### Scenario: 以網址開啟路線圖
+
+- **WHEN** app 執行中、主區開著某變更的詳情頁，外部程式送出 `speclink://roadmap?project=%2FUsers%2Fdev%2Fspeclink`
+- **THEN** 主視窗顯示於前景並取得焦點，活躍分頁為 speclink，詳情頁已關閉，主區為看板頁的路線圖檢視，沒有出現 toast
+
+#### Scenario: 以網址切到專案並顯示看板
+
+- **WHEN** app 執行中、活躍分頁為 other、主區開著某變更的詳情頁、看板頁上次選的是路線圖，外部程式送出 `speclink://project?project=%2FUsers%2Fdev%2Fspeclink`
+- **THEN** 主視窗顯示於前景並取得焦點，活躍分頁為 speclink，詳情頁已關閉，主區為看板頁的卡片檢視，沒有開啟詳情頁或路線圖，沒有出現 toast
+
+#### Scenario: 以網址切到尚未開啟的專案
+
+- **WHEN** 分頁列沒有 /Users/dev/other，外部程式送出 `speclink://project?project=%2FUsers%2Fdev%2Fother`，該資料夾是已啟用的專案
+- **THEN** 分頁列多出 other 並成為活躍分頁，資料載入完成後主區為看板頁的卡片檢視
+
+#### Scenario: 找不到目標變更
+
+- **WHEN** 外部程式送出 `speclink://change/no-such-change?project=%2FUsers%2Fdev%2Fspeclink`，speclink 專案沒有這個進行中的變更
+- **THEN** 活躍分頁切到 speclink、主區為看板且未開任何詳情頁，toast 說明在 speclink 找不到變更 no-such-change
+
+#### Scenario: 未初始化的資料夾沿用既有確認流程
+
+- **WHEN** 外部程式送出 `speclink://change/x?project=%2FUsers%2Fdev%2Fplain`，該資料夾尚未初始化 speclink
+- **THEN** 主視窗出現「開啟專案」流程的既有初始化確認框，未開任何詳情頁，使用者確認前該資料夾沒有新增或修改任何檔案
+
+#### Scenario: 專案網址指向未初始化的資料夾
+
+- **WHEN** 活躍分頁為 speclink、主區為規格頁，外部程式送出 `speclink://project?project=%2FUsers%2Fdev%2Fplain`，該資料夾尚未初始化 speclink
+- **THEN** 主視窗出現「開啟專案」流程的既有初始化確認框，主區維持規格頁，使用者確認前該資料夾沒有新增或修改任何檔案
+
+#### Scenario: 不可取消的浮層開著時不開詳情
+
+- **WHEN** 主視窗開著不可取消的浮層，外部程式送出指向已開專案某變更的合法網址
+- **THEN** 主視窗顯示於前景，浮層與目前畫面維持不變，未開啟該變更的詳情頁
+
+#### Scenario: 不可取消的浮層開著時不切專案
+
+- **WHEN** 主視窗開著不可取消的浮層，外部程式送出 `speclink://project?project=%2FUsers%2Fdev%2Fother`
+- **THEN** 主視窗顯示於前景，浮層、活躍分頁與目前畫面維持不變，沒有出現 toast
+
+#### Scenario: Windows 與 Linux 再次啟動時帶到前景
+
+- **WHEN** 於 Windows 或 Linux，app 執行中且主視窗已最小化，使用者再次從開始選單或啟動器啟動 Speclink
+- **THEN** 既有主視窗還原、顯示於前景並取得焦點，沒有出現第二個 app
+
+<!-- @trace
+source: merge-upstream-0-12-0
+updated: 2026-11-05T23:11:44+08:00
 -->
