@@ -1,6 +1,16 @@
 # Changelog
 **English** · [繁體中文](CHANGELOG.zh-TW.md)
 
+## 0.12.1 (2026-11-06)
+
+### New features
+
+- The upstream 0.12.0 update adds roadmap views, speclink:// project links, unpromoted discussion work in plan, and Herdr integration, while Antigravity now shares .agents/skills with Codex and keeps the other tool's skills when either tool is removed.
+
+### Fixes
+
+- Node SDK type checks no longer time out too early on slower CI machines and still report compilation errors.
+
 ## 0.11.2 (2026-10-29)
 
 ### New features

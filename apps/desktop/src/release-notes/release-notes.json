@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.12.1",
+    "date": "2026-11-06",
+    "sections": [
+      {
+        "kind": "features",
+        "items": [
+          {
+            "en": "The upstream 0.12.0 update adds roadmap views, speclink:// project links, unpromoted discussion work in plan, and Herdr integration, while Antigravity now shares .agents/skills with Codex and keeps the other tool's skills when either tool is removed.",
+            "zh-TW": "整合上游 0.12.0，新增路線圖、speclink:// 專案連結、plan 未轉出工作與 Herdr 整合，並將 Antigravity 技能改為與 Codex 共用 .agents/skills，取消任一工具時仍保留另一工具的技能。"
+          }
+        ]
+      },
+      {
+        "kind": "fixes",
+        "items": [
+          {
+            "en": "Node SDK type checks no longer time out too early on slower CI machines and still report compilation errors.",
+            "zh-TW": "修正 Node SDK 型別檢查在較慢 CI 環境過早逾時的問題，並保留編譯錯誤檢查。"
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.11.2",
     "date": "2026-10-29",
     "sections": [
