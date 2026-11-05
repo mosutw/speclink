@@ -5,15 +5,21 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
 
-Run both quality stations over one change as a single pass that pauses after every round: `$speclink-review` and `$speclink-verify` each do their checking WITHOUT stamping, then this skill reports both stations' findings together and STOPS for the user's call on what to fix, when to stamp, and whether to archive. Nothing is fixed, stamped or archived without their answer. Use this when both stations are known up front to be in play. Running only one station does not go through this skill — call that station directly and let it keep its own stamp-when-clean default and its own way of sending sub-agents.
+Run both quality stations over one change as a single pass that pauses after every round: `speclink-review` and `speclink-verify` each do their checking WITHOUT stamping, then this skill reports both stations' findings together and STOPS for the user's call on what to fix, when to stamp, and whether to archive. Nothing is fixed, stamped or archived without their answer. Use this when both stations are known up front to be in play. Running only one station does not go through this skill — call that station directly and let it keep its own stamp-when-clean default and its own way of sending sub-agents.
 
-**Input**: Optionally specify a change name after `$speclink-quality` (e.g., `$speclink-quality add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous, resolve it BEFORE step 1: run `speclink list --json` and prompt with the available changes, then pass the same name to every station call.
+**Input**: Optionally specify a change name after `speclink-quality` (e.g., `speclink-quality add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous, resolve it BEFORE step 1: run `speclink list --json` and prompt with the available changes, then pass the same name to every station call.
 
 **Prerequisites**: This skill requires the `speclink` CLI. If any `speclink` command fails with "command not found" or similar, report the error and STOP.
 
@@ -21,7 +27,7 @@ Run both quality stations over one change as a single pass that pauses after eve
 
 **What this skill owns**
 
-The ORDER of the two stations, the moment their sub-agents go out, the pause that ends every round, and the main-branch comparison before the first round (step 1) — nothing else. What each station checks, how it freezes its scope, what its briefs say, how it records its ticket, how it triages findings and what its stamp means all belong to `$speclink-review` and `$speclink-verify` — this document never restates them, and when it appears to disagree with a station's own instructions, the station wins. Follow each station's skill as written; this skill only decides when each step of a station runs, when the sub-agents are sent, which exit a station takes, and when to hand the decision back to the user.
+The ORDER of the two stations, the moment their sub-agents go out, the pause that ends every round, and the main-branch comparison before the first round (step 1) — nothing else. What each station checks, how it freezes its scope, what its briefs say, how it records its ticket, how it triages findings and what its stamp means all belong to `speclink-review` and `speclink-verify` — this document never restates them, and when it appears to disagree with a station's own instructions, the station wins. Follow each station's skill as written; this skill only decides when each step of a station runs, when the sub-agents are sent, which exit a station takes, and when to hand the decision back to the user.
 
 **Why the order matters**
 
@@ -49,7 +55,7 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
 
    This skill compares and recommends: it never rebases, merges or pushes on its own. After the user rebases or merges, its only follow-ups are the commit check and the starting-point reset above.
 
-   Then, for the same change, walk `$speclink-review` steps 1–4 (choose the change, the code-task gate and the project review rules, the ticket check and the frozen scope, the artifacts), then `$speclink-verify` steps 1–5 (choose the change, the status, the artifacts and task progress, the branch on the call, the frozen scope), each exactly as its skill writes them. When a station stops during its preparation — a refusal, a mid-flight check-in, `needsInput`, a scope failure — relay its outcome verbatim and follow what that station says; send no sub-agent for either station — a round checks both stations or neither, and the resume rule for an empty validation patch is the one exception.
+   Then, for the same change, walk `speclink-review` steps 1–4 (choose the change, the code-task gate and the project review rules, the ticket check and the frozen scope, the artifacts), then `speclink-verify` steps 1–5 (choose the change, the status, the artifacts and task progress, the branch on the call, the frozen scope), each exactly as its skill writes them. When a station stops during its preparation — a refusal, a mid-flight check-in, `needsInput`, a scope failure — relay its outcome verbatim and follow what that station says; send no sub-agent for either station — a round checks both stations or neither, and the resume rule for an empty validation patch is the one exception.
 
 2. **Send the three checks in one message**
 
@@ -57,7 +63,7 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
 
 3. **Close both stations, review first, no stamp**
 
-   Once all three have reported, finish `$speclink-review` steps 6–9 (present, triage, record the round), then `$speclink-verify` steps 10–13 (report, triage, record the round): the review ticket is written first, the verify ticket second. At each station's closing question, take the **stop without stamping** exit — the tickets and their frozen snapshots stay for the rounds that follow. A clean pass takes the same exit; each station's own quality-timeline exception covers it.
+   Once all three have reported, finish `speclink-review` steps 6–9 (present, triage, record the round), then `speclink-verify` steps 10–13 (report, triage, record the round): the review ticket is written first, the verify ticket second. At each station's closing question, take the **stop without stamping** exit — the tickets and their frozen snapshots stay for the rounds that follow. A clean pass takes the same exit; each station's own quality-timeline exception covers it.
 
    Do not ask the user anything between the two stations: apart from step 1's main-branch comparison, which runs before any station starts, this skill's only pause is step 4, and it takes priority over the stations' own closing questions.
 
@@ -74,7 +80,7 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
 
    Options with nothing to act on simply do not appear — a round where both stations found nothing offers the last two.
 
-   **Top-severity findings left unfixed are confirmed here, once.** When the answer — **go to the closing stamps**, or **fix a selection** — leaves must-fix findings of the top severity unfixed, list each one verbatim and ask once whether to accept them (see **Asking the user**). Only a yes goes on; a no returns to the options above. Every later `$speclink-review` call in this run then states that the top-severity findings were listed verbatim and confirmed one by one, and names them — that hand-over is the confirmation the review station would otherwise ask for.
+   **Top-severity findings left unfixed are confirmed here, once.** When the answer — **go to the closing stamps**, or **fix a selection** — leaves must-fix findings of the top severity unfixed, list each one verbatim and ask once whether to accept them (see **Asking the user**). Only a yes goes on; a no returns to the options above. Every later `speclink-review` call in this run then states that the top-severity findings were listed verbatim and confirmed one by one, and names them — that hand-over is the confirmation the review station would otherwise ask for.
 
    A **fix everything** or **fix a selection** answer continues to step 5; **fix nothing and stop** ends here; **go to the closing stamps** jumps to step 7.
 
@@ -92,11 +98,11 @@ Which findings are worth fixing, and whether the change is ready to stamp, are t
 
 8. **Archive — a recommendation**
 
-   Both stamps are green: recommend `$speclink-archive` and leave the run to the user. When the change still carries unchecked `[M]` manual tasks, the recommendation says so: the manual work has to be completed and those tasks checked off before archive will let the change through.
+   Both stamps are green: recommend `speclink-archive` and leave the run to the user. When the change still carries unchecked `[M]` manual tasks, the recommendation says so: the manual work has to be completed and those tasks checked off before archive will let the change through.
 
 **Resuming after an interrupted session**
 
-A session closed in the middle of a fix round resumes by running `$speclink-quality` again. The tickets live in the change folder and the frozen snapshots in `.speclink/review-scopes/<change>/`, so each station's scope sees its open ticket and freezes a validation patch that holds every fix landed before the close. A resumed run adds three rules to the steps above:
+A session closed in the middle of a fix round resumes by running `speclink-quality` again. The tickets live in the change folder and the frozen snapshots in `.speclink/review-scopes/<change>/`, so each station's scope sees its open ticket and freezes a validation patch that holds every fix landed before the close. A resumed run adds three rules to the steps above:
 
 - Pass both stations' **Verification gate** before step 1 — the earlier session's test state is unknown, and a fix the gate still needs must land before the scopes freeze.
 - A station whose validation patch has no files while its last round still carries must-fix findings may still have an artifact fix to judge, because the patch leaves the spec directory out. List the change folder's uncommitted and untracked files with `git status --porcelain -- "openspec/changes/<change-name>/"`, the two tickets left out. Git cannot tell whether those edits came before or after the last round, so:
@@ -129,6 +135,6 @@ Check these before you report:
 
 Suggestions only. This skill NEVER invokes any of them — report where things stand and stop; the user decides what runs next.
 
-- Both stamps landed and the work is in the main checkout → `$speclink-archive <change-name>`
-- Both stamps landed inside a worktree → `$speclink-worktree-merge <change-name>` first; archive runs only from the main checkout
+- Both stamps landed and the work is in the main checkout → `speclink-archive <change-name>`
+- Both stamps landed inside a worktree → `speclink-worktree-merge <change-name>` first; archive runs only from the main checkout
 - The round ended without stamping → nothing downstream is suggested; the round's pause is where this skill stops

@@ -5,8 +5,14 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
@@ -15,7 +21,7 @@ Detect drift between a Speclink change and the current codebase state. Reports t
 
 **Read-only**: never modify files, artifacts, or git state based on drift findings.
 
-**Input**: Optionally specify a change name (e.g., `$speclink-drift add-auth`). If omitted, infer from conversation context or auto-select if only one active change exists.
+**Input**: Optionally specify a change name (e.g., `speclink-drift add-auth`). If omitted, infer from conversation context or auto-select if only one active change exists.
 
 **Prerequisites**: This skill requires the `speclink` CLI. If any `speclink` command fails with "command not found" or similar, report the error and STOP.
 
@@ -88,31 +94,31 @@ Detect drift between a Speclink change and the current codebase state. Reports t
 
 4. **Apply the recommendation interactively**
 
-   Use the **AskUserQuestion tool** to offer one decision based on `severity`. Use plain-language option labels (in the report language) while preserving the exact command in each option description. Do NOT auto-invoke `$speclink-apply`, `$speclink-ingest`, `speclink archive`, or any other follow-up command; always wait for the user's choice. If the **AskUserQuestion tool** is not available, present the same plain-language choices as plain text and wait for the user's response.
+   Use the **AskUserQuestion tool** to offer one decision based on `severity`. Use plain-language option labels (in the report language) while preserving the exact command in each option description. Do NOT auto-invoke `speclink-apply`, `speclink-ingest`, `speclink archive`, or any other follow-up command; always wait for the user's choice. If the **AskUserQuestion tool** is not available, present the same plain-language choices as plain text and wait for the user's response.
    - **Light** (score 0-3, drift is minor):
      - Recommended label: "Directly start work"
-       - Description: run `$speclink-apply <name>`
+       - Description: run `speclink-apply <name>`
      - Alternate label: "Pause for now"
        - Description: do nothing until the user reviews manually
    - **Medium** (score 4-8, refresh worth doing):
      - Recommended label: "Refresh the plan"
-       - Description: run `$speclink-ingest <name>` with the broken references and task collisions as context
+       - Description: run `speclink-ingest <name>` with the broken references and task collisions as context
      - Alternate label: "Directly start work"
-       - Description: run `$speclink-apply <name>` only if the user knows the reported changes are harmless
+       - Description: run `speclink-apply <name>` only if the user knows the reported changes are harmless
      - Alternate label: "Pause for now"
        - Description: do nothing until the user reviews manually
    - **Heavy** (score >8 or anchor decay >30%, design diverges from code):
      - Recommended label: "Archive and restart"
        - Description: run `<primary_recommendation>`
      - Alternate label: "Refresh the plan"
-       - Description: try `$speclink-ingest <name>` before restarting
+       - Description: try `speclink-ingest <name>` before restarting
      - Alternate label: "Pause for now"
        - Description: do nothing until the user reviews manually
 
 
 **Passive Trigger**
 
-When `$speclink-apply` is invoked on a change whose `.meta.yaml created` date is more than 5 days ago AND no commits have touched the change directory in the past 3 days, the apply skill SHOULD run drift analysis first and surface findings before tasks begin. The trigger is guidance only and does not block apply from proceeding.
+When `speclink-apply` is invoked on a change whose `.meta.yaml created` date is more than 5 days ago AND no commits have touched the change directory in the past 3 days, the apply skill SHOULD run drift analysis first and surface findings before tasks begin. The trigger is guidance only and does not block apply from proceeding.
 
 (Threshold reasoning: AI-assisted commits are daily-cadence, not weekly. A change sitting ≥5 days with ≥3 days of no commits is almost always genuine stagnation rather than normal pacing.)
 
@@ -128,5 +134,5 @@ Check these before you report (the CLI caps anchor checks at 50 via `ANCHOR_CAP`
 
 Suggestions only. This skill NEVER invokes any of them — report where things stand and stop; the user decides what runs next.
 
-- The delta's assumptions are stale → `$speclink-ingest <change-name>` to refresh the artifacts before any code is written
-- No meaningful drift → `$speclink-apply <change-name>` to pick the tasks back up
+- The delta's assumptions are stale → `speclink-ingest <change-name>` to refresh the artifacts before any code is written
+- No meaningful drift → `speclink-apply <change-name>` to pick the tasks back up

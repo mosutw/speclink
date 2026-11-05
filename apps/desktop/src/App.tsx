@@ -6,6 +6,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CloudOff, MoreHorizontal } from "lucide-react";
 import {
   KanbanBoard,
+  RoadmapView,
+  BoardViewSwitch,
   ArchivedList,
   ArchivedDetailPage,
   SpecList,
@@ -52,6 +54,7 @@ import {
 } from "./store";
 import { locatorKey, type WorkspaceSession } from "./session";
 import { initTray, type TrayController } from "./tray";
+import { installDeepLinks } from "./deepLink";
 import { installAppMenu, type AppMenuAction } from "./appMenu";
 import { ProjectRail, tabPathHint } from "./components/ProjectRail";
 import { ProjectColumn } from "./components/ProjectColumn";
@@ -477,8 +480,11 @@ function AppInner({
   useEffect(() => {
     // 啟動：有 workspace 即還原分頁列（依持久化 activeKey 切回上次活躍專案、
     // 背景徽章快照）；否則維持既有的整批 refresh（無活躍 session 時為無事）。
-    if (workspace) void useStore.getState().restoreTabs();
-    else void useStore.getState().refresh();
+    // speclink 網址（desktop-app「以 speclink 網址開啟詳情頁」）排隊到分頁還原之後才處理。
+    const uninstallDeepLinks = workspace
+      ? installDeepLinks(useStore, useStore.getState().restoreTabs())
+      : null;
+    if (!workspace) void useStore.getState().refresh();
     if (connections) void useStore.getState().refreshConnections();
     // 啟動背景檢查更新（非阻塞；失敗靜默——desktop-app「檢查失敗靜默」）。
     if (updater) void useStore.getState().checkForUpdates(false);
@@ -495,6 +501,7 @@ function AppInner({
     // CLI 佈署狀態探測（含 AppImage 版本不符的啟動自我修復）。
     if (cliInstall) void useStore.getState().refreshCliInstall();
     return () => {
+      uninstallDeepLinks?.();
       void focusUnlisten?.then((unlisten) => unlisten?.());
       // 卸載時取消漏出的搜尋去抖，杜絕在途 timer 於 store 卸載後才開火。
       useStore.getState().disposeSearch();
@@ -701,13 +708,25 @@ function AppInner({
   // 取消尚未套用的上一次；非 macOS 由 installAppMenu 自行 no-op。選單動作只派發到 store 既有
   // 動作、看板搜尋列的 window 事件、更新日誌對話框，或外部瀏覽器。
   const hasProject = s.activeKey !== null;
-  // 不在看板時的「搜尋看板」：先切回看板，等搜尋列掛上（子元件的 effect 先於本元件）再聚焦。
+  // 「搜尋看板」的共用入口（選單項，以及路線圖顯示中的搜尋快捷鍵）：看板的卡片檢視顯示中直接聚焦；
+  // 不在看板頁或正顯示路線圖時先切回卡片，等搜尋列掛上且不再藏著（子元件的 effect 先於本元件）
+  // 再聚焦。
   const pendingSearchFocus = useRef(false);
   useEffect(() => {
-    if (s.boardView !== "board" || !pendingSearchFocus.current) return;
+    if (s.boardView !== "board" || s.boardMode !== "cards" || !pendingSearchFocus.current) return;
     pendingSearchFocus.current = false;
     window.dispatchEvent(new CustomEvent("speclink:focus-search"));
-  }, [s.boardView]);
+  }, [s.boardView, s.boardMode]);
+  const focusBoardSearch = useCallback(() => {
+    const st = useStore.getState();
+    if (st.boardView === "board" && st.boardMode === "cards") {
+      window.dispatchEvent(new CustomEvent("speclink:focus-search"));
+      return;
+    }
+    pendingSearchFocus.current = true;
+    if (st.boardView !== "board") st.setBoardView("board");
+    st.setBoardMode("cards");
+  }, [useStore]);
   useEffect(() => {
     const dispatch = (action: AppMenuAction) => {
       const st = useStore.getState();
@@ -747,11 +766,7 @@ function AppInner({
         case "viewProjectSettings":
           return st.setBoardView("project-settings");
         case "focusSearch":
-          if (st.boardView === "board") {
-            return void window.dispatchEvent(new CustomEvent("speclink:focus-search"));
-          }
-          pendingSearchFocus.current = true;
-          return st.setBoardView("board");
+          return focusBoardSearch();
         case "refresh":
           return void st.refresh();
         case "nextProject":
@@ -767,7 +782,7 @@ function AppInner({
       }
     };
     return installAppMenu({ isMacOS: platform === "macos", t, hasProject, dispatch });
-  }, [useStore, platform, t, hasProject]);
+  }, [useStore, platform, t, hasProject, focusBoardSearch]);
 
   const onRunVerb = (verb: Verb, change: string) => {
     if (verb === "archive") s.requestArchive(change);
@@ -844,6 +859,12 @@ function AppInner({
   // 殼（design D2）：標題列文字與麵包屑依模式——設定、有作用中專案、零專案（留白）。
   // projectTab＝標題列要呈現的專案（設定模式時沒有）。
   const projectTab = s.boardView === "settings" ? undefined : activeTab;
+  // 看板頁兩種檢視共用的載入狀態。骨架的前提是「首訪的載入正在進行」：探測中
+  // （pendingTabKey）或整批載入中（loadingActive），且尚無真值。只看 loaded 會讓探測
+  // 失敗或讀取失敗的 workspace 永遠停在載入中——讀不到不等於還在讀。
+  const boardLoading = (s.pendingTabKey !== null || s.loadingActive) && !s.loaded;
+  const boardLoadFailed = !s.loaded && s.loadFailed;
+  const boardViewSwitch = <BoardViewSwitch value={s.boardMode} onChange={s.setBoardMode} />;
   // 設定模式（desktop-settings-mode design D1／D2）：遠端專案沒有 .speclink.yaml 頁，記住的分類
   // 落在那頁時退回專案說明。
   const remoteProject = activeTab?.locator.kind === "remote";
@@ -1364,46 +1385,78 @@ function AppInner({
                 onVisibleOrderChange={(specs) => setVisibleOrder((v) => ({ ...v, specs }))}
               />
             ) : s.boardView === "board" ? (
-              <KanbanBoard
-                title={t("app.navChanges")}
-                description={t("board.pageDesc")}
-                changes={s.changes}
-                onOpenChange={s.openDetail}
-                onArchive={caps && !caps.archive ? undefined : s.requestArchive}
-                onRevert={s.requestRevert}
-                discussions={s.discussions}
-                archivedChanges={s.archived}
-                onOpenDiscussion={s.openDiscussion}
-                onArchiveDiscussion={
-                  caps && !caps.archiveDiscussion ? undefined : s.requestArchiveDiscussion
-                }
-                query={s.boardQuery}
-                onQuery={s.setBoardQuery}
-                fulltextHits={s.searchHits}
-                searchUnavailableReason={
-                  caps && !caps.searchWorkspace ? t("remote.searchUnavailable") : undefined
-                }
-                onReorder={
-                  caps?.reorderCard
-                    ? (kind, id, prevId, nextId) => void s.reorderCard(kind, id, prevId, nextId)
-                    : undefined
-                }
-                reorderUnavailableReason={
-                  caps && !caps.reorderCard ? writeDisabledReason : undefined
-                }
-                planError={s.planError}
-                onDragActiveChange={handleBoardDragActive}
-                onVisibleOrderChange={(order) => setVisibleOrder((v) => ({ ...v, ...order }))}
-                promotedExpanded={s.promotedExpanded}
-                onPromotedExpandedChange={s.setPromotedExpanded}
-                // 骨架的前提是「首訪的載入正在進行」：探測中（pendingTabKey）或整批
-                // 載入中（loadingActive），且尚無真值。只看 loaded 會讓探測失敗或讀取
-                // 失敗的 workspace 永遠停在載入中——讀不到不等於還在讀。
-                loading={(s.pendingTabKey !== null || s.loadingActive) && !s.loaded}
-                // 首訪失敗的終態：讀不到 ≠ 確認是空的，故不落回空態文案。已有舊
-                // 快取（loaded）時照舊靜默沿用最後成功快照，不顯示提示。
-                loadFailed={!s.loaded && s.loadFailed}
-              />
+              // 看板頁的兩種檢視（desktop-roadmap design「路線圖是看板頁的一種檢視」）：兩者同時
+              // 掛載、只顯示 boardMode 指定的一個——卡片的捲動、搜尋與篩選在切換間原樣保留，
+              // 詳情頁的 ‹ › 照舊依卡片順序；兩者吃同一份清單資料，不各自查詢。
+              <>
+                <div
+                  data-testid="board-cards"
+                  hidden={s.boardMode !== "cards"}
+                  inert={s.boardMode !== "cards" || undefined}
+                  className="flex min-h-0 flex-1 flex-col"
+                >
+                  <KanbanBoard
+                    viewSwitch={boardViewSwitch}
+                    title={t("app.navChanges")}
+                    description={t("board.pageDesc")}
+                    changes={s.changes}
+                    onOpenChange={s.openDetail}
+                    onArchive={caps && !caps.archive ? undefined : s.requestArchive}
+                    onRevert={s.requestRevert}
+                    discussions={s.discussions}
+                    archivedChanges={s.archived}
+                    onOpenDiscussion={s.openDiscussion}
+                    onArchiveDiscussion={
+                      caps && !caps.archiveDiscussion ? undefined : s.requestArchiveDiscussion
+                    }
+                    query={s.boardQuery}
+                    onQuery={s.setBoardQuery}
+                    fulltextHits={s.searchHits}
+                    searchUnavailableReason={
+                      caps && !caps.searchWorkspace ? t("remote.searchUnavailable") : undefined
+                    }
+                    onRevealSearch={s.boardMode === "roadmap" ? focusBoardSearch : undefined}
+                    onReorder={
+                      caps?.reorderCard
+                        ? (kind, id, prevId, nextId) => void s.reorderCard(kind, id, prevId, nextId)
+                        : undefined
+                    }
+                    reorderUnavailableReason={
+                      caps && !caps.reorderCard ? writeDisabledReason : undefined
+                    }
+                    planError={s.planError}
+                    onDragActiveChange={handleBoardDragActive}
+                    onVisibleOrderChange={(order) => setVisibleOrder((v) => ({ ...v, ...order }))}
+                    promotedExpanded={s.promotedExpanded}
+                    onPromotedExpandedChange={s.setPromotedExpanded}
+                    loading={boardLoading}
+                    // 首訪失敗的終態：讀不到 ≠ 確認是空的，故不落回空態文案。已有舊
+                    // 快取（loaded）時照舊靜默沿用最後成功快照，不顯示提示。
+                    loadFailed={boardLoadFailed}
+                  />
+                </div>
+                <div
+                  data-testid="board-roadmap"
+                  hidden={s.boardMode !== "roadmap"}
+                  inert={s.boardMode !== "roadmap" || undefined}
+                  className="flex min-h-0 flex-1 flex-col"
+                >
+                  <RoadmapView
+                    viewSwitch={boardViewSwitch}
+                    title={t("app.navChanges")}
+                    description={t("roadmap.pageDesc")}
+                    changes={s.changes}
+                    next={s.planNext}
+                    unpromotedCuts={s.unpromotedCuts}
+                    planError={s.planError}
+                    discussions={s.discussions}
+                    onOpenChange={s.openDetail}
+                    onOpenDiscussion={s.openDiscussion}
+                    loading={boardLoading}
+                    loadFailed={boardLoadFailed}
+                  />
+                </div>
+              </>
             ) : (
               <ArchivedList
                 title={t("app.archived")}

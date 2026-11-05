@@ -27,9 +27,9 @@ use speclink_protocol::command::{
 use speclink_protocol::events::TransportKind;
 use speclink_protocol::query::{
     ArchivedListResponse, ArtifactContent, BoardOrderDoc, ChangeStatus, ChangeSummary,
-    DiscussionInfo, ImportBundle, ImportBundleDocument, ImportDocumentId, ImportReportResponse,
-    ImportScope, ListSpecsResponse, PlanChangeEntry, PlanResponse, ScopesResponse,
-    SearchResponse, ShowDiscussionResponse, SpecDocumentResponse,
+    DiscussionCut, DiscussionInfo, ImportBundle, ImportBundleDocument, ImportDocumentId,
+    ImportReportResponse, ImportScope, ListSpecsResponse, PlanChangeEntry, PlanResponse,
+    PlanUnpromotedCut, ScopesResponse, SearchResponse, ShowDiscussionResponse, SpecDocumentResponse,
 };
 use speclink_remote::client::Client;
 use speclink_remote::RemoteError;
@@ -843,12 +843,15 @@ fn schedule_of(entry: &PlanChangeEntry) -> serde_json::Map<String, serde_json::V
         .collect()
 }
 
-/// `remote_list_changes` 的 payload：清單項＋頂層 planError（成環時為訊息，否則 null）。
+/// `remote_list_changes` 的 payload：清單項＋頂層 planError（成環時為訊息，否則 null）、
+/// plan 的 next 與尚未轉出的刀（plan 不可得時為 null 與空陣列）。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteChangeList {
     pub changes: Vec<RemoteChangeItem>,
     pub plan_error: Option<String>,
+    pub next: Option<String>,
+    pub unpromoted_cuts: Vec<PlanUnpromotedCut>,
 }
 
 /// 清單合併 plan（D5）：順序與排程欄位來自 [`display_order`]。GET /plan 唯一的 409
@@ -870,7 +873,8 @@ pub(crate) fn merge_plan(
             schedule: entry.map(schedule_of),
         })
         .collect();
-    RemoteChangeList { changes, plan_error }
+    let (next, unpromoted_cuts) = plan.map(|p| (p.next, p.unpromoted_cuts)).unwrap_or_default();
+    RemoteChangeList { changes, plan_error, next, unpromoted_cuts }
 }
 
 /// 變更卡的顯示序（清單與拖排共用，D5／D6）：有 plan 時照其配置序，plan 沒列到
@@ -1087,6 +1091,27 @@ pub(crate) fn reorder_full_text(
         status: None,
         evidence: None,
     })
+}
+
+/// remote 的討論記錄回應：與本地的 `speclink_desktop_core::discussions::DiscussionDocument`
+/// 同形（`{ content, cuts }`），`cuts` 原樣轉交 server 回應的 protocol 型別（同
+/// [`RemoteChangeList`] 的 `unpromoted_cuts`）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RemoteDiscussionDocument {
+    pub content: String,
+    pub cuts: Vec<DiscussionCut>,
+}
+
+/// GET /discussions/{slug} 的結果轉成桌面的討論記錄回應（舊 server 缺 `cuts` 時
+/// protocol 已讀作空陣列），404 與本地語意一致為 None。
+pub(crate) fn discussion_document_of(
+    shown: Result<ShowDiscussionResponse, RemoteError>,
+) -> Result<Option<RemoteDiscussionDocument>, RemoteError> {
+    match shown {
+        Ok(shown) => Ok(Some(RemoteDiscussionDocument { content: shown.content, cuts: shown.cuts })),
+        Err(e) if e.status == Some(404) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 /// 拖排寫回的 CAS 收斂迴圈（決策 5）：讀現況 → 重算全文 → PUT 帶 If-Match；
@@ -1867,12 +1892,13 @@ impl RemoteWorkspace {
         )
     }
 
+    /// 討論記錄全文與 server 解析的刀，與本地的討論記錄回應同形；404 回 None。
     pub fn discussion_document(
         &self,
         credentials: &dyn CredentialStore,
         slug: &str,
-    ) -> Result<ShowDiscussionResponse, RemoteError> {
-        self.run(credentials, |client| client.show_discussion(slug))
+    ) -> Result<Option<RemoteDiscussionDocument>, RemoteError> {
+        discussion_document_of(self.run(credentials, |client| client.show_discussion(slug)))
     }
 
     pub fn promote_discussion(
@@ -2158,7 +2184,7 @@ mod plan_merge_tests {
     use super::board_order_tests::change;
     use super::{merge_plan, RemoteChangeList};
     use speclink_desktop_core::query::PLAN_FIELDS;
-    use speclink_protocol::query::{BoardOrderDoc, PlanChangeEntry, PlanResponse};
+    use speclink_protocol::query::{BoardOrderDoc, PlanChangeEntry, PlanResponse, PlanUnpromotedCut};
     use speclink_remote::RemoteError;
 
     pub(super) fn entry(name: &str, wave: usize, depends_on: &[&str], blocked_by: &[&str]) -> PlanChangeEntry {
@@ -2176,7 +2202,13 @@ mod plan_merge_tests {
     }
 
     pub(super) fn plan(entries: Vec<PlanChangeEntry>) -> PlanResponse {
-        PlanResponse { waves: Vec::new(), changes: entries, next: None, skipped: Vec::new() }
+        PlanResponse {
+            waves: Vec::new(),
+            changes: entries,
+            next: None,
+            skipped: Vec::new(),
+            unpromoted_cuts: Vec::new(),
+        }
     }
 
     fn failure(status: Option<u16>, reason: Option<&str>, message: &str) -> RemoteError {
@@ -2312,6 +2344,62 @@ mod plan_merge_tests {
         for item in json["changes"].as_array().unwrap() {
             assert_eq!(item["requirementOverlap"], serde_json::json!([]), "{item}");
             assert_eq!(item["archiveAfter"], serde_json::json!([]), "{item}");
+        }
+        // 舊 server 的 plan 回應沒有 unpromotedCuts 鍵：頂層讀作空陣列，next 照搬。
+        assert_eq!(list.next.as_deref(), Some("a"));
+        assert!(list.unpromoted_cuts.is_empty());
+        assert_eq!(json["unpromotedCuts"], serde_json::json!([]), "{json}");
+    }
+
+    fn panel_cut() -> PlanUnpromotedCut {
+        PlanUnpromotedCut {
+            discussion: "panel".into(),
+            cut: "cut 3".into(),
+            title: "路線圖".into(),
+            changes: vec!["add-z".into()],
+            unpromoted: vec!["add-z".into()],
+        }
+    }
+
+    #[test]
+    fn merge_plan_carries_the_next_and_unpromoted_cuts() {
+        // 規格 Scenario「remote 清單帶 next 與尚未轉出的刀」：兩欄逐欄搬運自 GET /plan，
+        // 序列化為頂層的 next 與 unpromotedCuts（五鍵 camelCase）。
+        let mut response = plan(vec![entry("add-a", 1, &[], &[])]);
+        response.next = Some("add-a".into());
+        response.unpromoted_cuts = vec![panel_cut()];
+        let list = merge_plan(vec![change("add-a", 0, 0)], &BoardOrderDoc::default(), Ok(response));
+        assert_eq!(list.next.as_deref(), Some("add-a"));
+        assert_eq!(list.unpromoted_cuts, [panel_cut()]);
+        let json = serde_json::to_value(&list).unwrap();
+        assert_eq!(json["next"], "add-a");
+        assert_eq!(
+            json["unpromotedCuts"],
+            serde_json::json!([{
+                "discussion": "panel",
+                "cut": "cut 3",
+                "title": "路線圖",
+                "changes": ["add-z"],
+                "unpromoted": ["add-z"],
+            }])
+        );
+    }
+
+    #[test]
+    fn merge_plan_errors_clear_the_next_and_unpromoted_cuts() {
+        // 規格「remote 變更清單的排程欄位」：409（成環）與其他錯誤（404、連線失敗）
+        // 時 next 為 null、unpromotedCuts 為空陣列——兩鍵照樣出現在 payload。
+        for error in [
+            failure(Some(409), Some("refused"), "dependency cycle: a -> b -> a"),
+            failure(Some(404), Some("not_found"), "resource not found"),
+            failure(None, None, "server unreachable"),
+        ] {
+            let list = merge_plan(vec![change("a", 0, 0)], &board(), Err(error));
+            assert_eq!(list.next, None);
+            assert!(list.unpromoted_cuts.is_empty());
+            let json = serde_json::to_value(&list).unwrap();
+            assert!(json.get("next").is_some_and(serde_json::Value::is_null), "{json}");
+            assert_eq!(json["unpromotedCuts"], serde_json::json!([]), "{json}");
         }
     }
 }
@@ -3114,5 +3202,44 @@ mod migration_bundle_tests {
         assert!(root.path().join("openspec").is_dir());
         assert!(!root.path().join("openspec.migrated-2026-07-21").exists());
         assert!(!root.path().join(".speclink.yaml").exists());
+    }
+}
+
+#[cfg(test)]
+mod discussion_document_tests {
+    use super::discussion_document_of;
+    use speclink_protocol::query::ShowDiscussionResponse;
+    use speclink_remote::RemoteError;
+
+    const INFO: &str = r#"{"slug":"panel","topic":"Panel","status":"promoted","rounds":0,"created":"2026-11-01","promotedTo":["add-y"],"path":"discussions/panel.md","archived":false}"#;
+
+    fn shown(cuts: &str) -> ShowDiscussionResponse {
+        serde_json::from_str(&format!(r##"{{"info":{INFO},"content":"# Discussion\n"{cuts}}}"##)).unwrap()
+    }
+
+    #[test]
+    fn discussion_document_carries_the_cuts_of_the_detail_response() {
+        let wire = r#"[{"cut":"cut 3","title":"路線圖","note":"","line":"**cut 3 `add-z`**: 路線圖","changes":["add-z"],"changesInBold":true,"unpromoted":["add-z"]}]"#;
+        let doc = discussion_document_of(Ok(shown(&format!(r#","cuts":{wire}"#)))).unwrap().expect("found");
+        let json = serde_json::to_value(&doc).unwrap();
+        assert_eq!(json["content"], "# Discussion\n");
+        assert_eq!(json["cuts"], serde_json::from_str::<serde_json::Value>(wire).unwrap(), "cuts 逐欄同值");
+        let mut keys: Vec<_> = json.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, ["content", "cuts"], "與本地的討論記錄回應同形");
+    }
+
+    #[test]
+    fn discussion_document_from_an_old_server_has_empty_cuts() {
+        let doc = discussion_document_of(Ok(shown(""))).unwrap().expect("found");
+        assert_eq!(doc.content, "# Discussion\n");
+        assert!(doc.cuts.is_empty());
+    }
+
+    #[test]
+    fn discussion_document_not_found_is_none_and_other_errors_pass_through() {
+        let error = |status| RemoteError { message: "boom".into(), reason: None, status, evidence: None };
+        assert_eq!(discussion_document_of(Err(error(Some(404)))).unwrap(), None);
+        assert_eq!(discussion_document_of(Err(error(Some(500)))).unwrap_err().message, "boom");
     }
 }

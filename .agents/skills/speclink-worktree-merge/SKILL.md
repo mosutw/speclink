@@ -5,17 +5,23 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
 
 Merge a finished Speclink worktree branch back into the main branch, then clean up.
 
-This is the wrap-up half of `$speclink-apply-with-worktree`. That skill stops right after committing inside the worktree; this one takes it from there. It is **human-triggered**: merging is a decision, and a conflict is the user's call.
+This is the wrap-up half of `speclink-apply-with-worktree`. That skill stops right after committing inside the worktree; this one takes it from there. It is **human-triggered**: merging is a decision, and a conflict is the user's call.
 
-**Input**: Optionally specify a change name (e.g., `$speclink-worktree-merge add-auth`). If omitted, run `git worktree list --porcelain` and offer the `speclink/*` branches found. If more than one is a candidate you MUST ask which one and wait for the answer — never guess.
+**Input**: Optionally specify a change name (e.g., `speclink-worktree-merge add-auth`). If omitted, run `git worktree list --porcelain` and offer the `speclink/*` branches found. If more than one is a candidate you MUST ask which one and wait for the answer — never guess.
 
 **Prerequisites**: This skill requires `git` and the `speclink` CLI. Run `git --version`. If git is not available, report it and STOP. Every step below is driven from the **main checkout**; the steps that act on the worktree — its status check and the rebase — reach it with `git -C <worktree-path>` rather than moving you there.
 
@@ -55,7 +61,7 @@ This is the wrap-up half of `$speclink-apply-with-worktree`. That skill stops ri
    ```
 
    - **Main tree not clean** (any uncommitted change) — STOP. List the dirty files and tell the user to commit or stash them first. Do **NOT** stash on their behalf. Do **NOT** commit their unrelated work for them.
-   - **Worktree not fully committed** (any uncommitted change) — STOP. List the dirty files and tell the user the change's work must be committed inside the worktree first (`$speclink-apply-with-worktree` does this at its wrap-up). Do **NOT** commit on their behalf.
+   - **Worktree not fully committed** (any uncommitted change) — STOP. List the dirty files and tell the user the change's work must be committed inside the worktree first (`speclink-apply-with-worktree` does this at its wrap-up). Do **NOT** commit on their behalf.
 
    Only when all three hold, continue.
 
@@ -119,7 +125,7 @@ This is the wrap-up half of `$speclink-apply-with-worktree`. That skill stops ri
    speclink review prepare "<change-name>" --base "<pre-merge-HEAD>" --from "<worktree-path>"
    ```
 
-   It writes the quality stations' Apply baseline in the main checkout and carries over both stations' snapshots from the worktree, so `$speclink-review`, `$speclink-verify` and `$speclink-quality` work in the main checkout with no `--base` from the user. From the pre-merge HEAD to the merged HEAD is exactly what this change brought in, conflict resolutions included. If the command fails, report its error and stop here: do not remove the worktree — the snapshots still live there. The merge has already landed, so the way back is not this skill: once the cause is cleared (an open ticket stamped or discarded, a failed copy retried), run that same `speclink review prepare` line again with the pre-merge HEAD recorded in step 3, then run the cleanup below. A second run of this skill would record the merged HEAD as the pre-merge HEAD, and the baseline would then hide every change this merge brought in.
+   It writes the quality stations' Apply baseline in the main checkout and carries over both stations' snapshots from the worktree, so `speclink-review`, `speclink-verify` and `speclink-quality` work in the main checkout with no `--base` from the user. From the pre-merge HEAD to the merged HEAD is exactly what this change brought in, conflict resolutions included. If the command fails, report its error and stop here: do not remove the worktree — the snapshots still live there. The merge has already landed, so the way back is not this skill: once the cause is cleared (an open ticket stamped or discarded, a failed copy retried), run that same `speclink review prepare` line again with the pre-merge HEAD recorded in step 3, then run the cleanup below. A second run of this skill would record the merged HEAD as the pre-merge HEAD, and the baseline would then hide every change this merge brought in.
 
    Then remove the worktree and delete the branch:
 
@@ -138,15 +144,15 @@ This is the wrap-up half of `$speclink-apply-with-worktree`. That skill stops ri
 
    - **The quality stations already ran in the worktree** (their stamps came along with the merge):
 
-     > 這個 change 已合併回主分支，品質關卡也已在 worktree 內跑完。下一步是在主 checkout `$speclink-archive` 封存。
+     > 這個 change 已合併回主分支，品質關卡也已在 worktree 內跑完。下一步是在主 checkout `speclink-archive` 封存。
 
    - **The quality stations have not run, and no `[M]` task is open**:
 
-     > 這個 change 已合併回主分支，品質關卡的起點已承接到主 checkout。要跑的話直接在這裡執行 `$speclink-review`（工藝品質）∥ `$speclink-verify`（規格符合度），或 `$speclink-quality`（兩站合跑），是否要跑由你決定；之後 `$speclink-archive` 封存。
+     > 這個 change 已合併回主分支，品質關卡的起點已承接到主 checkout。要跑的話直接在這裡執行 `speclink-review`（工藝品質）∥ `speclink-verify`（規格符合度），或 `speclink-quality`（兩站合跑），是否要跑由你決定；之後 `speclink-archive` 封存。
 
    - **Unchecked `[M]` manual tasks remain**:
 
-     > 這個 change 已合併回主分支，品質關卡的起點已承接到主 checkout。在這裡執行 `$speclink-review` ∥ `$speclink-verify`，或 `$speclink-quality`，再把手動任務做完並勾選，之後 `$speclink-archive` 封存。
+     > 這個 change 已合併回主分支，品質關卡的起點已承接到主 checkout。在這裡執行 `speclink-review` ∥ `speclink-verify`，或 `speclink-quality`，再把手動任務做完並勾選，之後 `speclink-archive` 封存。
 
 **Output On Success**
 
@@ -160,7 +166,7 @@ This is the wrap-up half of `$speclink-apply-with-worktree`. That skill stops ri
 **Worktree:** <path> (removed)
 **Branch deleted:** ✓
 
-接下來：<step 6 的交棒——品質關卡已跑完→主 checkout $speclink-archive；未跑→直接在主 checkout 跑品質關卡再封存；有未勾手動任務→主 checkout 跑品質關卡、完成手動任務後封存>
+接下來：<step 6 的交棒——品質關卡已跑完→主 checkout speclink-archive；未跑→直接在主 checkout 跑品質關卡再封存；有未勾手動任務→主 checkout 跑品質關卡、完成手動任務後封存>
 ```
 
 **Output On Stop**
@@ -193,6 +199,6 @@ Check these before you report:
 
 Suggestions only. This skill NEVER invokes any of them — report where things stand and stop; the user decides what runs next.
 
-- The quality stations already ran in the worktree → `$speclink-archive <change-name>` **from the main checkout** — archiving inside a linked worktree is refused by the engine
-- The quality stations have not run → run them in the main checkout, where step 5 carried their baseline over: `$speclink-review` ∥ `$speclink-verify`, or `$speclink-quality` for both; then `$speclink-archive <change-name>`
-- Unchecked `[M]` manual tasks remain → the quality stations in the main checkout, then the manual tasks, then `$speclink-archive <change-name>`
+- The quality stations already ran in the worktree → `speclink-archive <change-name>` **from the main checkout** — archiving inside a linked worktree is refused by the engine
+- The quality stations have not run → run them in the main checkout, where step 5 carried their baseline over: `speclink-review` ∥ `speclink-verify`, or `speclink-quality` for both; then `speclink-archive <change-name>`
+- Unchecked `[M]` manual tasks remain → the quality stations in the main checkout, then the manual tasks, then `speclink-archive <change-name>`

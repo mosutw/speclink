@@ -17,10 +17,11 @@ use crate::init_core_context;
 pub const PLAN_FIELDS: &[&str] =
     &["wave", "blockedBy", "dependsOn", "overlaps", "requirementOverlap", "archiveAfter"];
 
-/// 對應 `speclink list --json`：`{ "changes": [ … ] }`。非專案回傳 `{ "changes": [] }`。
+/// 對應 `speclink list --json`：`{ "changes": [ … ] }` 加頂層 `planError`、`next`、`unpromotedCuts`。
+/// 非專案回傳同形的空清單：前端的 ChangeListPayload 四鍵都是必填。
 pub fn list_changes_at(root: &Path) -> Value {
     let Some(ctx) = init_core_context(root) else {
-        return json!({ "changes": [] });
+        return json!({ "changes": [], "planError": null, "next": null, "unpromotedCuts": [] });
     };
     // Worktree 觀察面：與 CLI list 同一組閘門與 payload 落點（design D6）。
     // 政策關、非主 checkout、git 不可用 → facts 為空，讀寫與 payload 與此功能
@@ -138,7 +139,22 @@ pub fn list_changes_at(root: &Path) -> Value {
             v
         })
         .collect();
-    json!({ "changes": items, "planError": plan.err().map(|e| e.to_string()) })
+    // 頂層的 next 與 unpromotedCuts（spec client-protocol「變更清單的排程欄位」）取自
+    // 同一次 plan 計算；成環時為 null 與空陣列。
+    match plan {
+        Ok(plan) => json!({
+            "changes": items,
+            "planError": null,
+            "next": plan.next,
+            "unpromotedCuts": plan.unpromoted_cuts,
+        }),
+        Err(e) => json!({
+            "changes": items,
+            "planError": e.to_string(),
+            "next": null,
+            "unpromotedCuts": [],
+        }),
+    }
 }
 
 /// 批次入口的讀取 store（design D2）：每個有映射的 change，其 artifact 讀取轉向
@@ -1406,6 +1422,66 @@ mod tests {
         assert_eq!(board_names(fx.root()), ["add-c", "add-a", "add-b"]);
     }
 
+    /// 討論 panel 的結論分兩刀（cut 2 `add-y`、cut 3 `add-z`），只轉出 add-y。
+    fn write_panel_discussion(fx: &FixtureRoot) {
+        fx.write(
+            "speclink/discussions/panel.md",
+            "---\ntopic: panel\nslug: panel\nstatus: promoted\npromoted_to: add-y\ncreated: 2026-09-01\n---\n\n\
+             # Discussion: panel\n\n## Context\n\n背景。\n\n## Rounds\n\n\
+             ### Round 1 — assumptions (2026-09-01)\n\n**Focus**: scope\n\n\
+             ## Conclusion\n\n**Decision**: 定案。\n\n- **cut 2 `add-y`**: 第二刀\n- **cut 3 `add-z`**: 路線圖\n",
+        );
+    }
+
+    #[test]
+    fn list_changes_carries_the_plan_next_and_unpromoted_cuts() {
+        // Scenario「清單回應帶尚未轉出的刀」：add-x 已開工、add-y 為唯一的提案中變更
+        // （plan 的 next），討論 panel 的 cut 3 尚未轉出 → 頂層 next 為 "add-y"、
+        // unpromotedCuts 恰一項，五鍵 camelCase、與引擎 plan 同一次計算的值相同。
+        let fx = FixtureRoot::new("q-plan-next-cuts");
+        fx.add_change("add-x", STARTED_META);
+        fx.add_change("add-y", OLD_META);
+        fx.write("speclink/changes/add-y/tasks.md", "## 1. Group\n\n- [ ] 1.1 First task\n");
+        write_panel_discussion(&fx);
+        let v = list_changes_at(fx.root());
+        assert!(v["planError"].is_null(), "{v}");
+        assert_eq!(v["next"], "add-y", "{v}");
+        assert_eq!(
+            v["unpromotedCuts"],
+            json!([{
+                "discussion": "panel",
+                "cut": "cut 3",
+                "title": "路線圖",
+                "changes": ["add-z"],
+                "unpromoted": ["add-z"],
+            }]),
+            "{v}"
+        );
+        let ctx = init_core_context(fx.root()).expect("project");
+        let plan = speclink_core::plan::compute(&ctx.store).expect("no cycle");
+        assert_eq!(v["next"], json!(plan.next));
+        assert_eq!(v["unpromotedCuts"], serde_json::to_value(&plan.unpromoted_cuts).unwrap());
+    }
+
+    #[test]
+    fn cycle_clears_the_plan_next_and_unpromoted_cuts() {
+        // Scenario「成環退回」：plan 失敗時 next 為 null、unpromotedCuts 為空陣列——
+        // 即使有一份討論的刀尚未轉出；planError 與六欄缺席的斷言不變。
+        let fx = FixtureRoot::new("q-plan-cycle-next-cuts");
+        fx.add_change("add-a", &format!("{OLD_META}depends_on: add-b\n"));
+        fx.add_change("add-b", &format!("{OLD_META}depends_on: add-a\n"));
+        write_panel_discussion(&fx);
+        let v = list_changes_at(fx.root());
+        assert_eq!(v["planError"], "dependency cycle: add-a -> add-b -> add-a", "{v}");
+        assert!(v.get("next").is_some_and(Value::is_null), "next present and null: {v}");
+        assert_eq!(v["unpromotedCuts"], json!([]), "{v}");
+        for item in v["changes"].as_array().unwrap() {
+            for &key in PLAN_FIELDS {
+                assert_eq!(item.get(key).is_some(), key == "dependsOn", "cycle → {key}: {item}");
+            }
+        }
+    }
+
     #[test]
     fn list_changes_keeps_listing_a_corrupt_card_without_plan_fields() {
         // 壞 meta 項照舊列出（metaError 已在）且排程鍵缺席；有效卡照常帶齊。
@@ -1903,7 +1979,11 @@ mod tests {
     #[test]
     fn non_project_yields_empty_state_not_panic() {
         let root = crate::testfixture::fresh_non_project_dir("query");
-        assert_eq!(list_changes_at(&root), json!({ "changes": [] }));
+        // 清單回應的頂層四鍵在非專案時照樣齊全：前端的 ChangeListPayload 四鍵都是必填。
+        assert_eq!(
+            list_changes_at(&root),
+            json!({ "changes": [], "planError": null, "next": null, "unpromotedCuts": [] })
+        );
         assert_eq!(list_specs_at(&root), json!({ "specs": [] }));
         assert!(status_at(&root, "anything").is_err());
         assert!(document_at(&root, "anything", "proposal").is_none());

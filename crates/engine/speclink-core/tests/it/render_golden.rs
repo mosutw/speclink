@@ -153,7 +153,8 @@ fn copilot_native_selections_match_across_worktree_and_language_policies() {
                         assert_eq!(files.iter().any(|(p, _)| p.contains(skill)), worktree);
                     }
                     let propose = files.iter().find(|(p, _)| p.contains("speclink-propose/")).unwrap();
-                    assert!(propose.1.contains(&format!("--agent {}", tool.name())));
+                    let agent = if tool == Tool::Codex { "<current-agent>" } else { tool.name() };
+                    assert!(propose.1.contains(&format!("--agent {agent}")));
                     let prefix = if tool == Tool::Codex { "$speclink-" } else { "/speclink-" };
                     assert!(propose.1.contains(prefix));
                 }
@@ -1689,6 +1690,10 @@ fn apply_with_worktree_treats_the_body_plan_as_a_recheck() {
             .splitn(3, "---\n")
             .nth(2)
             .unwrap_or_else(|| panic!("{rel}: missing the frontmatter"));
+        let body = if rel.starts_with(".agents/") {
+            assert!(body.contains("## Shared Codex / Antigravity skills"));
+            body.split_once("\n---\n").expect("shared harness preamble").1
+        } else { body };
         let paragraph =
             normalize_eol(include_str!("../../assets/skills/conversation-language.md"));
         let body = normalize_eol(body);
@@ -2837,7 +2842,7 @@ fn skill_references_render_per_tool() {
             "reference-codex",
             Tool::Codex,
             ".agents/skills",
-            "$speclink-",
+            "speclink-",
         ),
         (
             "reference-copilot",
@@ -2861,7 +2866,7 @@ fn skill_references_render_per_tool() {
             let reference = crate::slash_skill_reference();
             for (rel, content) in &files {
                 assert!(
-                    !reference.is_match(content),
+                    !reference.is_match(content.split_once("**Conversation language**").expect("shared language paragraph").1),
                     "{rel}: a codex skill must not carry a /speclink- reference"
                 );
             }

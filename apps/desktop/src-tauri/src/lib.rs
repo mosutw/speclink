@@ -543,7 +543,10 @@ async fn list_discussions(root: PathBuf) -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn discussion_document(root: PathBuf, slug: String) -> Result<Option<String>, String> {
+async fn discussion_document(
+    root: PathBuf,
+    slug: String,
+) -> Result<Option<speclink_desktop_core::discussions::DiscussionDocument>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         speclink_desktop_core::discussions::discussion_document_at(&root, &slug)
     })
@@ -1887,7 +1890,7 @@ async fn remote_list_discussions(
     .await
 }
 
-/// 討論內文：404 與本地語意一致回 null。
+/// 討論記錄全文與其刀（`{ content, cuts }`）：404 與本地語意一致回 null。
 #[tauri::command]
 async fn remote_discussion_document(
     app: tauri::AppHandle,
@@ -1895,18 +1898,10 @@ async fn remote_discussion_document(
     project: String,
     repo: String,
     slug: String,
-) -> Result<Option<String>, String> {
-    with_remote(
-        app,
-        connection_id,
-        project,
-        repo,
-        move |ws, credentials| match ws.discussion_document(credentials, &slug) {
-            Ok(shown) => Ok(Some(shown.content)),
-            Err(e) if e.status == Some(404) => Ok(None),
-            Err(e) => Err(e.message),
-        },
-    )
+) -> Result<Option<remote::RemoteDiscussionDocument>, String> {
+    with_remote(app, connection_id, project, repo, move |ws, credentials| {
+        ws.discussion_document(credentials, &slug).map_err(|e| e.message)
+    })
     .await
 }
 
@@ -2064,9 +2059,25 @@ pub fn run() {
     let data = speclink_host::portable::data_dir();
     let mut context = tauri::generate_context!();
     let windows = portable::windows(context.config_mut(), data);
-    let builder = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // speclink 網址（desktop-deep-link）：Windows、Linux 再次啟動（含作業系統帶網址啟動）時交給
+    // 執行中的 app——外掛的 deep-link 功能先把網址轉成前端 onOpenUrl 事件，callback 再把主視窗
+    // 帶到前景。外掛要求排在所有外掛之前。macOS 由系統確保單一實例，網址走 RunEvent::Opened。
+    // 喚起步驟與前端 tray.ts 的 openMainWindow 相同（先收合面板）；不帶網址的再次啟動不會經過前端，
+    // 所以這裡要自己做一次。
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        panel::hide(app);
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.unminimize();
+            let _ = main.show();
+            let _ = main.set_focus();
+        }
+    }));
+    let builder = builder
         .manage(speclink_desktop_core::security::SecurityJobs::default())
         .manage(updater_commands::UpdaterJobs::default())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
@@ -2134,6 +2145,15 @@ pub fn run() {
             }
             #[cfg(target_os = "macos")]
             trackpad_gesture::install(app.handle());
+            // Linux 的 AppImage 不經安裝程式，執行期補登 speclink 網址格式（desktop-deep-link）；
+            // 失敗只記錄，app 照常、只是網址開不了。
+            #[cfg(target_os = "linux")]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("speclink-desktop: speclink:// scheme registration failed: {e}");
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

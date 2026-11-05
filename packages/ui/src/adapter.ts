@@ -232,6 +232,27 @@ export interface DiscussionItem {
   hold?: boolean;
 }
 
+/**
+ * 討論結論的一把刀——引擎（speclink-core discuss::record_cuts）自記錄的結論與 `promoted_to` 解析，local 經
+ * 桌面的討論記錄查詢、remote 經 GET /discussions/{slug} 的 `cuts`；前端不另做判定。`line` 為該刀列點去掉
+ * `- ` 的首行原文，`unpromoted` 為 `changes` 中不在 `promoted_to` 的名稱（`changesInBold` 為 false 時恆空）。
+ */
+export interface DiscussionCut {
+  cut: string;
+  title: string;
+  note: string;
+  line: string;
+  changes: string[];
+  changesInBold: boolean;
+  unpromoted: string[];
+}
+
+/** 討論記錄全文與其刀；`cuts` 為空陣列＝結論沒有刀，或舊 server 沒有分刀資料。 */
+export interface DiscussionDocument {
+  content: string;
+  cuts: DiscussionCut[];
+}
+
 /** 預設規格資料夾（資料來源沒帶出時用它組路徑；desktop-spec-dir-migration D4）。 */
 export const DEFAULT_SPEC_DIR = "speclink";
 
@@ -409,6 +430,21 @@ export function toRevertError(raw: unknown): Error {
 export interface ChangeListPayload {
   changes: ChangeItem[];
   planError: string | null;
+  /** 引擎 plan 的 next（第一個沒被擋的提案中變更）；成環或 plan 不可得時為 null。 */
+  next: string | null;
+  /** 討論結論中尚未轉出的刀（與 plan 的 unpromotedCuts 同形同序）；成環或 plan 不可得時為空陣列
+   * （舊 server 的 plan 回應缺這個鍵時，Tauri 殼已讀作空陣列）。 */
+  unpromotedCuts: UnpromotedCutItem[];
+}
+
+/** 討論結論中尚未全部轉出的一刀：`changes` 為刀粗體內的全部變更名，`unpromoted` 為其中
+ * 尚未轉出的（spec client-protocol「變更清單的排程欄位」）。 */
+export interface UnpromotedCutItem {
+  discussion: string;
+  cut: string;
+  title: string;
+  changes: string[];
+  unpromoted: string[];
 }
 
 /** 元件透過此介面取得資料與觸發動詞——不知道背後是 Tauri 還是 HTTP。 */
@@ -480,8 +516,8 @@ export interface SpeclinkDataSource {
   archivedCapabilities(datedName: string): Promise<string[]>;
   /** 討論清單（active＋archived）。非 speclink 專案回兩個空清單。 */
   listDiscussions(): Promise<DiscussionLists>;
-  /** 讀取討論記錄全文（slug 定址；live 優先、封存後備）。無則 null。 */
-  getDiscussionDocument(slug: string): Promise<string | null>;
+  /** 讀取討論記錄全文與引擎解析的刀（slug 定址；live 優先、封存後備）。無則 null。 */
+  getDiscussionDocument(slug: string): Promise<DiscussionDocument | null>;
   /** 把討論轉為新 change（可選 change 名，省略時由 slug 衍生）。失敗 reject 單行訊息。 */
   promoteDiscussion(slug: string, name?: string): Promise<{ change: string }>;
   /** 歸檔一筆 live 討論（UI 需先確認）；失敗 reject 附訊息。 */

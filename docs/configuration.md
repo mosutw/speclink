@@ -165,12 +165,11 @@ The `tools` list in `.speclink.yaml` decides which AI tools get skill files:
 | `claude` | `.claude/skills/` |
 | `codex` (`agents` is an alias) | `.agents/skills/` |
 | `copilot` | `.github/skills/` |
-| `antigravity` | `.agent/skills/` |
+| `antigravity` | `.agents/skills/` |
 
-Desktop options display the skill root after each name: `claude [.claude]`, `codex [.agents]`, `copilot [.github]`, and `antigravity [.agent]`. Stored values remain tool names.
+Desktop options display the skill root after each name: `claude [.claude]`, `codex [.agents]`, `copilot [.github]`, and `antigravity [.agents]`. Stored values remain tool names.
 
-[Antigravity documentation](https://antigravity.google/docs/skills) now defaults to `.agents/skills` and still supports `.agent/skills`. Speclink uses the latter so Antigravity and Codex keep their own skill content. Deselecting Antigravity removes only managed `speclink-*` skills, leaving custom skills and other `.agent` files. Existing descriptors that use the name `antigravity` or the directory `.agent/skills` must be renamed or moved, or explicitly replaced with the built-in tool; they are never silently overwritten.
-| A custom tool descriptor | The `skills_dir` of the descriptor |
+Antigravity and Codex share one set of skills in `.agents/skills/`. The preamble explains each harness's invocation syntax and the agent identity to fill in before execution. Deselecting one keeps skills needed by the other. Updates generate the new location first, then remove managed `speclink-*` skills from the old `.agent/skills/`, preserving custom skills, rules and other files without following links. The old path remains reserved for migration: custom descriptors cannot use `.agent/skills` or `.agents/skills`. A descriptor named `antigravity` must be renamed or explicitly replaced with the built-in tool; it is never silently overwritten.
 
 GitHub Copilot also reads `.claude/skills/` and `.agents/skills/`, but it reads `.github/skills/` first. Thus, when you select `copilot`, Copilot uses the skills that Speclink writes for it.
 

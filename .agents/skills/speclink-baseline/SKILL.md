@@ -5,17 +5,23 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
 
 Establish the baseline for an existing codebase: generate the initial canonical specs from current behavior, so later changes have a spec baseline to build on.
 
-**The baseline documents what the system does TODAY — not what it should do.** Specs written here describe observed behavior with evidence. Aspirations, fixes, and improvements belong in a change (`$speclink-propose`) after the baseline is written. Because nothing is changing, baseline writes directly to `openspec/specs/` — no change folder is involved, and no code is changed: do not refactor while writing the baseline.
+**The baseline documents what the system does TODAY — not what it should do.** Specs written here describe observed behavior with evidence. Aspirations, fixes, and improvements belong in a change (`speclink-propose`) after the baseline is written. Because nothing is changing, baseline writes directly to `openspec/specs/` — no change folder is involved, and no code is changed: do not refactor while writing the baseline.
 
-**Input**: Optionally a scope hint after `$speclink-baseline` (e.g., "auth and billing only"). If omitted, baseline the whole codebase.
+**Input**: Optionally a scope hint after `speclink-baseline` (e.g., "auth and billing only"). If omitted, baseline the whole codebase.
 
 ---
 
@@ -28,7 +34,7 @@ speclink workflow-config languages --json
 ```
 
 - **No specs yet** → full baseline pass; continue below.
-- **Some specs exist** → gap-filling mode: inventory what is not yet covered and scope the rest of this flow to those areas. Never rewrite an existing spec here — modifications go through a change (`$speclink-propose`).
+- **Some specs exist** → gap-filling mode: inventory what is not yet covered and scope the rest of this flow to those areas. Never rewrite an existing spec here — modifications go through a change (`speclink-propose`).
 
 The `workflow-config show --json` payload is the canonical workflow config for this workspace — the values `openspec/config.yaml` holds (the store's config document in remote mode), in the same shape either way. Environment overrides (`SPECLINK_*`) are not applied; that is the same reading the file itself gives. Read these fields from it:
 
@@ -123,5 +129,5 @@ Check these before you report:
 
 Suggestions only. This skill NEVER invokes any of them — report where things stand and stop; the user decides what runs next.
 
-- The requirements for the next piece of work are clear → `$speclink-propose <idea>`
-- They are still fuzzy or worth debating → `$speclink-discuss <topic>`
+- The requirements for the next piece of work are clear → `speclink-propose <idea>`
+- They are still fuzzy or worth debating → `speclink-discuss <topic>`

@@ -484,7 +484,7 @@ fn reconcile_converts_builtin_selection_row_by_row() {
 
         for tool in Tool::ALL {
             let skill = propose_skill(tool);
-            if to.contains(&tool) {
+            if to.iter().any(|selected| selected.skills_dir() == tool.skills_dir()) {
                 assert!(root.exists(&skill), "row {i}: {skill} 應被補齊");
             } else {
                 assert!(!root.exists(&skill), "row {i}: {skill} 應被清理");
@@ -2020,7 +2020,7 @@ fn sync_plan_builds_one_target_per_selected_tool() {
     let plan =
         SyncPlan::resolve(&root.dir, ToolSelection::builtins_only(&[Tool::Codex]), "openspec");
     assert_eq!(plan.targets.len(), 1, "只選 codex 就只有一個 target");
-    assert_eq!(plan.targets[0].label, "codex");
+    assert_eq!(plan.targets[0].labels, ["codex"]);
     assert_eq!(plan.targets[0].skills_root, root.at(".agents/skills"));
     assert_eq!(plan.deselected_builtins, vec![Tool::Claude, Tool::Copilot, Tool::Antigravity]);
 }
@@ -2033,7 +2033,7 @@ fn sync_plan_prunes_nothing_on_the_legacy_fallback() {
     let selection = ToolSelection::resolve(&root.dir, &app_config("tools: []\n"));
     let plan = SyncPlan::resolve(&root.dir, selection, "openspec");
     assert_eq!(plan.targets.len(), 1);
-    assert_eq!(plan.targets[0].label, "claude");
+    assert_eq!(plan.targets[0].labels, ["claude"]);
     assert!(plan.deselected_builtins.is_empty(), "沒有清單就沒有「下架」這回事");
 }
 
@@ -2047,8 +2047,8 @@ fn sync_plan_adds_a_target_for_each_descriptor() {
     );
     let plan = SyncPlan::resolve(&root.dir, selection, "openspec");
     assert_eq!(plan.targets.len(), 2);
-    assert_eq!(plan.targets[0].label, "claude");
-    assert_eq!(plan.targets[1].label, "wad-harness");
+    assert_eq!(plan.targets[0].labels, ["claude"]);
+    assert_eq!(plan.targets[1].labels, ["wad-harness"]);
     assert_eq!(plan.targets[1].skills_root, root.at(".wad/skills"));
     assert_eq!(plan.deselected_builtins, vec![Tool::Codex, Tool::Copilot, Tool::Antigravity]);
 }
@@ -2207,18 +2207,19 @@ fn copilot_skill_has_neutral_frontmatter_and_slash_references() {
 }
 
 #[test]
-fn copilot_skills_differ_from_codex_only_by_prefix_and_agent_name() {
-    // Requirement「Copilot 渲染目標」：除叫用前綴與 {{TOOL}} 代換值以外逐字相同。
-    let root = TempRoot::new("copilot-vs-codex");
+fn copilot_skills_keep_their_own_prefix_and_identity() {
+    let root = TempRoot::new("copilot-vs-shared-agents");
     init(&root.dir, &[Tool::Codex, Tool::Copilot], false, "openspec").unwrap();
-
-    for dir in expected_dirs(Tool::Codex) {
-        let codex = root.read(&format!(".agents/skills/{dir}/SKILL.md"));
-        let copilot = root.read(&format!(".github/skills/{dir}/SKILL.md"));
-        let mapped = codex
-            .replace("$speclink-", "/speclink-")
-            .replace("--agent codex", "--agent copilot");
-        assert_eq!(copilot, mapped, "{dir}");
+    for skill in skills::registry().into_iter().filter(|s| !s.claude_only) {
+        let path = format!(".github/skills/speclink-{}/SKILL.md", skill.name);
+        if !root.exists(&path) {
+            assert!(skill.worktree_gated);
+            continue;
+        }
+        let copilot = root.read(&path);
+        assert_eq!(copilot, skills::render_skill_file_for(skills::RenderTarget::Builtin(Tool::Copilot), &skill, "openspec"));
+        assert!(!copilot.contains("$speclink-") && !copilot.contains("<current-agent>"));
+        assert!(root.read(&format!(".agents/skills/speclink-{}/SKILL.md", skill.name)).contains("Shared Codex / Antigravity"));
     }
 }
 
@@ -2415,26 +2416,97 @@ fn skill_probe_reports_stale_copilot_skills() {
 
 #[test]
 fn antigravity_coexists_with_codex_and_deselects_only_owned_skills() {
-    let root=TempRoot::new("antigravity-coexists");
-    let tools=parse_tools("codex,antigravity").expect("Antigravity is a built-in tool");
-    init(&root.dir,&tools,false,"openspec").unwrap();
-    let codex=root.read(".agents/skills/speclink-propose/SKILL.md");
-    let antigravity=root.read(".agent/skills/speclink-propose/SKILL.md");
-    assert!(codex.contains("$speclink-"));
-    assert!(antigravity.contains("/speclink-"));
-    assert!(!antigravity.contains("$speclink-"), "tool-specific references must be rendered");
-    assert!(antigravity.contains("--agent antigravity"));
-    assert!(!antigravity.contains("context: fork"));
-    assert_eq!(skill_dirs(&root,".agent/skills"),expected_dirs(Tool::Codex));
-    assert_eq!(builtin_names(&root),["antigravity","codex"]);
-    for absent in ["AGENTS.md","GEMINI.md","CLAUDE.md"] {assert!(!root.exists(absent));}
-    root.write(".agent/skills/my-skill/SKILL.md","user skill\n");
-    root.write(".agent/rules/team.md","team rules\n");
-    reconcile_builtin_tools(&root.dir,&[Tool::Codex]).unwrap();
-    assert!(skill_dirs(&root,".agent/skills").is_empty());
-    assert_eq!(root.read(".agent/skills/my-skill/SKILL.md"),"user skill\n");
-    assert_eq!(root.read(".agent/rules/team.md"),"team rules\n");
-    assert_eq!(root.read(".agents/skills/speclink-propose/SKILL.md"),codex);
+    let root = TempRoot::new("antigravity-coexists");
+    init(&root.dir, &parse_tools("codex,antigravity").unwrap(), false, "openspec").unwrap();
+    let shared = root.read(".agents/skills/speclink-propose/SKILL.md");
+    assert!(shared.contains("$speclink-") && shared.contains("/speclink-"));
+    assert!(shared.contains("--agent <current-agent>"));
+    assert!(!root.exists(".agent"));
+    assert_eq!(builtin_names(&root), ["antigravity", "codex"]);
+    for tool in [Tool::Codex, Tool::Antigravity] {
+        reconcile_builtin_tools(&root.dir, &[tool]).unwrap();
+        assert_eq!(root.read(".agents/skills/speclink-propose/SKILL.md"), shared);
+        assert_eq!(probe_assets(&root.dir).status, AssetStatus::Current);
+    }
+    root.write(".agents/skills/my-skill/SKILL.md", "user skill\n");
+    reconcile_builtin_tools(&root.dir, &[Tool::Claude]).unwrap();
+    assert!(skill_dirs(&root, ".agents/skills").is_empty());
+    assert_eq!(root.read(".agents/skills/my-skill/SKILL.md"), "user skill\n");
+}
+
+#[test]
+fn shared_agents_render_once_and_probe_each_logical_tool() {
+    let root = TempRoot::new("shared-agents");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [codex, antigravity]\n");
+    let probe = probe_assets(&root.dir);
+    let unique: std::collections::HashSet<_> = probe.differing_files.iter().collect();
+    assert_eq!(unique.len(), probe.differing_files.len());
+    assert_eq!(probe.tools.len(), 2);
+    update(&root.dir, false).unwrap();
+    let before = root.read(".agents/skills/speclink-propose/SKILL.md");
+    update(&root.dir, false).unwrap();
+    assert_eq!(root.read(".agents/skills/speclink-propose/SKILL.md"), before);
+    let probe = probe_assets(&root.dir);
+    assert_eq!(probe.tools.len(), 2);
+    assert_eq!(probe.status, AssetStatus::Current);
+    assert!(probe.differing_files.is_empty());
+}
+
+#[test]
+fn antigravity_upgrade_cleans_only_legacy_managed_skills_after_generation() {
+    let root = TempRoot::new("antigravity-upgrade");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [antigravity]\n");
+    root.write(".agent/skills/speclink-propose/SKILL.md", "legacy managed\n");
+    root.write(".agent/skills/my-skill/SKILL.md", "user skill\n");
+    root.write(".agent/rules/team.md", "user rules\n");
+    update(&root.dir, false).unwrap();
+    assert!(root.exists(".agents/skills/speclink-propose/SKILL.md"));
+    assert!(!root.exists(".agent/skills/speclink-propose"));
+    assert_eq!(root.read(".agent/skills/my-skill/SKILL.md"), "user skill\n");
+    assert_eq!(root.read(".agent/rules/team.md"), "user rules\n");
+}
+
+#[test]
+fn antigravity_upgrade_write_failure_preserves_legacy_source() {
+    let root = TempRoot::new("antigravity-upgrade-write-failure");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [antigravity]\n");
+    root.write(".agent/skills/speclink-propose/SKILL.md", "legacy managed\n");
+    root.write(".agents/skills/speclink-propose", "not a directory");
+    assert!(update(&root.dir, false).is_err());
+    assert_eq!(root.read(".agent/skills/speclink-propose/SKILL.md"), "legacy managed\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn antigravity_upgrade_does_not_follow_legacy_parent_or_child_links() {
+    use std::os::unix::fs::symlink;
+    for parent in [true, false] {
+        let root = TempRoot::new("antigravity-legacy-link");
+        let outside = TempRoot::new("antigravity-outside");
+        outside.write("skills/speclink-propose/SKILL.md", "outside\n");
+        root.write(".speclink.yaml", "spec_dir: openspec\ntools: [antigravity]\n");
+        if parent { symlink(&outside.dir, root.at(".agent")).unwrap(); }
+        else {
+            std::fs::create_dir_all(root.at(".agent/skills")).unwrap();
+            symlink(outside.at("skills/speclink-propose"), root.at(".agent/skills/speclink-propose")).unwrap();
+        }
+        update(&root.dir, false).unwrap();
+        assert_eq!(outside.read("skills/speclink-propose/SKILL.md"), "outside\n");
+        assert!(root.exists(".agents/skills/speclink-propose/SKILL.md"));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn shared_agents_reject_linked_destination_before_any_skill_write() {
+    use std::os::unix::fs::symlink;
+    let root = TempRoot::new("shared-agents-destination-link");
+    let outside = TempRoot::new("shared-agents-outside");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [claude, antigravity]\n");
+    symlink(&outside.dir, root.at(".agents")).unwrap();
+    assert!(update(&root.dir, false).is_err());
+    assert!(!root.exists(".claude/skills"));
+    assert!(!outside.exists("skills"));
 }
 
 #[test]
@@ -2468,9 +2540,91 @@ fn update_never_prunes_through_a_symlinked_antigravity_skills_dir() {
 fn antigravity_remote_init_generates_skills_without_a_local_spec_tree() {
     let root=TempRoot::new("antigravity-remote");
     init_remote(&root.dir,&[Tool::Antigravity],false,REMOTE_URL,Some("desktop")).unwrap();
-    assert!(root.exists(".agent/skills/speclink-propose/SKILL.md"));
+    assert!(root.exists(".agents/skills/speclink-propose/SKILL.md"));
     assert!(!root.exists("openspec"));
     assert!(!root.exists("GEMINI.md"));
     assert_eq!(builtin_names(&root),["antigravity"]);
     assert!(root.read(".speclink.yaml").contains(REMOTE_URL));
+}
+
+#[test]
+fn antigravity_upgrade_rejects_newer_legacy_assets_before_writing() {
+    let root = TempRoot::new("antigravity-newer-legacy");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [antigravity]\n");
+    root.write(".agent/skills/speclink-propose/SKILL.md", "---\nmetadata:\n  version: v999.0.0\n---\nnewer\n");
+    let before = root.read(".agent/skills/speclink-propose/SKILL.md");
+    assert!(update(&root.dir, false).is_err());
+    assert_eq!(root.read(".agent/skills/speclink-propose/SKILL.md"), before);
+    assert!(!root.exists(".agents/skills"));
+}
+
+#[cfg(unix)]
+#[test]
+fn antigravity_upgrade_cleanup_failure_keeps_new_skills_and_can_retry() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = TempRoot::new("antigravity-cleanup-retry");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [antigravity]\n");
+    root.write(".agent/skills/speclink-propose/SKILL.md", "legacy\n");
+    root.write(".agent/skills/my-skill/SKILL.md", "user\n");
+    let old = root.at(".agent/skills/speclink-propose");
+    std::fs::set_permissions(&old, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let result = update(&root.dir, false);
+    std::fs::set_permissions(&old, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let error = result.unwrap_err().to_string();
+    assert!(error.contains("speclink-propose"), "{error}");
+    assert!(root.exists(".agents/skills/speclink-propose/SKILL.md"));
+    assert_eq!(root.read(".agent/skills/my-skill/SKILL.md"), "user\n");
+    update(&root.dir, false).unwrap();
+    assert!(!root.exists(".agent/skills/speclink-propose"));
+    assert_eq!(probe_assets(&root.dir).status, AssetStatus::Current);
+}
+
+#[cfg(windows)]
+#[test]
+fn antigravity_upgrade_preserves_windows_junction_target() {
+    let root = TempRoot::new("antigravity-junction");
+    let outside = TempRoot::new("antigravity-junction-target");
+    outside.write("skills/speclink-propose/SKILL.md", "outside\n");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [antigravity]\n");
+    let status = std::process::Command::new("cmd")
+        .args(["/d", "/c", "mklink", "/J"])
+        .arg(root.at(".agent"))
+        .arg(&outside.dir)
+        .output().unwrap();
+    assert!(status.status.success(), "{}", String::from_utf8_lossy(&status.stderr));
+    let result = update(&root.dir, false);
+    // Remove only the junction before fixture cleanup; never recurse into its target.
+    std::fs::remove_dir(root.at(".agent")).unwrap();
+    result.unwrap();
+    assert_eq!(outside.read("skills/speclink-propose/SKILL.md"), "outside\n");
+    assert!(root.exists(".agents/skills/speclink-propose/SKILL.md"));
+}
+
+#[test]
+fn shared_agents_keep_logical_report_order_and_do_not_report_selected_tool_as_deselected() {
+    let root = TempRoot::new("shared-agents-report");
+    init(&root.dir, &Tool::ALL, false, "openspec").unwrap();
+    root.write(".agent/skills/speclink-propose/SKILL.md", "legacy\n");
+    let outcome = update(&root.dir, false).unwrap();
+    assert_eq!(outcome.updated, ["claude", "codex", "copilot", "antigravity"]);
+    assert!(!outcome.pruned.iter().any(|name| name == "antigravity"));
+}
+
+#[cfg(unix)]
+#[test]
+fn antigravity_upgrade_reports_unreadable_legacy_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = TempRoot::new("antigravity-unreadable-legacy");
+    root.write(".speclink.yaml", "spec_dir: openspec\ntools: [antigravity]\n");
+    root.write(".agent/skills/speclink-propose/SKILL.md", "legacy\n");
+    let legacy = root.at(".agent/skills");
+    std::fs::set_permissions(&legacy, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let result = update(&root.dir, false);
+    std::fs::set_permissions(&legacy, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let error = result.unwrap_err().to_string();
+    assert!(error.contains(".agent/skills"), "{error}");
+    assert!(root.exists(".agents/skills/speclink-propose/SKILL.md"));
+    assert_eq!(root.read(".agent/skills/speclink-propose/SKILL.md"), "legacy\n");
+    update(&root.dir, false).unwrap();
+    assert!(!root.exists(".agent/skills/speclink-propose"));
 }

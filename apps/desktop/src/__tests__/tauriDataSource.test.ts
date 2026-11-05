@@ -17,12 +17,34 @@ describe("createTauriDataSource", () => {
     invoke.mockResolvedValueOnce({
       changes: [{ name: "a", status: "s", totalTasks: 1, completedTasks: 0, restaleFrom: ["alpha"] }],
       planError: "dependency cycle: a -> b -> a",
+      next: null,
+      unpromotedCuts: [],
     });
     const ds = createTauriDataSource("/r");
     const payload = await ds.listChanges();
     expect(invoke).toHaveBeenCalledWith("list_changes", { root: "/r" });
     expect(payload.changes[0].restaleFrom).toEqual(["alpha"]);
     expect(payload.planError).toBe("dependency cycle: a -> b -> a");
+  });
+
+  it("getDiscussionDocument 回 { content, cuts }：cuts 照傳、缺席補空陣列、不存在為 null", async () => {
+    const cut = {
+      cut: "cut 1",
+      title: "骨架",
+      note: "",
+      line: "**cut 1 `a-one`**: 骨架",
+      changes: ["a-one"],
+      changesInBold: true,
+      unpromoted: [],
+    };
+    invoke.mockResolvedValueOnce({ content: "record", cuts: [cut] });
+    const ds = createTauriDataSource("/r");
+    await expect(ds.getDiscussionDocument("s1")).resolves.toEqual({ content: "record", cuts: [cut] });
+    expect(invoke).toHaveBeenCalledWith("discussion_document", { root: "/r", slug: "s1" });
+    invoke.mockResolvedValueOnce({ content: "record" });
+    await expect(ds.getDiscussionDocument("s1")).resolves.toEqual({ content: "record", cuts: [] });
+    invoke.mockResolvedValueOnce(null);
+    await expect(ds.getDiscussionDocument("s1")).resolves.toBeNull();
   });
 
   it("listSpecs unwraps the { specs } envelope and carries the presentation helper fields", async () => {

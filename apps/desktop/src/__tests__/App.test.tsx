@@ -87,6 +87,12 @@ vi.mock("../appMenu", async (importOriginal) => ({
   },
 }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn().mockResolvedValue(undefined) }));
+// speclink 網址（desktop-deep-link）：jsdom 無 Tauri IPC，外掛換成不帶任何網址的假模組；
+// 派送行為由 deepLink.test 承載。
+vi.mock("@tauri-apps/plugin-deep-link", () => ({
+  getCurrent: vi.fn().mockResolvedValue(null),
+  onOpenUrl: vi.fn().mockResolvedValue(() => {}),
+}));
 
 // 系統匣（tray-status-menu）：jsdom 載不了原生圖示，initTray 原本就會失敗而靜默降級。
 // 這裡改為捕捉 App 交給系統匣的 store，測試以它呼叫系統匣「開啟此變更」所走的同一個動作。
@@ -411,8 +417,10 @@ describe("App (kanban primary + rich detail)", () => {
       ),
     });
     renderApp(ds);
-    await waitFor(() => screen.getByText("依賴成環：dependency cycle: add-a -> add-b -> add-a"));
-    expect(screen.getByText("add-a")).toBeTruthy();
+    // 看板頁同時掛著隱藏的路線圖（desktop-roadmap）：成環提示以卡片檢視為準。
+    const cards = () => within(screen.getByTestId("board-cards"));
+    await waitFor(() => cards().getByText("依賴成環：dependency cycle: add-a -> add-b -> add-a"));
+    expect(cards().getByText("add-a")).toBeTruthy();
   });
 
   it("資料源提供 dependsCandidates 時，排程分頁的新增候選取自它（宿主接線）", async () => {
@@ -436,7 +444,8 @@ describe("App (kanban primary + rich detail)", () => {
       dependsCandidates,
     });
     renderApp(ds);
-    fireEvent.click(await screen.findByText("add-dark-mode"));
+    // 帶波次的變更也是隱藏路線圖上的站（desktop-roadmap）：點卡片檢視的卡。
+    fireEvent.click(await within(await screen.findByTestId("board-cards")).findByText("add-dark-mode"));
     fireEvent.mouseDown(await screen.findByRole("tab", { name: /排程/ }));
     await waitFor(() => expect(dependsCandidates).toHaveBeenCalledWith("add-dark-mode"));
     const user = userEvent.setup({ pointerEventsCheck: 0 });
@@ -464,7 +473,7 @@ describe("App (kanban primary + rich detail)", () => {
       listChanges: vi.fn().mockResolvedValue(changeList([item("add-c", "add-b", []), item("add-b", "add-c", ["add-c"])])),
     });
     renderApp(ds);
-    fireEvent.click(await screen.findByText("add-b"));
+    fireEvent.click(await within(await screen.findByTestId("board-cards")).findByText("add-b"));
     fireEvent.mouseDown(await screen.findByRole("tab", { name: /排程/ }));
     const section = (name: string) => document.querySelector(`[data-plan-section="${name}"]`) as HTMLElement;
     await waitFor(() => expect(section("archive")).toBeTruthy());
@@ -712,7 +721,7 @@ describe("App (kanban primary + rich detail)", () => {
     const codex = within(dialog).getByRole("checkbox", { name: "codex [.agents]" });
     // spec「未初始化目錄經確認後自動初始化」：多選含 copilot，預設只勾 claude。
     const copilot = within(dialog).getByRole("checkbox", { name: "copilot [.github]" });
-    expect(within(dialog).getByRole("checkbox", {name:"antigravity [.agent]"}).getAttribute("aria-checked")).toBe("false");
+    expect(within(dialog).getByRole("checkbox", {name:"antigravity [.agents]"}).getAttribute("aria-checked")).toBe("false");
     // 主題化原語（button 元素）而非原生 input。
     expect(claude.tagName).not.toBe("INPUT");
     // 預設勾選狀態與替換前相同：claude 勾、codex 未勾。
@@ -757,7 +766,7 @@ describe("App (kanban primary + rich detail)", () => {
     expect(codex.getAttribute("aria-checked")).toBe("false");
     // 多選含 copilot、預設未勾。
     const copilot = within(dialog).getByRole("checkbox", { name: "copilot [.github]" });
-    expect(within(dialog).getByRole("checkbox", {name:"antigravity [.agent]"}).getAttribute("aria-checked")).toBe("false");
+    expect(within(dialog).getByRole("checkbox", {name:"antigravity [.agents]"}).getAttribute("aria-checked")).toBe("false");
     expect(copilot.getAttribute("aria-checked")).toBe("false");
     // 確認 → 以所選工具呼叫 adopt（而非 init）。
     fireEvent.click(within(dialog).getByRole("button", { name: "啟用" }));
@@ -907,7 +916,7 @@ describe("board search wiring（看板搜尋接線）", () => {
     await screen.findByText("desktop-shell-and-browser");
     const heading = screen.getByRole("heading", { level: 2, name: "變更" });
     const header = heading.closest("[data-page-header]") as HTMLElement;
-    expect(header.textContent).toContain("依生命週期分欄；拖曳卡片調整順序，點卡片開詳情頁。");
+    expect(header.textContent).toContain("依生命週期分欄；拖曳排序，點卡片開詳情。");
     expect(within(header).getByPlaceholderText("搜尋看板卡片…")).toBeTruthy();
   });
 
@@ -1649,9 +1658,11 @@ describe("sidebar navigation structure（側欄導覽結構）", () => {
       getArchivedDocument: vi.fn().mockResolvedValue("## Why\n\n封存提案內文。"),
       getDiscussionDocument: vi
         .fn()
-        .mockResolvedValue(
-          "---\ntopic: Old topic\nslug: old-topic\nstatus: promoted\ncreated: 2026-06-30\n---\n\n# Discussion: Old topic\n\n## Context\n\n封存背景內文。\n\n## Rounds\n\n## Conclusion\n\n**Decision**: 收工\n",
-        ),
+        .mockResolvedValue({
+          content:
+            "---\ntopic: Old topic\nslug: old-topic\nstatus: promoted\ncreated: 2026-06-30\n---\n\n# Discussion: Old topic\n\n## Context\n\n封存背景內文。\n\n## Rounds\n\n## Conclusion\n\n**Decision**: 收工\n",
+          cuts: [],
+        }),
     });
     renderApp(ds);
     await waitFor(() => screen.getByText("desktop-shell-and-browser"));
@@ -1684,9 +1695,11 @@ describe("sidebar navigation structure（側欄導覽結構）", () => {
       getArchivedDocument: vi.fn().mockResolvedValue("## Why\n\n封存提案內文。"),
       getDiscussionDocument: vi
         .fn()
-        .mockResolvedValue(
-          "---\ntopic: Held topic\nslug: held-topic\nstatus: promoted\ncreated: 2026-06-30\n---\n\n# Discussion: Held topic\n\n## Context\n\n背景。\n\n## Rounds\n\n## Conclusion\n\n**Decision**: 收工\n",
-        ),
+        .mockResolvedValue({
+          content:
+            "---\ntopic: Held topic\nslug: held-topic\nstatus: promoted\ncreated: 2026-06-30\n---\n\n# Discussion: Held topic\n\n## Context\n\n背景。\n\n## Rounds\n\n## Conclusion\n\n**Decision**: 收工\n",
+          cuts: [],
+        }),
     });
     renderApp(ds);
     await waitFor(() => screen.getByText("desktop-shell-and-browser"));
@@ -1711,9 +1724,11 @@ describe("sidebar navigation structure（側欄導覽結構）", () => {
       }),
       getDiscussionDocument: vi
         .fn()
-        .mockResolvedValue(
-          "---\ntopic: Old topic\nslug: old-topic\nstatus: promoted\ncreated: 2026-06-30\n---\n\n# Discussion: Old topic\n\n## Context\n\n封存背景內文。\n\n## Rounds\n\n## Conclusion\n\n**Decision**: 收工\n",
-        ),
+        .mockResolvedValue({
+          content:
+            "---\ntopic: Old topic\nslug: old-topic\nstatus: promoted\ncreated: 2026-06-30\n---\n\n# Discussion: Old topic\n\n## Context\n\n封存背景內文。\n\n## Rounds\n\n## Conclusion\n\n**Decision**: 收工\n",
+          cuts: [],
+        }),
     });
     renderApp(ds);
     await waitFor(() => screen.getByText("desktop-shell-and-browser"));
@@ -2283,7 +2298,7 @@ describe("溯源與衍生變更接線（desktop-readonly-detail-pages）", () =>
         ],
       }),
       getArchivedDocument: vi.fn().mockResolvedValue("## Why\n\n封存提案內文。"),
-      getDiscussionDocument: vi.fn().mockResolvedValue(DISCUSSION_DOC),
+      getDiscussionDocument: vi.fn().mockResolvedValue({ content: DISCUSSION_DOC, cuts: [] }),
     });
     renderApp(ds);
     await screen.findByText("desktop-shell-and-browser");
@@ -2318,7 +2333,7 @@ describe("溯源與衍生變更接線（desktop-readonly-detail-pages）", () =>
           { slug: "old-topic", topic: "Old topic", status: "promoted", rounds: 1, created: "2026-06-30", promotedTo: ["live-child"] },
         ],
       }),
-      getDiscussionDocument: vi.fn().mockResolvedValue(DISCUSSION_DOC),
+      getDiscussionDocument: vi.fn().mockResolvedValue({ content: DISCUSSION_DOC, cuts: [] }),
     });
     renderApp(ds);
     await screen.findByText("desktop-shell-and-browser");
@@ -2353,7 +2368,7 @@ describe("溯源與衍生變更接線（desktop-readonly-detail-pages）", () =>
       }),
       getDiscussionDocument: vi
         .fn()
-        .mockResolvedValue(DISCUSSION_DOC.replace("封存背景內文。", "背景提到 desktop-app 的需求。")),
+        .mockResolvedValue({ content: DISCUSSION_DOC.replace("封存背景內文。", "背景提到 desktop-app 的需求。"), cuts: [] }),
       getSpecDocument: vi.fn().mockResolvedValue("# desktop-app Specification\n\n### Requirement: 甲\n\n正典內文段落。"),
     });
     renderApp(ds);
@@ -2393,7 +2408,7 @@ describe("溯源與衍生變更接線（desktop-readonly-detail-pages）", () =>
         ],
       }),
       getArchivedDocument: vi.fn().mockResolvedValue("## Why\n\n封存提案內文。"),
-      getDiscussionDocument: vi.fn().mockResolvedValue(DISCUSSION_DOC),
+      getDiscussionDocument: vi.fn().mockResolvedValue({ content: DISCUSSION_DOC, cuts: [] }),
     });
     renderApp(ds);
     await screen.findByText("desktop-shell-and-browser");
@@ -2426,7 +2441,7 @@ describe("溯源與衍生變更接線（desktop-readonly-detail-pages）", () =>
       }),
       getDiscussionDocument: vi
         .fn()
-        .mockResolvedValue(DISCUSSION_DOC.replace("封存背景內文。", "接續 topic-a 與 older-topic 的討論。")),
+        .mockResolvedValue({ content: DISCUSSION_DOC.replace("封存背景內文。", "接續 topic-a 與 older-topic 的討論。"), cuts: [] }),
     });
     renderApp(ds);
     await screen.findByText("desktop-shell-and-browser");
@@ -3533,4 +3548,156 @@ it("點目前專案離開設定時先確認草稿；取消保留、捨棄回看�
  fireEvent.click(document.querySelector('[data-tab="local:A"]')!);
  fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button",{name:"捨棄"}));
  await waitFor(()=>expect(crumbText()).toBe("proj-a/變更"));
+});
+
+// spec desktop-roadmap「看板頁的路線圖檢視」：卡片與路線圖同時掛載，只顯示 boardMode 指定的一個。
+describe("看板頁的路線圖檢視（desktop-roadmap）", () => {
+  const planned = () =>
+    fakeDataSource({
+      listChanges: vi.fn().mockResolvedValue({
+        ...changeList([
+          { name: "add-a", status: "in-progress", totalTasks: 4, completedTasks: 0, wave: 1, blockedBy: [], dependsOn: [] },
+          {
+            name: "add-b",
+            status: "in-progress",
+            totalTasks: 3,
+            completedTasks: 0,
+            wave: 2,
+            blockedBy: ["add-a"],
+            dependsOn: ["add-a"],
+          },
+        ]),
+        next: "add-a",
+        unpromotedCuts: [],
+      }),
+    });
+
+  it("切到路線圖再切回看板（Scenario「切到路線圖再切回看板」）", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderApp(planned());
+    const cards = await screen.findByTestId("board-cards");
+    const roadmap = screen.getByTestId("board-roadmap");
+    await within(cards).findByText("add-b");
+    expect(roadmap.hidden).toBe(true);
+    expect(roadmap.hasAttribute("inert")).toBe(true);
+    fireEvent.change(within(cards).getByPlaceholderText("搜尋看板卡片…"), { target: { value: "add" } });
+
+    await user.click(within(cards).getByRole("tab", { name: "路線圖" }));
+    expect(cards.hidden).toBe(true);
+    expect(cards.hasAttribute("inert")).toBe(true);
+    expect(roadmap.hidden).toBe(false);
+    expect(roadmap.hasAttribute("inert")).toBe(false);
+    expect(within(roadmap).getByRole("tab", { name: "路線圖" }).getAttribute("aria-selected")).toBe("true");
+    expect(roadmap.querySelector('[data-station="add-b"]')).not.toBeNull();
+    // 專案欄的「變更」項照舊高亮。
+    expect(within(projectColumn()).getByRole("button", { name: "變更" }).className).toContain("bg-primary");
+
+    await user.click(within(roadmap).getByRole("tab", { name: "看板" }));
+    expect(cards.hidden).toBe(false);
+    expect(roadmap.hidden).toBe(true);
+    expect((within(cards).getByPlaceholderText("搜尋看板卡片…") as HTMLInputElement).value).toBe("add");
+    // 捲動位置與篩選靠「卡片檢視一直掛著、不重新掛載」保留：切回後仍是同一個節點。jsdom 沒有
+    // 版面、量不到捲動，捲動位置由 [M] 6.1 在桌面視窗驗收。
+    expect(screen.getByTestId("board-cards")).toBe(cards);
+  });
+
+  it("自路線圖開詳情頁時 ‹ n／m › 依看板卡片的順序，不依路線圖的列序", async () => {
+    // add-a 已開工（進行中欄）、add-b 提案中（提案中欄在前）：卡片順序 add-b、add-a，
+    // 路線圖的列序 add-a、add-b。
+    const ds = fakeDataSource({
+      listChanges: vi.fn().mockResolvedValue({
+        ...changeList([
+          { name: "add-a", status: "in-progress", totalTasks: 4, completedTasks: 1, wave: 1, blockedBy: [], dependsOn: [] },
+          {
+            name: "add-b",
+            status: "in-progress",
+            totalTasks: 3,
+            completedTasks: 0,
+            wave: 2,
+            blockedBy: ["add-a"],
+            dependsOn: ["add-a"],
+          },
+        ]),
+        next: null,
+      }),
+    });
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderApp(ds);
+    const cards = await screen.findByTestId("board-cards");
+    await within(cards).findByText("add-b");
+    await user.click(within(cards).getByRole("tab", { name: "路線圖" }));
+    const roadmap = screen.getByTestId("board-roadmap");
+    expect([...roadmap.querySelectorAll("[data-station]")].map((el) => el.getAttribute("data-station"))).toEqual([
+      "add-a",
+      "add-b",
+    ]);
+    fireEvent.click(roadmap.querySelector('[data-station="add-b"]') as HTMLElement);
+    await screen.findByTestId("detail-page");
+    expect(screen.getByText("1 / 2")).toBeTruthy();
+  });
+
+  it("路線圖顯示中按 ⌘F 或選單「搜尋看板」：先切回卡片再聚焦看板搜尋", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderApp(planned());
+    const cards = await screen.findByTestId("board-cards");
+    await within(cards).findByText("add-b");
+    const input = within(cards).getByPlaceholderText("搜尋看板卡片…");
+    await user.click(within(cards).getByRole("tab", { name: "路線圖" }));
+    act(() => {
+      fireEvent.keyDown(window, { key: "f", metaKey: true });
+    });
+    await waitFor(() => expect(cards.hidden).toBe(false));
+    await waitFor(() => expect(document.activeElement).toBe(input));
+
+    await user.click(within(cards).getByRole("tab", { name: "路線圖" }));
+    expect(cards.hidden).toBe(true);
+    act(() => appMenuSpy.deps[appMenuSpy.deps.length - 1].dispatch("focusSearch"));
+    await waitFor(() => expect(cards.hidden).toBe(false));
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
+  it("以方向鍵切換檢視後，焦點落在新顯示那一頁的切換上", async () => {
+    renderApp(planned());
+    const cards = await screen.findByTestId("board-cards");
+    await within(cards).findByText("add-b");
+    const roadmap = screen.getByTestId("board-roadmap");
+    act(() => within(cards).getByRole("tab", { name: "看板" }).focus());
+    await userEvent.keyboard("{ArrowRight}");
+    await waitFor(() => expect(roadmap.hidden).toBe(false));
+    expect(document.activeElement).toBe(within(roadmap).getByRole("tab", { name: "路線圖" }));
+    await userEvent.keyboard("{ArrowLeft}");
+    await waitFor(() => expect(cards.hidden).toBe(false));
+    expect(document.activeElement).toBe(within(cards).getByRole("tab", { name: "看板" }));
+  });
+
+  it("自路線圖開詳情頁，按 Esc 回到路線圖（Scenario「自路線圖開詳情頁後回到路線圖」）", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderApp(planned());
+    const cards = await screen.findByTestId("board-cards");
+    await within(cards).findByText("add-b");
+    await user.click(within(cards).getByRole("tab", { name: "路線圖" }));
+    const roadmap = screen.getByTestId("board-roadmap");
+    fireEvent.click(roadmap.querySelector('[data-station="add-b"]') as HTMLElement);
+    await screen.findByTestId("detail-page");
+    expect(crumbText()).toContain("add-b");
+    act(() => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+    await waitFor(() => expect(screen.queryByTestId("detail-page")).toBeNull());
+    expect(screen.getByTestId("board-roadmap").hidden).toBe(false);
+    expect(screen.getByTestId("board-cards").hidden).toBe(true);
+  });
+
+  it("切到其他頁再回到變更頁時維持路線圖（Scenario「切到其他頁再回來維持路線圖」）", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderApp(planned());
+    const cards = await screen.findByTestId("board-cards");
+    await within(cards).findByText("add-b");
+    await user.click(within(cards).getByRole("tab", { name: "路線圖" }));
+    fireEvent.click(within(projectColumn()).getByRole("button", { name: "規格" }));
+    await waitFor(() => expect(screen.queryByTestId("board-roadmap")).toBeNull());
+    fireEvent.click(within(projectColumn()).getByRole("button", { name: "變更" }));
+    expect((await screen.findByTestId("board-roadmap")).hidden).toBe(false);
+    expect(screen.getByTestId("board-cards").hidden).toBe(true);
+  });
 });

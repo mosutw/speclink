@@ -703,12 +703,39 @@ pub struct DiscussionInfo {
     pub archived: bool,
 }
 
-/// `GET /discussions/{slug}` response.
+/// `GET /discussions/{slug}` response. `cuts` reads an absent key as empty
+/// (a new client reading an old server).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ShowDiscussionResponse {
     pub info: DiscussionInfo,
     pub content: String,
+    #[serde(default)]
+    pub cuts: Vec<DiscussionCut>,
+}
+
+/// One cut in the record's conclusion, in conclusion order, as the engine
+/// parses it from the same read as `content` and `info.promotedTo`: `line` is
+/// the cut's list item first line (marker and outer whitespace removed),
+/// `unpromoted` the names of `changes` not in `promotedTo` (always empty when
+/// `changesInBold` is false). Every field reads an absent key as empty.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscussionCut {
+    #[serde(default)]
+    pub cut: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub line: String,
+    #[serde(default)]
+    pub changes: Vec<String>,
+    #[serde(default)]
+    pub changes_in_bold: bool,
+    #[serde(default)]
+    pub unpromoted: Vec<String>,
 }
 
 /// One keyword match inside a discussion record (`GET /discussions/search`).
@@ -744,8 +771,9 @@ pub struct SearchDiscussionsResponse {
 }
 
 /// `GET /plan` response — the CLI `plan --json` shape: waves, every placed
-/// change in placement order, the next startable change, and the changes left
-/// out for corrupt metadata. Array fields read an absent key as empty.
+/// change in placement order, the next startable change, the changes left
+/// out for corrupt metadata, and the discussion cuts not yet promoted. Array
+/// fields read an absent key as empty (a new client reading an old server).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanResponse {
@@ -756,6 +784,23 @@ pub struct PlanResponse {
     pub next: Option<String>,
     #[serde(default)]
     pub skipped: Vec<PlanSkipped>,
+    #[serde(default)]
+    pub unpromoted_cuts: Vec<PlanUnpromotedCut>,
+}
+
+/// A cut planned in a live discussion's conclusion with a change name not yet
+/// promoted: `changes` are every name in the cut's bold, `unpromoted` the ones
+/// not in the discussion's `promoted_to`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanUnpromotedCut {
+    pub discussion: String,
+    pub cut: String,
+    pub title: String,
+    #[serde(default)]
+    pub changes: Vec<String>,
+    #[serde(default)]
+    pub unpromoted: Vec<String>,
 }
 
 /// One wave of the plan: the changes that may run in parallel.
@@ -1233,6 +1278,49 @@ mod tests {
         assert_eq!(show.content, "# Discussion\n");
     }
 
+    // --- client-protocol「討論詳情回應的分刀 payload」---
+
+    const SHOW_INFO: &str = r#"{"slug":"panel","topic":"Panel","status":"promoted","rounds":0,"created":"2026-11-01","promotedTo":["a"],"path":"discussions/panel.md","archived":false}"#;
+
+    #[test]
+    fn show_discussion_without_cuts_reads_as_empty() {
+        // 場景「舊 server 缺 cuts 讀作空陣列」：回應只有 info 與 content 兩鍵。
+        let show: ShowDiscussionResponse =
+            serde_json::from_str(&format!(r##"{{"info":{SHOW_INFO},"content":"# Discussion\n"}}"##)).unwrap();
+        assert!(show.cuts.is_empty());
+    }
+
+    #[test]
+    fn discussion_cut_absent_fields_read_as_empty_values() {
+        let cut: DiscussionCut = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            cut,
+            DiscussionCut {
+                cut: String::new(),
+                title: String::new(),
+                note: String::new(),
+                line: String::new(),
+                changes: Vec::new(),
+                changes_in_bold: false,
+                unpromoted: Vec::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn discussion_cuts_are_camel_case_on_the_wire() {
+        let wire = format!(
+            r##"{{"info":{SHOW_INFO},"content":"# Discussion\n","cuts":[{{"cut":"cut 3","title":"收尾","note":"","line":"**cut 3 `d` `e`**: 收尾","changes":["d","e"],"changesInBold":true,"unpromoted":["d","e"]}}]}}"##
+        );
+        let show: ShowDiscussionResponse = serde_json::from_str(&wire).unwrap();
+        assert_eq!(show.cuts[0].cut, "cut 3");
+        assert!(show.cuts[0].changes_in_bold);
+        assert_eq!(show.cuts[0].unpromoted, ["d", "e"]);
+        let back = serde_json::to_value(&show).unwrap();
+        let wire: serde_json::Value = serde_json::from_str(&wire).unwrap();
+        assert_eq!(back, wire, "the wire shape round-trips key for key");
+    }
+
     #[test]
     fn discussion_search_hits_carry_info_fields_and_matches() {
         // discuss-search-recall「討論搜尋回應 payload」：hits 每筆 = 討論資訊欄位 + matches。
@@ -1488,6 +1576,11 @@ mod tests {
             status.contains("changeName") && status.contains("applyRequires"),
             "schema fields are camelCase: {status}"
         );
+        let show = serde_json::to_string(&schemars::schema_for!(ShowDiscussionResponse)).unwrap();
+        assert!(
+            show.contains("\"cuts\"") && show.contains("changesInBold"),
+            "the discussion detail schema carries cuts: {show}"
+        );
     }
 
     #[test]
@@ -1521,6 +1614,31 @@ mod tests {
     }
 
     #[test]
+    fn plan_response_reads_a_missing_unpromoted_cuts_as_empty() {
+        // 規格「plan 回應 payload」：新 client 讀舊 server，頂層缺 unpromotedCuts 讀作空。
+        let plan: PlanResponse =
+            serde_json::from_str(r#"{"waves":[],"changes":[],"next":null,"skipped":[]}"#).unwrap();
+        assert!(plan.unpromoted_cuts.is_empty());
+    }
+
+    #[test]
+    fn plan_unpromoted_cut_reads_its_five_keys_and_missing_arrays_as_empty() {
+        let plan: PlanResponse = serde_json::from_str(
+            r#"{"next":null,"unpromotedCuts":[{"discussion":"talk-a","cut":"cut 2","title":"第二刀","changes":["add-b","add-c"],"unpromoted":["add-c"]},{"discussion":"talk-b","cut":"cut 1","title":""}]}"#,
+        )
+        .unwrap();
+        let first = &plan.unpromoted_cuts[0];
+        assert_eq!(
+            (first.discussion.as_str(), first.cut.as_str(), first.title.as_str()),
+            ("talk-a", "cut 2", "第二刀")
+        );
+        assert_eq!(first.changes, ["add-b", "add-c"]);
+        assert_eq!(first.unpromoted, ["add-c"]);
+        assert!(plan.unpromoted_cuts[1].changes.is_empty());
+        assert!(plan.unpromoted_cuts[1].unpromoted.is_empty());
+    }
+
+    #[test]
     fn plan_response_serializes_the_cli_plan_json_keys() {
         // 回應與 CLI `plan --json` 同形：camelCase、next 為 null 時照樣出現。
         let plan = PlanResponse {
@@ -1550,9 +1668,13 @@ mod tests {
                 archive_after: Vec::new(),
             }],
             next: None,
-            skipped: vec![PlanSkipped {
-                change: "c".into(),
-                reason: "bad meta".into(),
+            skipped: vec![PlanSkipped { change: "c".into(), reason: "bad meta".into() }],
+            unpromoted_cuts: vec![PlanUnpromotedCut {
+                discussion: "talk-a".into(),
+                cut: "cut 2".into(),
+                title: "第二刀".into(),
+                changes: vec!["add-b".into()],
+                unpromoted: vec!["add-b".into()],
             }],
         };
         let json = serde_json::to_value(&plan).unwrap();
@@ -1562,7 +1684,11 @@ mod tests {
             k.sort();
             k
         };
-        assert_eq!(keys(&json), ["changes", "next", "skipped", "waves"]);
+        assert_eq!(keys(&json), ["changes", "next", "skipped", "unpromotedCuts", "waves"]);
+        assert_eq!(
+            keys(&json["unpromotedCuts"][0]),
+            ["changes", "cut", "discussion", "title", "unpromoted"]
+        );
         assert_eq!(
             keys(&json["changes"][0]),
             [
@@ -1638,6 +1764,8 @@ mod tests {
             "requirementOverlap",
             "archiveAfter",
             "ownOperation",
+            "unpromotedCuts",
+            "unpromoted",
         ] {
             assert!(text.contains(field), "plan schema exposes {field}: {text}");
         }

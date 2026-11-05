@@ -94,7 +94,7 @@ Generated files for: claude, codex
 這一步會：
 
 - 建立 `openspec/` 與 `.speclink.yaml`。
-- 產生所選工具的技能檔：Claude 在 `.claude/skills/`，Codex 在 `.agents/skills/`，GitHub Copilot 在 `.github/skills/`，Antigravity 在 `.agent/skills/`。
+- 產生所選工具的技能檔：Claude 在 `.claude/skills/`，Codex 在 `.agents/skills/`，GitHub Copilot 在 `.github/skills/`，Antigravity 在 `.agents/skills/`。
 - 把 `.speclink/`（本機工作資料）加進 `.gitignore`。
 
 它不會改你的 `CLAUDE.md`、`AGENTS.md` 或 `.github/copilot-instructions.md`。Agent 靠技能檔自己的說明判斷什麼時候用哪個技能。

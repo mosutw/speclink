@@ -1127,3 +1127,33 @@ describe("KanbanBoard 呈現順序回報", () => {
     });
   });
 });
+
+// spec desktop-roadmap「看板頁的路線圖檢視」：卡片檢視的頁首放「看板｜路線圖」切換。切換放在頁首
+// 最右端（搜尋列與篩選鈕之後）——路線圖的頁首只有切換，兩種檢視的切換才會停在同一個位置。
+describe("KanbanBoard 頁首的檢視切換", () => {
+  it("viewSwitch 是頁首動作區的最後一個，排在搜尋列與篩選鈕之後", () => {
+    render(
+      <KanbanBoard
+        changes={changes}
+        title="變更"
+        query=""
+        onQuery={vi.fn()}
+        viewSwitch={<span data-testid="view-switch" />}
+      />,
+    );
+    const header = document.querySelector("[data-page-header]") as HTMLElement;
+    const viewSwitch = within(header).getByTestId("view-switch");
+    expect(viewSwitch.parentElement!.lastElementChild).toBe(viewSwitch);
+    const search = within(header).getByPlaceholderText("搜尋看板卡片…");
+    const filters = within(header).getByRole("button", { name: "篩選" });
+    for (const before of [search, filters]) {
+      expect(before.compareDocumentPosition(viewSwitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it("沒有頁標題時切換與搜尋列照樣出現", () => {
+    render(<KanbanBoard changes={changes} query="" onQuery={vi.fn()} viewSwitch={<span data-testid="view-switch" />} />);
+    expect(screen.getByTestId("view-switch")).toBeTruthy();
+    expect(screen.getByPlaceholderText("搜尋看板卡片…")).toBeTruthy();
+  });
+});

@@ -5,19 +5,25 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
 
 Create a complete Speclink change proposal — from requirement to validated artifacts — in a single workflow.
 
-**Input**: The argument after `$speclink-propose` is the requirement description. Examples:
+**Input**: The argument after `speclink-propose` is the requirement description. Examples:
 
-- `$speclink-propose add dark mode`
-- `$speclink-propose fix the login page crash`
-- `$speclink-propose improve search performance`
+- `speclink-propose add dark mode`
+- `speclink-propose fix the login page crash`
+- `speclink-propose improve search performance`
 
 If no argument is provided, the workflow extracts requirements from conversation context or asks.
 
@@ -25,7 +31,7 @@ If no argument is provided, the workflow extracts requirements from conversation
 
 **Asking the user**: ask with the **AskUserQuestion tool**; when that tool is not available, ask the same question with the same options as plain text and wait for the user's response.
 
-**This workflow writes artifacts, not code.** Never write application code or implement features during this workflow, never skip the artifact workflow to write code directly, and never reinterpret requirements by ignoring the proposal file. The workflow ends after step 12 and its landscape check — it NEVER invokes `$speclink-apply`; the user decides when implementation starts.
+**This workflow writes artifacts, not code.** Never write application code or implement features during this workflow, never skip the artifact workflow to write code directly, and never reinterpret requirements by ignoring the proposal file. The workflow ends after step 12 and its landscape check — it NEVER invokes `speclink-apply`; the user decides when implementation starts.
 
 **Steps**
 
@@ -37,7 +43,7 @@ If no argument is provided, the workflow extracts requirements from conversation
 
    b. **Document supplied directly** (`--from-doc <path>`, speclink enhancement):
    - This is a skill-text convention modelled on `--from-discussion`, not an engine flag — it changes no CLI syntax and requires nothing new from the engine.
-   - When the user passes it, read that document and use it as the requirement source: its title or opening statement gives the requirement description, its content feeds Why, What Changes, Capabilities, and Impact. **No existing discussion is needed** — this is the path for building a proposal straight from a plan the user brought, without going through `$speclink-discuss` first.
+   - When the user passes it, read that document and use it as the requirement source: its title or opening statement gives the requirement description, its content feeds Why, What Changes, Capabilities, and Impact. **No existing discussion is needed** — this is the path for building a proposal straight from a plan the user brought, without going through `speclink-discuss` first.
    - The document is consumed, not grilled: itemized challenge of its claims belongs to `discuss`. Never edit the user's original document.
    - **Leave a provenance line.** A proposal built from `--from-doc` carries one line `Source doc: <path>` in its Why or Impact section, naming the document it came from — a `--from-discussion` proposal gets its origin recorded by the link, and this line is the `--from-doc` counterpart. Skill-text convention only; the engine records nothing for you.
    - `--from-doc` outranks (c) and (d): when it is present, do not go hunting for a discussion record or a plan file.
@@ -68,7 +74,6 @@ If no argument is provided, the workflow extracts requirements from conversation
    - If no discussion exists or the user declines → fall through to (d).
 
    d. **Plan file available**:
-   - Check if the conversation context mentions a plan file path (plan mode system messages include the path like `<name>.md`)
    - If found, check if the file exists at ``
    - If a plan file is found, use the **AskUserQuestion tool** to ask:
      - Option 1: Use the plan file
@@ -125,7 +130,7 @@ If no argument is provided, the workflow extracts requirements from conversation
 5. **Create the change directory**
 
    ```bash
-   speclink new change "<name>" --schema <chosen> --agent codex
+   speclink new change "<name>" --schema <chosen> --agent <current-agent>
    ```
 
    `<chosen>` is the schema step 4 chose. If a change with that name already exists, suggest continuing the existing change instead of creating a new one.
@@ -133,7 +138,7 @@ If no argument is provided, the workflow extracts requirements from conversation
    When the proposal is sourced from a discussion document (path (c) in step 1), pass the link so the change records its origin and the discussion is marked `promoted` (it will be archived together with the change later):
 
    ```bash
-   speclink new change "<name>" --schema <chosen> --agent codex --from-discussion <slug>
+   speclink new change "<name>" --schema <chosen> --agent <current-agent> --from-discussion <slug>
    ```
 
    **Is this the last cut the conclusion planned? Then add `--last`.** A discussion whose conclusion stages several cuts (cut A now, cut B once A lands, …) was concluded with `--hold`, and the engine has no way to tell the final cut from a middle one — you do. Before running the command, read the record's `## Conclusion` **Decision** for the list of planned cuts (刀一／刀二／…, cut A／cut B, or any similar enumeration) and the frontmatter's `promoted_to` for the cuts already spun out, then decide:
@@ -141,7 +146,7 @@ If no argument is provided, the workflow extracts requirements from conversation
    - The change you are creating is the **final cut the conclusion planned** → pass `--last`:
 
      ```bash
-     speclink new change "<name>" --schema <chosen> --agent codex --from-discussion <slug> --last
+     speclink new change "<name>" --schema <chosen> --agent <current-agent> --from-discussion <slug> --last
      ```
 
    - You are **splitting one planned cut into several changes** at propose time → only the last piece of the split gets `--last`; every earlier piece is spun out without it.
@@ -414,11 +419,10 @@ If no argument is provided, the workflow extracts requirements from conversation
     - List of artifacts created
     - Validation result
 
-    Inform the user that the change is ready and that running `$speclink-apply <change-name>` when ready will start implementation.
+    Inform the user that the change is ready and that running `speclink-apply <change-name>` when ready will start implementation.
 
-    If you are currently in Codex Plan Mode, also remind the user to switch the session to normal mode before running `$speclink-apply <change-name>`. This is only a reminder: do not try to use ExitPlanMode or EnterPlanMode, do not ask whether to switch modes, and do not invoke apply.
 
-    The propose workflow ENDS here. Do not invoke `$speclink-apply`, and do not call **AskUserQuestion** to ask whether to apply. This behavior is identical across Auto Mode, interactive mode, and any other agent mode.
+    The propose workflow ENDS here. Do not invoke `speclink-apply`, and do not call **AskUserQuestion** to ask whether to apply. This behavior is identical across Auto Mode, interactive mode, and any other agent mode.
 
     After the summary, run the **Pending-change landscape check** below before presenting Next steps.
 
@@ -451,7 +455,7 @@ Run this check after the summary, right before presenting the Next steps below.
    - The verb refuses because the move would cross a declared dependency → report the refusal and leave the order as it is.
    - Not small, or not urgent → run nothing.
 5. Run `speclink plan --json` (again, when step 4 moved the change) and present its result according to the project's effective worktree policy (`speclink workflow-config show --json` → `worktree`; a `SPECLINK_WORKTREE` env override wins):
-   - **Policy on** → list wave 1 (`waves[0].changes`) as "parallel-safe — run each change in its own session via `$speclink-apply-with-worktree` (the multi-session recipe)", then each later wave in order as "after the wave before it lands". A change's `blockedBy` names what it waits for.
+   - **Policy on** → list wave 1 (`waves[0].changes`) as "parallel-safe — run each change in its own session via `speclink-apply-with-worktree` (the multi-session recipe)", then each later wave in order as "after the wave before it lands". A change's `blockedBy` names what it waits for.
    - **Policy off** → one recommended order: the `changes` array in its given order, one at a time.
    - `next` is the first change that is ready to start; `skipped` lists changes whose metadata could not be parsed — name them so the user can repair them.
    - For each change whose `archiveAfter` is non-empty, add one line: 「封存時 <change> 要在 <archiveAfter 的名稱> 之後」 — an archive-order note only; it never delays a start.
@@ -462,7 +466,7 @@ Run this check after the summary, right before presenting the Next steps below.
 Check these before you present the Next steps:
 
 - [ ] Every artifact in the `applyRequires` chain exists and `speclink status` shows it done; optional artifacts were skipped only when their criteria did not apply (step 8).
-- [ ] No application code was written, and `$speclink-apply` was not invoked (step 12).
+- [ ] No application code was written, and `speclink-apply` was not invoked (step 12).
 - [ ] Every manual task carries `[M]` right after the checkbox, before the task number (step 8).
 - [ ] The change was created with the schema step 4 chose, and a case the rules could not decide was asked, not guessed (step 4).
 - [ ] `speclink validate` passed (step 11).
@@ -472,9 +476,9 @@ Check these before you present the Next steps:
 
 Suggestions only. This skill NEVER invokes any of them — report where things stand and stop; the user decides what runs next.
 
-- Artifacts are complete → `$speclink-apply <change-name>` when the user is ready to implement (with two or more active changes pending, the landscape check above sets the order first)
-- Several independent changes will be implemented at once, and the project's worktree policy is on → `$speclink-apply-with-worktree <change-name>` (one git worktree per change)
-- The requirements turned out to be fuzzier than they looked → `$speclink-discuss` before implementing
+- Artifacts are complete → `speclink-apply <change-name>` when the user is ready to implement (with two or more active changes pending, the landscape check above sets the order first)
+- Several independent changes will be implemented at once, and the project's worktree policy is on → `speclink-apply-with-worktree <change-name>` (one git worktree per change)
+- The requirements turned out to be fuzzier than they looked → `speclink-discuss` before implementing
 
 
 **Proposal lists are the default for all projects.** Write Why and What Changes with one point per bullet, separating independent motivations and changes while preserving every agreed requirement. Do not collapse them into a long paragraph or make this a project-specific option. The shared proposal view displays these sections as numbered items; update templates and skill sources together rather than editing one tool's generated copy. Existing proposals are not batch rewritten by init/update.

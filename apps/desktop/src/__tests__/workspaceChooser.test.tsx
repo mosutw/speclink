@@ -284,7 +284,7 @@ describe("WorkspaceChooser", () => {
     await chooseDesktopRepo();
     await reachCheckoutFolder();
 
-    for(const label of ["claude [.claude]","codex [.agents]","copilot [.github]","antigravity [.agent]"]) {
+    for(const label of ["claude [.claude]","codex [.agents]","copilot [.github]","antigravity [.agents]"]) {
       expect(screen.getByRole("checkbox",{name:label})).toBeTruthy();
     }
     // inspect 回傳 codex → codex 勾選、claude 與 copilot 未勾。

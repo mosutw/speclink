@@ -57,7 +57,7 @@ impl Tool {
             Tool::Claude => ".claude/skills",
             Tool::Codex => ".agents/skills",
             Tool::Copilot => ".github/skills",
-            Tool::Antigravity => ".agent/skills",
+            Tool::Antigravity => ".agents/skills",
         }
     }
     /// Where the tool keeps plan-mode files ({{PLAN_DIR}}); empty when the tool has none.
@@ -290,6 +290,14 @@ pub fn description_for(skill: &Skill, spec_dir: &str) -> String {
 fn substitutions<'a>(target: RenderTarget<'a>, spec_dir: &str) -> Substitutions<'a> {
     let spec_dir_slash = spec_dir_slash(spec_dir);
     match target {
+        RenderTarget::Builtin(Tool::Codex | Tool::Antigravity) => Substitutions {
+            spec_dir_slash,
+            plan_dir: "",
+            tool_name: "<current-agent>",
+            slash_replacement: "speclink-",
+            drop_plan_mode_lines: true,
+            neutralize_skill_refs: true,
+        },
         RenderTarget::Builtin(tool) => Substitutions {
             spec_dir_slash,
             plan_dir: tool.plan_dir(),
@@ -387,6 +395,9 @@ pub fn render_skill_file_for(target: RenderTarget, skill: &Skill, spec_dir: &str
     fm.push_str("---\n\n");
     match target {
         RenderTarget::Builtin(_) => {
+            if matches!(target, RenderTarget::Builtin(Tool::Codex | Tool::Antigravity)) {
+                fm.push_str("## Shared Codex / Antigravity skills\n\nThis file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.\n\n---\n\n");
+            }
             if claude && skill.fork {
                 if let Some(preamble) = fork_context(skill.name) {
                     fm.push_str(&preamble);
@@ -640,6 +651,23 @@ mod tests {
                 rendered.contains("## Invocation"),
                 "{label} carries the descriptor invocation preamble"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod shared_agents_tests {
+    use super::*;
+
+    #[test]
+    fn shared_agents_render_identical_skills_with_runtime_identity() {
+        for skill in registry().into_iter().filter(|s| !s.claude_only) {
+            let codex = render_skill_file_for(RenderTarget::Builtin(Tool::Codex), &skill, "openspec");
+            let antigravity = render_skill_file_for(RenderTarget::Builtin(Tool::Antigravity), &skill, "openspec");
+            assert_eq!(codex, antigravity, "{}", skill.name);
+            assert!(codex.contains("<current-agent>"));
+            assert!(codex.contains("$speclink-") && codex.contains("/speclink-"));
+            assert!(!codex.contains("{{TOOL}}") && !codex.contains("{{SPEC_DIR}}"));
         }
     }
 }

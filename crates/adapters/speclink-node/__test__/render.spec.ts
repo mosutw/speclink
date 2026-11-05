@@ -135,15 +135,15 @@ describe('skills.render — render matrix', () => {
   })
 })
 
-it('antigravity renders the same skills as init under its independent .agent directory',()=>{
+it('antigravity renders the same skills as init in the shared .agents directory',()=>{
  const fixture=mkdtempSync(join(tmpdir(),'speclink-node-antigravity-'));
  try {
   execFileSync(cliBin,['init','.','--tools','codex,antigravity'],{cwd:fixture});
   for(const {name} of skills.list()) {
-   const path=join(fixture,'.agent','skills',`speclink-${name}`,'SKILL.md');
-   if(existsSync(path))expect(normalize(skills.render(name,{target:'antigravity'}))).toBe(normalize(readFileSync(path,'utf8')));
+   const path=join(fixture,'.agents','skills',`speclink-${name}`,'SKILL.md');
+   if(existsSync(path)) { expect(normalize(skills.render(name,{target:'antigravity'}))).toBe(normalize(readFileSync(path,'utf8'))); expect(skills.render(name,{target:'codex'})).toBe(skills.render(name,{target:'antigravity'})); }
   }
   expect(readFileSync(join(fixture,'.agents','skills','speclink-propose','SKILL.md'),'utf8')).toContain('$speclink-');
-  expect(readFileSync(join(fixture,'.agent','skills','speclink-propose','SKILL.md'),'utf8')).toContain('/speclink-');
+  expect(readFileSync(join(fixture,'.agents','skills','speclink-propose','SKILL.md'),'utf8')).toContain('/speclink-');
  } finally {rmSync(fixture,{recursive:true,force:true})}
 });
