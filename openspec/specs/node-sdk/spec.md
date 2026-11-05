@@ -78,7 +78,8 @@ dispatch SHALL 由與 CLI 共用的引擎命令層執行：argv 詞彙、回傳�
 
 ---
 ### Requirement: 渲染 API
-SDK SHALL 提供 skills.list()（回傳技能名與描述清單）與 skills.render(name, options)（回傳技能 Markdown 字串，不寫入檔案）。options SHALL 包含 target（claude｜codex｜copilot｜antigravity｜neutral），並接受 invocation（cli｜tool-call，預設 cli）、specDir（預設 openspec）與 toolName（neutral 專用，預設 speclink）。回傳字串內容 SHALL 與 CLI 以對等參數生成的內容一致。SDK 的公開 TypeScript 宣告 SHALL 接受上述五種 target 與選項，並拒絕未知 target、未知 invocation 及 store／worktree 渲染選項；SDK SHALL NOT 提供 instructions.render 指令檔介面。執行時未知 target SHALL 拋出錯誤並列出五個合法值，未知 invocation 與未知技能 SHALL 明確拋出錯誤。此為規格對齊既有技能 API，加上 Antigravity 型別修正；CLI 人眼輸出、JSON、生成檔內容與退出碼 SHALL 維持既有行為。
+
+SDK SHALL 提供 skills.list()（回傳技能名與描述清單）與 skills.render(name, options)（回傳技能 Markdown 字串，不寫入檔案）。options SHALL 包含 target（claude｜codex｜copilot｜antigravity｜neutral），並接受 invocation（cli｜tool-call，預設 cli）、specDir（預設 openspec）與 toolName（neutral 專用，預設 speclink）。回傳字串內容 SHALL 與 CLI 以對等參數生成的內容一致。SDK 的公開 TypeScript 宣告 SHALL 接受上述五種 target 與選項，並拒絕未知 target、未知 invocation 及 store／worktree 渲染選項；SDK SHALL NOT 提供 instructions.render 指令檔介面。執行時未知 target SHALL 拋出錯誤並列出五個合法值，未知 invocation 與未知技能 SHALL 明確拋出錯誤。此為規格對齊既有技能 API，加上 Antigravity 型別修正；CLI 人眼輸出、JSON 與退出碼 SHALL 維持既有行為；Codex／Antigravity 生成內容依 workspace-tools 的共用內容規定刻意更新，其他 target 維持原行為。
 
 #### Scenario: 中性 tool-call 渲染
 - **WHEN** 執行 skills.render('propose', { target: 'neutral', invocation: 'tool-call' })
@@ -99,12 +100,12 @@ SDK SHALL 提供 skills.list()（回傳技能名與描述清單）與 skills.ren
 #### Scenario: Copilot 原生渲染與 CLI 同源
 
 - **WHEN** 以 target copilot 呼叫 skills.render，並以相同 specDir 生成 CLI Copilot 技能
-- **THEN** SDK 回傳字串與 .github/skills 對應技能一致；採 /speclink- 語法，Codex 仍採 $speclink-，不要求兩工具逐位元相同；不寫入檔案。未知 target 或技能明確拋錯，neutral 的 invocation 語意不變。
+- **THEN** SDK 回傳字串與 .github/skills 對應技能一致；Copilot 採 /speclink- 語法，Codex 的共用內容以宿主前言說明 $speclink-，不要求 Copilot 與共用內容逐位元相同；不寫入檔案。未知 target 或技能明確拋錯，neutral 的 invocation 語意不變。
 
 #### Scenario: Antigravity 原生渲染與 CLI 同源
 
 - **WHEN** SDK 以 target antigravity 渲染各對外技能，並以 CLI init --tools codex,antigravity 產生技能
-- **THEN** SDK 與 .agent/skills 對應檔內容一致、採 /speclink-；Codex 的 .agents/skills 仍採 $speclink- 且內容不被覆寫
+- **THEN** SDK 與 .agents/skills 對應共用檔內容一致；前言說明 Antigravity 的 /speclink- 和 Codex 的 $speclink-，兩工具同選時內容不互相覆寫
 
 #### Scenario: 公開 TypeScript 宣告可供使用者編譯
 
@@ -121,10 +122,17 @@ SDK SHALL 提供 skills.list()（回傳技能名與描述清單）與 skills.ren
 - **WHEN** JavaScript 呼叫 skills.render('apply', { target: 'neutral', invocation: 'shell' })
 - **THEN** 呼叫拋出錯誤，訊息含 shell、cli 與 tool-call
 
+Codex 與 Antigravity target SHALL 回傳相同共用技能內容，不新增公開 options；兩者 SHALL 與相同 specDir 的 CLI 單選／同選生成逐位元一致。neutral 的 invocation 與 toolName 語意 SHALL 不受此共用改動影響。
+
+#### Scenario: Codex 與 Antigravity 渲染對等
+
+- **WHEN** 對每個兩工具可用的技能以 target codex、antigravity 呼叫 skills.render，並比對 CLI 三種選集的 .agents/skills 產物
+- **THEN** 五份對應技能內容一致，包含當前宿主身分與呼叫方式說明、不殘留生成模板；API 不讀寫工作區或 .agent
+
 
 <!-- @trace
-source: desktop-workflow-and-offline-security-review
-updated: 2026-10-23T14:12:44+08:00
+source: merge-upstream-0-12-0
+updated: 2026-11-05T23:11:44+08:00
 -->
 
 ---
