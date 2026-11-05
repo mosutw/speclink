@@ -5,15 +5,21 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
 
 Generate a human-readable operating manual from the canonical specs, or walk the user through the system in conversation. The manual is a wiki-style set of Markdown pages under `openspec/manual/`, written for someone who joined today and only wants to know how to operate the system.
 
-**Input**: Optional arguments after `$speclink-manual`. They pick the mode:
+**Input**: Optional arguments after `speclink-manual`. They pick the mode:
 
 | Arguments | Mode |
 | --- | --- |
@@ -34,7 +40,7 @@ Generate a human-readable operating manual from the canonical specs, or walk the
 Read `.speclink.yaml` at the workspace root. No file, or a file without a `remote` section, means a local project — continue with Step 1. A `remote` section means the project is bound to a remote store and generation is not supported yet: the pages would land in this local checkout only and never reach the store. Print
 
 ```
-remote 模式尚不支援手冊生成（導覽模式不受此限：$speclink-manual 導覽）
+remote 模式尚不支援手冊生成（導覽模式不受此限：speclink-manual 導覽）
 ```
 
 and STOP. Zero files are written. Tour mode is unaffected by this check.
@@ -197,7 +203,7 @@ Tour mode writes NOTHING — no manual pages, no notes, no scratch files. It is 
 2. **No manual**: say so — `尚無手冊，改以規格直接導覽` — then tour from the specs: `speclink list --specs` for the map, `speclink show <capability> --item-type spec` for each station, sources cited by capability name.
 3. **Remote-bound project**: tour mode proceeds as usual, from an existing manual or from the specs.
 
-When the tour ends you may suggest running generation mode (`$speclink-manual`) to produce the manual — a suggestion only. Never invoke another skill from here.
+When the tour ends you may suggest running generation mode (`speclink-manual`) to produce the manual — a suggestion only. Never invoke another skill from here.
 
 ---
 

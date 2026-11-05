@@ -83,6 +83,7 @@ export type {
   ListView,
   ChangeItem,
   ChangeListPayload,
+  UnpromotedCutItem,
   ChangeOverlap,
   ChangeRequirementOverlap,
   DeltaOperation,
@@ -90,6 +91,8 @@ export type {
   ArchivedItem,
   DiscussionItem,
   DiscussionLists,
+  DiscussionCut,
+  DiscussionDocument,
   ManualIndex,
   ManualPageItem,
   SearchHit,
@@ -149,6 +152,7 @@ export { parseTasks, type TaskLine } from "./tasks";
 export type { ArtifactStatus, StatusReport } from "./adapter";
 export { ChangeCard, type ChangeCardProps } from "./components/ChangeCard";
 export { KanbanBoard, type KanbanBoardProps } from "./components/KanbanBoard";
+export { RoadmapView, BoardViewSwitch, type BoardMode, type RoadmapViewProps } from "./components/RoadmapView";
 export {
   DiscussionColumn,
   discussionChipStage,

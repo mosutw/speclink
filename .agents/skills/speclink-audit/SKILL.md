@@ -5,8 +5,14 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
@@ -21,8 +27,8 @@ Good APIs don't require developers to "be careful" to stay secure. If the correc
 
 This skill operates in two modes depending on how it's invoked:
 
-- **Standalone** (`$speclink-audit`): Full 3-agent parallel analysis on current git diff. See [Standalone Mode](#standalone-mode).
-- **Discipline** (via `$speclink-apply` when `audit: true`): Condensed checklist applied during implementation. See [Discipline Mode](#discipline-mode).
+- **Standalone** (`speclink-audit`): Full 3-agent parallel analysis on current git diff. See [Standalone Mode](#standalone-mode).
+- **Discipline** (via `speclink-apply` when `audit: true`): Condensed checklist applied during implementation. See [Discipline Mode](#discipline-mode).
 
 Both modes share the same [Core Framework](#core-framework).
 
@@ -30,7 +36,7 @@ Both modes share the same [Core Framework](#core-framework).
 
 ## Standalone Mode
 
-When invoked directly as `$speclink-audit`:
+When invoked directly as `speclink-audit`:
 
 ### Phase 1: Gather Changes
 
@@ -80,7 +86,7 @@ Search the diff for:
 
 ### Phase 3: Consolidate and Report
 
-Standalone mode reports; it does not edit files. Fixing is the user's call — a change through `$speclink-propose`, or their own edit. (Discipline mode below fixes as it goes, because there it runs inside apply.)
+Standalone mode reports; it does not edit files. Fixing is the user's call — a change through `speclink-propose`, or their own edit. (Discipline mode below fixes as it goes, because there it runs inside apply.)
 
 Merge findings from all 3 lenses. For each finding:
 
@@ -103,7 +109,7 @@ End with a brief summary of the findings and their proposed fixes (or confirm th
 
 ## Discipline Mode
 
-When referenced by `$speclink-apply` (via `speclink instructions --skill audit`), do NOT launch the 3-agent workflow above. Instead, apply this condensed checklist continuously during implementation.
+When referenced by `speclink-apply` (via `speclink instructions --skill audit`), do NOT launch the 3-agent workflow above. Instead, apply this condensed checklist continuously during implementation.
 
 ### Quick 3-Role Check
 

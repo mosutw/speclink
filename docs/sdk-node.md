@@ -217,6 +217,8 @@ const skillMd = skills.render('propose', { target: 'neutral', invocation: 'tool-
 
 `skills.render` returns Markdown without writing files. The public TypeScript types accept all five targets, including `antigravity`. Rendering has no `store` or `worktree` option, and the SDK exports no `instructions.render` API. Storage belongs to `createEngine`; use `skills.list()` and `skills.render()` to produce skill content, then save the returned strings where your agent loads them.
 
+The `codex` and `antigravity` targets return identical shared skills, matching CLI output in `.agents/skills/`. The preamble explains each harness's invocation syntax; replace `<current-agent>` with the actual harness name before executing CLI examples. Options for `neutral`, `claude`, and `copilot` keep their existing meaning.
+
 Write each `SKILL.md` into a directory, and let your agent load it. The `description` of each skill says when to use it. The Next steps section at the end says what to suggest after it. You do not need a separate system prompt. Your agent must read the skill descriptions for this to work.
 
 ## <a id="example"></a>Full example: Copilot SDK

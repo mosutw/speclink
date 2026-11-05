@@ -2176,10 +2176,10 @@ describe('安全驗收與紀錄保留政策',()=>{
 
 it("AI 工具名稱顯示技能目錄，Antigravity 儲存純工具名", async () => {
  const ws=renderView(snapshot(),"speclink");
- for(const label of ["claude [.claude]","codex [.agents]","copilot [.github]","antigravity [.agent]"]) {
+ for(const label of ["claude [.claude]","codex [.agents]","copilot [.github]","antigravity [.agents]"]) {
   expect(await screen.findByLabelText(label)).toBeTruthy();
  }
- fireEvent.click(screen.getByLabelText("antigravity [.agent]"));
+ fireEvent.click(screen.getByLabelText("antigravity [.agents]"));
  fireEvent.click(screen.getByTestId("save-app"));
  await waitFor(()=>expect(ws.writeAppTools).toHaveBeenCalledWith(["claude","antigravity"]));
 });

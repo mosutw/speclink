@@ -217,6 +217,8 @@ const skillMd = skills.render('propose', { target: 'neutral', invocation: 'tool-
 
 `skills.render` 回傳 Markdown，不會寫入檔案。公開 TypeScript 型別接受全部五種 target，包含 `antigravity`。渲染沒有 `store` 或 `worktree` 選項，SDK 也沒有匯出 `instructions.render` API。儲存設定屬於 `createEngine`；請用 `skills.list()` 與 `skills.render()` 產生技能內容，再把回傳字串存到 agent 會載入的目錄。
 
+`codex` 與 `antigravity` target 回傳同一份共用技能內容，與 CLI 的 `.agents/skills/` 產物一致。前言說明各工具的呼叫方式，執行 CLI 範例前須將 `<current-agent>` 替換為實際宿主名稱；`neutral`、`claude` 與 `copilot` 的選項語意不變。
+
 把產生的 `SKILL.md` 寫進一個目錄，交給你的 agent 載入。每個技能的 `description` 說明什麼時候用它，結尾的 Next steps 說明之後建議做什麼，不需要另外的系統提示。前提是你的 agent 會讀技能的 description。
 
 ## <a id="example"></a>完整範例：接上 Copilot SDK

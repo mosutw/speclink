@@ -5,8 +5,14 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
@@ -23,10 +29,10 @@ Update an existing Speclink change — from a plan file or conversation context.
 
 **Input**: Optionally specify an active change name, or a plan file path or name.
 
-- `$speclink-ingest add-auth` (update the active change `add-auth` from conversation context)
-- `$speclink-ingest agile-discovering-rocket.md`
-- `$speclink-ingest agile-discovering-rocket`
-- `$speclink-ingest` (use conversation context or auto-detect plan file)
+- `speclink-ingest add-auth` (update the active change `add-auth` from conversation context)
+- `speclink-ingest agile-discovering-rocket.md`
+- `speclink-ingest agile-discovering-rocket`
+- `speclink-ingest` (use conversation context or auto-detect plan file)
 
 **Steps**
 
@@ -42,7 +48,6 @@ Update an existing Speclink change — from a plan file or conversation context.
       - The file does not exist → report an error that says both: `<argument>` is not an active change name, and no plan file `<argument>.md` exists. Add a hint: to update a change, pass only its name and give the details in the conversation. Then **stop** without touching any artifact
 
    b. **No argument, plan file detectable**:
-   - Check conversation context for plan file path (plan mode system messages include the path like `<name>.md`)
    - Found and the file exists → use the **AskUserQuestion tool** to ask:
      - Option 1: Use the plan file
      - Option 2: Use conversation context
@@ -107,7 +112,7 @@ Update an existing Speclink change — from a plan file or conversation context.
    - **The argument named an active change** (Step 1a) → update that change; do NOT ask which change to update
    - One change exists → use the **AskUserQuestion tool** to confirm updating it
    - Multiple changes exist → use the **AskUserQuestion tool** to let the user pick which one to update
-   - No changes at all → tell the user: "No active change found. Use `$speclink-propose` first to create one." and **stop**
+   - No changes at all → tell the user: "No active change found. Use `speclink-propose` first to create one." and **stop**
 
 4. **Select the change**
 
@@ -289,7 +294,7 @@ Update an existing Speclink change — from a plan file or conversation context.
    - Artifacts created/updated
    - Validation result
 
-   Then state the suggestion from **Next steps** and STOP. NEVER invoke `$speclink-apply` yourself — starting implementation is the user's call, and this workflow is over once the summary is out.
+   Then state the suggestion from **Next steps** and STOP. NEVER invoke `speclink-apply` yourself — starting implementation is the user's call, and this workflow is over once the summary is out.
 
 ---
 
@@ -313,11 +318,11 @@ Check these before you present the summary:
 - [ ] Every completed `[x]` task is still present and unchanged (step 5).
 - [ ] `speclink status` shows each updated artifact, and `speclink validate` passed (steps 5 and 8).
 - [ ] Soft dependencies were re-judged (step 9), and every linked discussion was sealed (step 10).
-- [ ] `$speclink-apply` was not invoked (step 11).
+- [ ] `speclink-apply` was not invoked (step 11).
 
 ## Next steps
 
 Suggestions only. This skill NEVER invokes any of them — report where things stand and stop; the user decides what runs next.
 
-- The artifacts are updated and validated → `$speclink-apply <change-name>` to resume implementation
+- The artifacts are updated and validated → `speclink-apply <change-name>` to resume implementation
 - A linked discussion fed this change → `speclink discuss seal <slug>` first (step 10), then the same suggestion applies

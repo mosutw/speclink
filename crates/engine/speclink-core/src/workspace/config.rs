@@ -178,6 +178,9 @@ impl ToolDescriptor {
         // 會把前手剛寫的 claude 專屬技能當成孤兒刪掉。名稱衝突已擋，目錄衝突同理。
         // 比對不分大小寫：macOS／Windows 上 `.GitHub/skills` 就是 `.github/skills`。
         let folded = normalized.to_string_lossy().to_lowercase();
+        if Path::new(&folded) == Path::new(".agent/skills") {
+            return Err(format!("tool descriptor '{name}': skills_dir '{raw}' is the legacy built-in antigravity skills directory (choose another directory)"));
+        }
         for builtin in crate::skills::Tool::ALL {
             if Path::new(&folded) == Path::new(builtin.skills_dir()) {
                 return Err(format!(

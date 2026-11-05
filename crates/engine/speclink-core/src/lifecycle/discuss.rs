@@ -13,6 +13,8 @@ use anyhow::{bail, Result};
 use serde::Serialize;
 use std::path::PathBuf;
 
+pub mod cuts;
+
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct DiscussionInfo {
     pub slug: String,
@@ -547,6 +549,20 @@ pub fn list_discussions(store: &dyn Store) -> Vec<DiscussionInfo> {
     out
 }
 
+/// Every live discussion whose Conclusion holds content, with that content as
+/// [`conclusion_text`] returns it (HTML comments stripped) — each record read
+/// once, so its conclusion and its `promoted_to` come from the same document,
+/// in [`list_discussions`] order.
+pub fn live_conclusions(store: &dyn Store) -> Vec<(DiscussionInfo, String)> {
+    let mut out: Vec<(DiscussionInfo, String)> = store
+        .list_live_discussions()
+        .iter()
+        .filter_map(|doc| Some((info_from_doc(doc), conclusion_body(&doc.text)?)))
+        .collect();
+    out.sort_by(|a, b| a.0.slug.cmp(&b.0.slug));
+    out
+}
+
 /// List archived discussions (sorted by archived file name, i.e. by archive date).
 pub fn list_archived(store: &dyn Store) -> Vec<DiscussionInfo> {
     let mut out: Vec<DiscussionInfo> = store
@@ -558,8 +574,9 @@ pub fn list_archived(store: &dyn Store) -> Vec<DiscussionInfo> {
     out
 }
 
-pub fn show_discussion(store: &dyn Store, slug: &str) -> Option<String> {
-    store.read_discussion(slug).map(|d| d.text)
+/// 記錄的 info 與全文，取自同一次讀取（server 以兩者計算詳情回應的 `cuts`，見 [`record_cuts`]）。
+pub fn show(store: &dyn Store, slug: &str) -> Option<(DiscussionInfo, String)> {
+    store.read_discussion(slug).map(|d| (info_from_doc(&d), d.text))
 }
 
 pub fn info(store: &dyn Store, slug: &str) -> Option<DiscussionInfo> {
@@ -592,10 +609,14 @@ pub struct DiscussionHit {
 /// Decision-line markers (design D2): the round-side one and the three
 /// conclusion-side ones, each with the `kind` it reports.
 const RULED_OUT_MARKER: &str = "**Ruled out**:";
+/// 結論欄位的標籤行前綴——搜尋（[`CONCLUSION_MARKERS`]）與分刀解析（[`cuts`]）共用。
+const DECISION_LABEL: &str = "**Decision**:";
+const REJECTED_LABEL: &str = "**Rejected alternatives**:";
+const DEFERRED_LABEL: &str = "**Deferred**:";
 const CONCLUSION_MARKERS: &[(&str, &str)] = &[
-    ("**Decision**:", "decision"),
-    ("**Rejected alternatives**:", "rejected"),
-    ("**Deferred**:", "deferred"),
+    (DECISION_LABEL, "decision"),
+    (REJECTED_LABEL, "rejected"),
+    (DEFERRED_LABEL, "deferred"),
 ];
 
 /// Search live and archived discussions for any of `terms` (case-insensitive
@@ -799,6 +820,17 @@ pub fn add_round(store: &dyn Store, slug: &str, mode: &str, content: &str) -> Re
 /// placeholder comment does not count as content).
 pub fn conclusion_text(store: &dyn Store, slug: &str) -> Option<String> {
     conclusion_body(&store.read_discussion(slug)?.text)
+}
+
+/// The cuts in a record's conclusion with their promotion state, in conclusion
+/// order — the one entry point the server's discussion detail and the desktop
+/// read. `text` and `promoted_to` MUST come from the same read of the same
+/// record (`read_discussion`'s text and its head), as in [`live_conclusions`].
+/// No conclusion, or no cut in it, gives an empty list.
+pub fn record_cuts(text: &str, promoted_to: &[String]) -> Vec<cuts::RecordCut> {
+    conclusion_body(text)
+        .map(|c| cuts::parse_cuts(&c).into_iter().map(|cut| cut.record(promoted_to)).collect())
+        .unwrap_or_default()
 }
 
 fn conclusion_body(text: &str) -> Option<String> {

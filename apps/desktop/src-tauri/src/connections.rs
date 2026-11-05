@@ -697,11 +697,13 @@ mod checkout_tests {
     }
 
     #[test]
-    fn bind_codex_and_antigravity_uses_independent_directories() {
+    fn bind_codex_and_antigravity_uses_shared_agents_directory() {
         let dir=git_checkout();
         bind(dir.path(),&["codex","antigravity"]).expect("new binding");
         assert!(exists(dir.path(),".agents/skills/speclink-propose/SKILL.md"));
-        assert!(exists(dir.path(),".agent/skills/speclink-propose/SKILL.md"));
+        assert!(!exists(dir.path(),".agent/skills/speclink-propose/SKILL.md"));
+        let shared = std::fs::read_to_string(dir.path().join(".agents/skills/speclink-propose/SKILL.md")).unwrap();
+        assert!(shared.contains("<current-agent>"));
         assert_eq!(inspect(dir.path()).unwrap().tools,vec!["codex","antigravity"]);
         assert!(!exists(dir.path(),"GEMINI.md"));
     }

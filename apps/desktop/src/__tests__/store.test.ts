@@ -6,6 +6,7 @@ import type {
   SearchHit,
   SpeclinkDataSource,
   StatusReport,
+  UnpromotedCutItem,
 } from "@speclink/ui";
 
 import { createAppStore, openTicketStation, selectAssetMigrated, selectAssetPrompt, type AppState } from "../store";
@@ -606,6 +607,147 @@ describe("app store (Zustand)", () => {
     const plain = storeWith(fakeDataSource());
     await plain.getState().refresh();
     expect(plain.getState().planError).toBeNull();
+  });
+
+  // desktop-roadmap：路線圖的 next 與尚未轉出的刀隨同一次 listChanges 進 store。
+  const PANEL_CUT: UnpromotedCutItem = {
+    discussion: "panel",
+    cut: "cut 3",
+    title: "路線圖",
+    changes: ["add-z"],
+    unpromoted: ["add-z"],
+  };
+
+  it("refresh：清單回應的 next 與 unpromotedCuts 進 store 的 planNext 與 unpromotedCuts", async () => {
+    const store = storeWith(
+      fakeDataSource({
+        listChanges: vi.fn().mockResolvedValue({
+          ...changeList([{ name: "add-a", status: "proposed", totalTasks: 1, completedTasks: 0 }]),
+          next: "add-a",
+          unpromotedCuts: [PANEL_CUT],
+        }),
+      }),
+    );
+    await store.getState().refresh();
+    expect(store.getState().planNext).toBe("add-a");
+    expect(store.getState().unpromotedCuts).toEqual([PANEL_CUT]);
+  });
+
+  it("refresh：清單回應的 next 為 null、unpromotedCuts 為空陣列時照樣寫入", async () => {
+    const store = storeWith(fakeDataSource());
+    await store.getState().refresh();
+    expect(store.getState().planNext).toBeNull();
+    expect(store.getState().unpromotedCuts).toEqual([]);
+  });
+
+  it("切到另一個 workspace 再切回時 planNext 與 unpromotedCuts 由快照還原", async () => {
+    const aChanges = vi.fn().mockResolvedValue({
+      ...changeList([{ name: "a-change", status: "proposed", totalTasks: 1, completedTasks: 0 }]),
+      next: "a-change",
+      unpromotedCuts: [PANEL_CUT],
+    });
+    const a = remoteSession(fakeDataSource({ listChanges: aChanges }), "alpha");
+    const b = remoteSession(fakeDataSource(), "beta");
+    const store = storeWithRemoteSessions(a, b);
+
+    await store.getState().refresh();
+    await store.getState().activateTab(b.id);
+    expect(store.getState().planNext).toBeNull();
+    expect(store.getState().unpromotedCuts).toEqual([]);
+
+    // 切回 A 時重載失敗：畫面上的兩欄只能來自 A 的快照。
+    aChanges.mockRejectedValue(new Error("alpha offline"));
+    await store.getState().activateTab(a.id);
+    expect(store.getState().planNext).toBe("a-change");
+    expect(store.getState().unpromotedCuts).toEqual([PANEL_CUT]);
+  });
+
+  // spec desktop-roadmap「看板頁的路線圖檢視」：卡片／路線圖是看板頁的兩種檢視。
+  it("boardMode 預設為 cards", () => {
+    expect(storeWith(fakeDataSource()).getState().boardMode).toBe("cards");
+  });
+
+  it("openDetail、openDiscussion 與關閉詳情頁都不改變 boardMode（自路線圖開詳情、關閉後回到路線圖）", async () => {
+    const store = storeWith(withTopicA());
+    await store.getState().refresh();
+    store.getState().setBoardMode("roadmap");
+    store.getState().openDetail("desktop-shell-and-browser");
+    expect(store.getState().detailChange?.name).toBe("desktop-shell-and-browser");
+    expect(store.getState().boardMode).toBe("roadmap");
+    store.getState().closeDetailPage();
+    expect(store.getState().boardMode).toBe("roadmap");
+    store.getState().openDiscussion("topic-a");
+    expect(store.getState().detailDiscussion?.slug).toBe("topic-a");
+    expect(store.getState().boardMode).toBe("roadmap");
+    store.getState().closeDetailPage();
+    expect(store.getState().boardView).toBe("board");
+    expect(store.getState().boardMode).toBe("roadmap");
+  });
+
+  it("切到其他頁再回到看板頁時維持上次選的檢視（Scenario「切到其他頁再回來維持路線圖」）", () => {
+    const store = storeWith(fakeDataSource());
+    store.getState().setBoardMode("roadmap");
+    store.getState().setBoardView("specs");
+    store.getState().setBoardView("board");
+    expect(store.getState().boardMode).toBe("roadmap");
+  });
+
+  it("openRoadmap 關閉開著的詳情頁、切回看板頁並顯示路線圖（Scenario「以網址開啟路線圖」）", async () => {
+    const store = storeWith(withTopicA());
+    await store.getState().refresh();
+    store.getState().openDetail("desktop-shell-and-browser");
+    store.getState().openRoadmap();
+    expect(store.getState().detailChange).toBeNull();
+    expect(store.getState().boardView).toBe("board");
+    expect(store.getState().boardMode).toBe("roadmap");
+    store.getState().setBoardView("specs");
+    store.getState().openRoadmap();
+    expect(store.getState().boardView).toBe("board");
+    expect(store.getState().boardMode).toBe("roadmap");
+  });
+
+  it("openBoard 從詳情頁、規格頁與路線圖檢視都回到看板頁的卡片檢視（Scenario「以網址切到專案並顯示看板」）", async () => {
+    const store = storeWith(withTopicA());
+    await store.getState().refresh();
+    const expectBoardCards = () =>
+      expect(store.getState()).toMatchObject({
+        boardView: "board",
+        boardMode: "cards",
+        detailChange: null,
+        detailDiscussion: null,
+      });
+    // 開著變更詳情頁，而且上次選的是路線圖。
+    store.getState().setBoardMode("roadmap");
+    store.getState().openDetail("desktop-shell-and-browser");
+    store.getState().openBoard();
+    expectBoardCards();
+    // 開著討論詳情頁。
+    store.getState().setBoardMode("roadmap");
+    store.getState().openDiscussion("topic-a");
+    store.getState().openBoard();
+    expectBoardCards();
+    // 規格頁。
+    store.getState().setBoardView("specs");
+    store.getState().openBoard();
+    expectBoardCards();
+    // 路線圖檢視。
+    store.getState().openRoadmap();
+    store.getState().openBoard();
+    expectBoardCards();
+  });
+
+  it("boardMode 不寫進 localStorage", async () => {
+    const store = storeWith(withTopicA());
+    await store.getState().refresh();
+    store.getState().setBoardMode("roadmap");
+    store.getState().setBoardView("specs");
+    store.getState().setBoardView("board");
+    store.getState().openDetail("desktop-shell-and-browser");
+    store.getState().closeDetailPage();
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)!;
+      expect(`${key}=${localStorage.getItem(key)}`).not.toMatch(/roadmap|boardMode/);
+    }
   });
 
   it("setDepends：成功後刷新清單，失敗以同一單槽 toast 呈現引擎訊息", async () => {
@@ -1278,6 +1420,10 @@ describe("app store (Zustand)", () => {
       (s) => s.detailChange?.name === "desktop-shell-and-browser",
     ],
     ["openDiscussion", (s) => s.openDiscussion("topic-a"), (s) => s.detailDiscussion?.slug === "topic-a"],
+    // 路線圖網址（desktop-roadmap）與開詳情的網址一樣收掉可取消浮層。
+    ["openRoadmap", (s) => s.openRoadmap(), (s) => s.boardMode === "roadmap"],
+    // 專案網址（desktop-app）同樣收掉可取消浮層，並固定回到卡片檢視。
+    ["openBoard", (s) => s.openBoard(), (s) => s.boardMode === "cards" && s.detailChange === null],
   ];
   describe.each(OPENERS)("open 動作清除可取消浮層：%s", (_name, open, drawerOpen) => {
     it.each<[string, Partial<AppState>]>([
@@ -3380,4 +3526,120 @@ it('無法讀取封存預覽時不執行一般確認、放棄或帶走工單',as
  expect(ds.runVerb).not.toHaveBeenCalled();
  expect(ds.discardReview).not.toHaveBeenCalled();
  expect(store.getState().pendingArchive).toBe('demo');
+});
+
+// speclink 網址（desktop-deep-link「專案一律走 openProjectAt，詳情等載入後再開」）：
+// 呼叫端靠回傳值知道是否進入了本機專案，再決定要不要開詳情頁。
+describe("openProjectAt 的回傳值", () => {
+  function storeWithProbe(openProject: WorkspaceAdapter["openProject"], ds = fakeDataSource()) {
+    return trackedAppStore({
+      createSession: (root, name) => fakeSession(ds, root, name),
+      workspace: fakeInstructionWorkspace({ openProject }),
+    });
+  }
+
+  it("探測為本機專案：整批載入完成後才 resolve，值為該分頁的 locator key", async () => {
+    const load = deferred<ChangeListPayload>();
+    const ds = fakeDataSource({ listChanges: vi.fn(() => load.promise) });
+    const store = storeWithProbe(vi.fn().mockResolvedValue({ status: "project", root: "B", name: "b" }), ds);
+    let settled = false;
+    const opening = store.getState().openProjectAt("B").then((key) => {
+      settled = true;
+      return key;
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.getState().activeKey).toBe("local:B");
+    expect(settled).toBe(false);
+    load.resolve(changeList([]));
+    expect(await opening).toBe("local:B");
+  });
+
+  it.each([
+    ["未初始化", { status: "uninitialized", dir: "C" }],
+    ["未啟用", { status: "unadopted", root: "C", needsImport: false }],
+  ])("探測為%s：回傳 null", async (_label, probe) => {
+    const store = storeWithProbe(vi.fn().mockResolvedValue(probe));
+    expect(await store.getState().openProjectAt("C")).toBeNull();
+  });
+
+  // Scenario「專案網址指向未初始化的資料夾」：確認框接手，主區維持原本的頁面。
+  it("探測為未初始化：開初始化確認框，主區維持原本的頁面", async () => {
+    const store = storeWithProbe(vi.fn().mockResolvedValue({ status: "uninitialized", dir: "C" }));
+    store.getState().setBoardView("specs");
+    await store.getState().openProjectAt("C");
+    expect(store.getState().pendingInit).toBe("C");
+    expect(store.getState().boardView).toBe("specs");
+  });
+
+  it("探測失敗：回傳 null", async () => {
+    const store = storeWithProbe(vi.fn().mockRejectedValue(new Error("gone")));
+    expect(await store.getState().openProjectAt("C")).toBeNull();
+  });
+
+  // 清單沒載進來時，呼叫端不得把空清單當成「找不到目標」。
+  it("整批載入失敗：回傳 null", async () => {
+    const ds = fakeDataSource({ listChanges: vi.fn().mockRejectedValue(new Error("io")) });
+    const store = storeWithProbe(vi.fn().mockResolvedValue({ status: "project", root: "B", name: "b" }), ds);
+    expect(await store.getState().openProjectAt("B")).toBeNull();
+    expect(store.getState().loadFailed).toBe(true);
+  });
+
+  // 回傳的 key 代表「現在可以拿這個專案的清單來用」：載入期間切走就不成立。
+  it("載入期間使用者切到別的分頁：回傳 null", async () => {
+    const load = deferred<ChangeListPayload>();
+    const ds = fakeDataSource({ listChanges: vi.fn(() => load.promise) });
+    const store = storeWithProbe(vi.fn().mockResolvedValue({ status: "project", root: "B", name: "b" }), ds);
+    const opening = store.getState().openProjectAt("B");
+    await new Promise((r) => setTimeout(r, 0));
+    store.setState({ activeKey: "local:A" });
+    load.resolve(changeList([]));
+    expect(await opening).toBeNull();
+  });
+
+  describe("帶 remote 標記（已登入、checkout 已有工具選集）", () => {
+    const MARKER = {
+      status: "remoteBinding",
+      url: "https://spec.example.test/api/speclink/v1/projects/demo",
+      repo: "backend",
+      hasLocalOpenspec: false,
+    };
+    function storeWithMarker() {
+      const connections = {
+        list: vi.fn().mockResolvedValue([
+          { id: "c1", origin: "https://spec.example.test", name: "Team", loggedIn: true },
+        ]),
+        inspectCheckout: vi.fn().mockResolvedValue({ root: "/work/backend", tools: ["claude"] }),
+        bindCheckout: vi.fn().mockResolvedValue("/work/backend"),
+      } as unknown as ConnectionsAdapter;
+      const openRemote = vi.fn().mockResolvedValue(remoteSession(fakeDataSource(), "backend"));
+      const store = trackedAppStore({
+        createSession: vi.fn() as never,
+        workspace: fakeInstructionWorkspace({ openProject: vi.fn().mockResolvedValue(MARKER) }),
+        connections,
+        openRemote,
+      });
+      return { store, connections, openRemote };
+    }
+
+    it("既有流程自動同步並開 remote 分頁：回傳 null", async () => {
+      const { store, connections, openRemote } = storeWithMarker();
+      expect(await store.getState().openProjectAt("/work/backend")).toBeNull();
+      expect(connections.bindCheckout).toHaveBeenCalled();
+      expect(openRemote).toHaveBeenCalled();
+    });
+
+    // speclink 網址入口：確認前零寫入，交給使用者在選擇器確認。
+    it("remoteViaChooser：改開選擇器（預選連線、scope 與 checkout），不同步、不連線，回傳 null", async () => {
+      const { store, connections, openRemote } = storeWithMarker();
+      expect(await store.getState().openProjectAt("/work/backend", { remoteViaChooser: true })).toBeNull();
+      expect(connections.inspectCheckout).not.toHaveBeenCalled();
+      expect(connections.bindCheckout).not.toHaveBeenCalled();
+      expect(openRemote).not.toHaveBeenCalled();
+      expect(store.getState().workspaceChooser).toEqual({
+        initialConnectionId: "c1",
+        initialScope: { projectKey: "demo", repoKey: "backend" },
+        initialCheckoutPath: "/work/backend",
+      });
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -92,6 +92,9 @@ interface KanbanBoardBaseProps {
   /** 全文搜尋不可用的說明（remote capability 缺口）：提供時搜尋輸入 disabled
    * 並以其文字為 tooltip（title）；缺席＝照常（本地不受影響）。 */
   searchUnavailableReason?: string;
+  /** 卡片檢視被藏起來（看板頁正顯示路線圖）時由宿主提供：搜尋快捷鍵與「搜尋看板」改呼叫它，
+   * 由宿主切回卡片再聚焦，不去聚焦藏起來的輸入。 */
+  onRevealSearch?: () => void;
   /** workspace 全文查詢命中（design D6）：命中卡片併入可見集合並呈 snippet 行。 */
   fulltextHits?: SearchHit[];
   /**
@@ -116,6 +119,9 @@ interface KanbanBoardBaseProps {
    * 缺席＝搜尋列照舊單獨一列。 */
   title?: string;
   description?: string;
+  /** 頁首的「看板｜路線圖」切換（宿主給 BoardViewSwitch）：放在頁首最右端、搜尋列之後——
+   * 路線圖的頁首只有這個切換，兩種檢視的切換才停在同一個位置。 */
+  viewSwitch?: ReactNode;
   /** 看板目前呈現順序（含搜尋與篩選；design D2）——詳情頁 ‹ n／m › 與 ⌥↑／⌥↓ 的序列。
    * 變更依欄序（提案中 → 進行中 → 已就緒）再依欄內順序；討論為上區全卡依序、其後接
    * 欄底「已轉出」細列（不論收合）。順序改變時才回報。 */
@@ -194,6 +200,17 @@ function SortableCard({
   );
 }
 
+/** 依賴成環的提示：看板的卡片檢視與路線圖共用同一個（含引擎的成環訊息）。 */
+export function PlanCycleNote({ planError }: { planError: string }) {
+  const { t } = useI18n();
+  return (
+    <div role="note" className={`rounded-md border px-3 py-2 text-xs ${SEMANTIC_SURFACE.warning} ${SEMANTIC_TONE.warning}`}>
+      {t("board.planCycle")}
+      {planError}
+    </div>
+  );
+}
+
 /**
  * 生命週期看板：討論（第 0 欄，傳入 discussions 時）＋提案中／進行中／已就緒
  * 三欄（彩色主題）；欄內拖排（onReorder 提供時）、拖曳時浮現封存落點。
@@ -211,6 +228,7 @@ export function KanbanBoard({
   onQuery,
   fulltextHits,
   searchUnavailableReason,
+  onRevealSearch,
   onReorder,
   reorderUnavailableReason,
   planError,
@@ -219,6 +237,7 @@ export function KanbanBoard({
   loadFailed,
   title,
   description,
+  viewSwitch,
   onVisibleOrderChange,
   ...promotedExpansion
 }: KanbanBoardProps) {
@@ -359,6 +378,7 @@ export function KanbanBoard({
       query={query}
       onQuery={onQuery}
       disabledReason={searchUnavailableReason}
+      onReveal={onRevealSearch}
       hitCount={visibleChanges.length + (visibleDiscussions?.length ?? 0)}
       filtersOpen={filtersOpen}
       onToggleFilters={() => setFiltersOpen((v) => !v)}
@@ -446,6 +466,14 @@ export function KanbanBoard({
     </BoardSearchBar>
   );
 
+  const headerActions =
+    viewSwitch || searchBar ? (
+      <>
+        {searchBar}
+        {viewSwitch}
+      </>
+    ) : undefined;
+
   return (
     <DndContext
       sensors={sensors}
@@ -465,23 +493,11 @@ export function KanbanBoard({
           {reorderUnavailableReason}
         </div>
       )}
-      {planError && (
-        <div
-          role="note"
-          className={`rounded-md border px-3 py-2 text-xs ${SEMANTIC_SURFACE.warning} ${SEMANTIC_TONE.warning}`}
-        >
-          {t("board.planCycle")}
-          {planError}
-        </div>
-      )}
+      {planError && <PlanCycleNote planError={planError} />}
       {title ? (
-        <PageHeader
-          title={title}
-          description={description}
-          actions={searchBar}
-        />
+        <PageHeader title={title} description={description} actions={headerActions} />
       ) : (
-        searchBar
+        headerActions
       )}
       {/* relative wrapper 供封存落點浮層錨定於「可視」右緣（design D8）——浮層
           在捲動容器之外、不進 flex 流，欄寬零變動且不隨水平捲動漂移。 */}

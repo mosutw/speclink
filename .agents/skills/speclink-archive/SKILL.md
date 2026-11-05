@@ -5,8 +5,14 @@ license: MIT
 compatibility: Requires speclink CLI.
 metadata:
   author: speclink
-  version: "v1.53.1"
+  version: "v1.54.0"
   generatedBy: "Speclink"
+---
+
+## Shared Codex / Antigravity skills
+
+This file is shared by Codex and Antigravity. Skill names such as `speclink-apply` refer to harness skills, not CLI subcommands: invoke `$speclink-<skill>` in Codex and `/speclink-<skill>` in Antigravity. Run actual `speclink <verb>` CLI examples unchanged. Before executing any `--agent <current-agent>` example, replace `<current-agent>` with `codex` in Codex or `antigravity` in Antigravity; never execute the literal placeholder or attribute work to the other harness. Use the current harness's available question/input tools; when unavailable, ask in plain text and wait.
+
 ---
 
 **Conversation language**: write to the user in the language they use with you — progress updates, questions, and summaries. This skill is written in English, and its example messages show structure, not language: translate their prose, and keep commands, file paths, code, and fixed tokens (severity labels, status words) as they are. When a step sets the language of its own output — a document, a report, or the way it presents results and asks about them (for example through `locale`) — that step decides for that output. When you edit a document that already exists and no step sets its language, keep the language it is written in. When you run in a forked context that cannot see the conversation, use the language of the request you were given.
@@ -15,17 +21,17 @@ Archive a completed change.
 
 **Security acceptance and check records**
 
-Read `speclink security review show "<name>" --json` when security is enabled. Effective required mode is security_verification.enabled && required_for_acceptance; in reference mode security findings add no archive blocker. In required mode, missing/stale deep reports, necessary unverified checks and unresolved CRITICAL/HIGH/MEDIUM must be settled through the shared Host verdict. Hand off to `$speclink-security-review` when deep evidence is needed. Do not replace it with a basic scan, choose risk acceptance for the user, change policy or bypass security through carry/--no-validate/ordinary --accept. Preserve existing open-ticket/stale-stamp gates.
+Read `speclink security review show "<name>" --json` when security is enabled. Effective required mode is security_verification.enabled && required_for_acceptance; in reference mode security findings add no archive blocker. In required mode, missing/stale deep reports, necessary unverified checks and unresolved CRITICAL/HIGH/MEDIUM must be settled through the shared Host verdict. Hand off to `speclink-security-review` when deep evidence is needed. Do not replace it with a basic scan, choose risk acceptance for the user, change policy or bypass security through carry/--no-validate/ordinary --accept. Preserve existing open-ticket/stale-stamp gates.
 
 Completed review/verify/security history always remains in the active proposal after stamps. At archive, check_records.archive.review/verify/security (all default true) controls which full records travel to the archive. Do not delete active records beforehand or rewrite historical findings. Required mode retains a minimal acceptance receipt even when full security reports are omitted; it is an acceptance basis, not the complete evidence. Report the actual retention/omission result. Failed archive means no claimed completion or manual cleanup of recovery backups.
 
-**Input**: Optionally specify a change name after `$speclink-archive` (e.g., `$speclink-archive add-auth`). If omitted, check if it can be inferred from conversation context; if it is still vague or ambiguous, step 1 asks the user.
+**Input**: Optionally specify a change name after `speclink-archive` (e.g., `speclink-archive add-auth`). If omitted, check if it can be inferred from conversation context; if it is still vague or ambiguous, step 1 asks the user.
 
 **Prerequisites**: This skill requires the `speclink` CLI. If any `speclink` command fails with "command not found" or similar, report the error and STOP.
 
 **Asking the user**: ask with the **AskUserQuestion tool**; when that tool is not available, ask the same question with the same options as plain text and wait for the user's response.
 
-**Where to run it**: archiving runs in the **main checkout**. Inside a linked worktree on a `speclink/` branch the engine refuses the archive outright — the unarchive backup would land in the worktree's gitignored `.speclink/snapshots/` and vanish with the worktree, and deltas would merge onto the branch point's stale canon. If you are in a worktree, wrap it up with the `$speclink-worktree-merge` skill first, then archive from the main checkout.
+**Where to run it**: archiving runs in the **main checkout**. Inside a linked worktree on a `speclink/` branch the engine refuses the archive outright — the unarchive backup would land in the worktree's gitignored `.speclink/snapshots/` and vanish with the worktree, and deltas would merge onto the branch point's stale canon. If you are in a worktree, wrap it up with the `speclink-worktree-merge` skill first, then archive from the main checkout.
 
 **Steps**
 
@@ -72,7 +78,7 @@ Completed review/verify/security history always remains in the active proposal a
 
    - `archiveAfter` is non-empty:
 
-     > plan 建議先封存 <archiveAfter 的名稱>；它們封存後，重讀本 change 對同名 requirement 的 MODIFIED／REMOVED／RENAMED 區塊、對照正式規格重寫（走 `$speclink-ingest`）再封存 <name>。重疊的 requirement：<requirementOverlap 裡對應那些 change 的 capability › requirement>。
+     > plan 建議先封存 <archiveAfter 的名稱>；它們封存後，重讀本 change 對同名 requirement 的 MODIFIED／REMOVED／RENAMED 區塊、對照正式規格重寫（走 `speclink-ingest`）再封存 <name>。重疊的 requirement：<requirementOverlap 裡對應那些 change 的 capability › requirement>。
 
    - `requirementOverlap` holds an entry whose `conflict` is true:
 
@@ -127,7 +133,7 @@ Completed review/verify/security history always remains in the active proposal a
      - merge the omitted canonical content into each MODIFIED requirement so it reads as the complete final state, or declare the drop with `<!-- REMOVED-SCENARIO: … -->`
      - drop or retarget each pre-existing ADDED requirement (a requirement the canon already carries is edited via MODIFIED, not re-added)
      - do NOT edit the main specs — only the delta files change
-   - "Refresh from the codebase": run `$speclink-drift <name>` to see what moved, then `$speclink-ingest <name>` to update the delta — the route the refusal message itself points at
+   - "Refresh from the codebase": run `speclink-drift <name>` to see what moved, then `speclink-ingest <name>` to update the delta — the route the refusal message itself points at
    - "Cancel"
 
    After fixing, show a brief diff summary of the rewritten delta files, then continue.
@@ -157,7 +163,7 @@ Completed review/verify/security history always remains in the active proposal a
 
    **If the merge gate refuses**, the error lists every offending operation
    (capability / operation / requirement / reason) at once. Fix them in one round on the
-   delta files — `speclink drift <name>` shows what moved, `$speclink-ingest <name>`
+   delta files — `speclink drift <name>` shows what moved, `speclink-ingest <name>`
    updates the delta — then re-run the archive. `--no-validate` does not unlock the gate;
    `--skip-specs` skips spec application entirely.
 
@@ -174,7 +180,7 @@ Completed review/verify/security history always remains in the active proposal a
    It is a note, not a refusal — nothing to waive, no flag to pass, exit code unchanged. A
    spec-only or docs-only change earns no code evidence by construction, so the note is
    expected there. Anywhere else, read it as a prompt to check whether the work actually
-   went through `$speclink-apply` before archiving.
+   went through `speclink-apply` before archiving.
 
 6. **Display summary**
 
@@ -309,38 +315,38 @@ up, nothing to delete.
 ## After the archive
 
 Every archive — whichever path led here: straight from apply, after a review or verify
-stamp, after `$speclink-quality`, or following `$speclink-worktree-merge` — leaves
+stamp, after `speclink-quality`, or following `speclink-worktree-merge` — leaves
 uncommitted working-tree changes: the deltas merged into the canonical specs and the
 change directory moved into the archive. Close by reminding the user to commit them
-with a plain git commit — the change-scoped `$speclink-commit` flow does not apply
+with a plain git commit — the change-scoped `speclink-commit` flow does not apply
 after the archive (its file selection reads the change directory that has just moved).
 This is a reminder only — never run the commit yourself.
 
 When the workspace has a `openspec/manual/` directory, add one more line to that
-reminder: the manual may be stale now, and `$speclink-manual` will report which pages
+reminder: the manual may be stale now, and `speclink-manual` will report which pages
 this archive's spec changes outdated. The condition is the directory's existence only —
 do not work out which specs this archive touched, and do not judge whether the manual
 is actually stale; that is the manual skill's report. This too is a reminder only —
-never run `$speclink-manual` yourself.
+never run `speclink-manual` yourself.
 
 When the plan order hint noted changes that list `<name>` in their `archiveAfter`, add
 one more line:
 
-> <那些 change 的名稱> 要在 <name> 之後封存，並動到同名的 requirement：先重讀它們對同名 requirement 的 MODIFIED／REMOVED／RENAMED 區塊、對照正式規格重寫（走 `$speclink-ingest`），再封存它們。
+> <那些 change 的名稱> 要在 <name> 之後封存，並動到同名的 requirement：先重讀它們對同名 requirement 的 MODIFIED／REMOVED／RENAMED 區塊、對照正式規格重寫（走 `speclink-ingest`），再封存它們。
 
 This too is a reminder only — never run the ingest yourself.
 
 Then run `speclink plan --json` and hand the user the next change to start. When `next`
 is non-null, add one more line:
 
-> plan 的下一個可開工：<next>，執行 `$speclink-apply <next>`。
+> plan 的下一個可開工：<next>，執行 `speclink-apply <next>`。
 
 When the effective worktree policy is on (`speclink workflow-config show --json` →
 `worktree`; a `SPECLINK_WORKTREE` env override wins) and `changes` holds two or more
 entries with `wave` 1 and `stage` `proposed` (wave 1 waits on nothing, so their
 `blockedBy` is empty), also list them as parallel-safe:
 
-> 第 1 波可並行：<name-a>、<name-b>，各開一個 session 走 `$speclink-apply-with-worktree <name>`。
+> 第 1 波可並行：<name-a>、<name-b>，各開一個 session 走 `speclink-apply-with-worktree <name>`。
 
 Policy off, or only one such change → name `next` alone. A null `next`, or a `plan`
 failure (a dependency cycle) → say nothing about ordering. This too is a reminder only —

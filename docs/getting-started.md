@@ -94,7 +94,7 @@ Generated files for: claude, codex
 This step does three things:
 
 - It creates `openspec/` and `.speclink.yaml`.
-- It writes skill files for the tools that you select: `.claude/skills/` for Claude, `.agents/skills/` for Codex, `.github/skills/` for GitHub Copilot, and `.agent/skills/` for Antigravity.
+- It writes skill files for the tools that you select: `.claude/skills/` for Claude, `.agents/skills/` for Codex, `.github/skills/` for GitHub Copilot, and `.agents/skills/` for Antigravity.
 - It adds `.speclink/` (local work data) to `.gitignore`.
 
 It does not change your `CLAUDE.md`, `AGENTS.md`, or `.github/copilot-instructions.md`. The agent reads the description in each skill file to choose the right skill.

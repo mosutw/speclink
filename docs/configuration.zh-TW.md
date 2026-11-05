@@ -165,12 +165,11 @@ cat CONTEXT.md | speclink workflow-config context --stdin
 | `claude` | `.claude/skills/` |
 | `codex`（`agents` 是它的別名） | `.agents/skills/` |
 | `copilot` | `.github/skills/` |
-| `antigravity` | `.agent/skills/` |
+| `antigravity` | `.agents/skills/` |
 
-Desktop 選項會在名稱後顯示根目錄，例如 `claude [.claude]`、`codex [.agents]`、`copilot [.github]`、`antigravity [.agent]`，儲存值仍是工具名。
+Desktop 選項會在名稱後顯示根目錄，例如 `claude [.claude]`、`codex [.agents]`、`copilot [.github]`、`antigravity [.agents]`，儲存值仍是工具名。
 
-[Antigravity 官方](https://antigravity.google/docs/skills)目前預設 `.agents/skills`，並仍支援 `.agent/skills`。Speclink 採後者，讓它與 Codex 的技能內容各自保存。取消 Antigravity 只移除受管的 `speclink-*` 技能，保留自有技能及 `.agent` 其他檔案。既有自訂描述子若撞名 `antigravity` 或撞目錄 `.agent/skills`，須改名／改目錄，或明確改選內建工具；不會靜默覆寫。
-| 自訂工具描述子 | 描述子的 `skills_dir` |
+Antigravity 與 Codex 共用 `.agents/skills/` 的同一份技能。前言說明兩種工具的呼叫方式與執行前要填入的工具身分；取消其中一種時保留另一種仍需的技能。更新會在新位置生成成功後，清理舊 `.agent/skills/` 的受管 `speclink-*`，保留自有技能、規則及其他檔案，不跟隨連結清理。舊路徑仍保留供升級，自訂描述子不能佔用 `.agent/skills` 或 `.agents/skills`；撞名 `antigravity` 時須改名或明確改選內建工具，不會靜默覆寫。
 
 GitHub Copilot 也會讀 `.claude/skills/` 與 `.agents/skills/`，但它先讀 `.github/skills/`。所以選了 `copilot`，Copilot 用的就是寫給它的那一份。
 

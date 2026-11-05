@@ -4,13 +4,13 @@ use crate::config::{CustomTool, ToolEntry};
 use crate::skills::{self, Tool};
 use crate::util;
 use crate::workspace::{resolve_spec_dir, DEFAULT_SPEC_DIR, LEGACY_SPEC_DIR};
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 /// 產物層的唯一版號：技能檔 frontmatter 的 version 同源於此，也是過期探測與
 /// 降級守門的比對基準。僅在內嵌資產（assets/skills）的 render 內容變動時遞增——
 /// 與 app／CLI 的發版號無關；`assets.lock` 鎖定測試把這條紀律變成紅燈。
-pub const ASSET_VERSION: &str = "v1.53.1";
+pub const ASSET_VERSION: &str = "v1.54.0";
 
 const APP_CONFIG_TEMPLATE: &str = concat!(
     "# Speclink application config
@@ -331,7 +331,7 @@ pub(crate) fn managed_skills(
 #[derive(Debug)]
 pub(crate) struct SyncTarget {
     /// The name that appears in [`UpdateOutcome`]'s lists and the CLI output.
-    pub(crate) label: String,
+    pub(crate) labels: Vec<String>,
     /// Project-root-relative skills directory, `/`-joined (`.claude/skills`,
     /// a descriptor's `skills_dir`) — the form the probe reports paths in.
     pub(crate) skills_dir: String,
@@ -353,6 +353,7 @@ pub(crate) struct SyncTarget {
 /// - `guard` has exactly one bypass, `update`'s explicit `--allow-downgrade`; every other
 ///   regeneration path calls it.
 pub(crate) struct SyncPlan {
+    root: PathBuf,
     /// Ordered claude, codex, copilot, antigravity, then descriptors in list order.
     pub(crate) targets: Vec<SyncTarget>,
     /// Built-ins that are NOT selected and lose their footprint. Empty on the legacy
@@ -368,11 +369,15 @@ impl SyncPlan {
     /// Build the plan. This is the ONE place a sync reads the worktree policy.
     pub(crate) fn resolve(root: &Path, selection: ToolSelection, spec_dir: &str) -> SyncPlan {
         let worktree_on = worktree_skills_enabled(root, spec_dir);
-        let mut targets = Vec::new();
+        let mut targets: Vec<SyncTarget> = Vec::new();
         for tool in Tool::ALL {
             if selection.builtins.contains(&tool) {
+                if let Some(target) = targets.iter_mut().find(|t| t.skills_dir == tool.skills_dir()) {
+                    target.labels.push(tool.name().to_string());
+                    continue;
+                }
                 targets.push(SyncTarget {
-                    label: tool.name().to_string(),
+                    labels: vec![tool.name().to_string()],
                     skills_dir: tool.skills_dir().to_string(),
                     skills_root: root.join(tool.skills_dir()),
                     files: managed_skills(
@@ -388,7 +393,7 @@ impl SyncPlan {
             // `skills_dir` 已在 `ToolDescriptor::validate` 正規化（削結尾分隔符、
             // 拒絕削完等於專案根或撞上內建目錄者），這裡直接信任欄位。
             targets.push(SyncTarget {
-                label: custom.name.clone(),
+                labels: vec![custom.name.clone()],
                 skills_dir: custom.skills_dir.clone(),
                 skills_root: root.join(&custom.skills_dir),
                 files: managed_skills(
@@ -416,6 +421,7 @@ impl SyncPlan {
                 .collect()
         };
         SyncPlan {
+            root: root.to_path_buf(),
             targets,
             deselected_builtins,
             custom_strip_targets,
@@ -426,7 +432,9 @@ impl SyncPlan {
     /// Downgrade guard: refuse when any target's skills directory leads this engine.
     /// The checked set IS the write set.
     pub(crate) fn guard(&self) -> Result<()> {
-        let dirs: Vec<PathBuf> = self.targets.iter().map(|t| t.skills_root.clone()).collect();
+        let mut dirs: Vec<PathBuf> = self.targets.iter().map(|t| t.skills_root.clone()).collect();
+        let legacy = self.root.join(".agent/skills");
+        if !linked_within(&self.root, &legacy) { dirs.push(legacy); }
         refuse_downgrade(&dirs)
     }
 
@@ -475,6 +483,16 @@ impl SyncPlan {
             migrated: crate::migrate::MigrationReport::default(),
         };
 
+        for target in &self.targets {
+            if target.skills_dir == ".agents/skills" {
+                for path in std::iter::once(target.skills_root.clone()).chain(
+                    target.files.iter().map(|(dir, _)| target.skills_root.join(dir).join("SKILL.md")),
+                ) {
+                    anyhow::ensure!(!linked_within(root, &path), "refusing linked skills destination: {}", path.display());
+                }
+            }
+        }
+
         // 1. 遺留剝除——內建工具唯一的剝除點（prune_tool 只清技能足跡）。
         for rel in Tool::ALL.into_iter().filter_map(instructions_path) {
             if strip_legacy_marker(&root.join(rel))? {
@@ -511,15 +529,39 @@ impl SyncPlan {
             }
             let expected: Vec<String> = target.files.iter().map(|(dir, _)| dir.clone()).collect();
             prune_orphan_skills(&target.skills_root, &expected)?;
-            out.updated.push(target.label.clone());
         }
+        out.updated = Tool::ALL.into_iter()
+            .filter(|tool| self.selection.builtins.contains(tool))
+            .map(|tool| tool.name().to_string())
+            .chain(self.selection.customs.iter().map(|tool| tool.name.clone()))
+            .collect();
 
         for tool in &self.deselected_builtins {
+            if self.targets.iter().any(|target| target.skills_dir == tool.skills_dir()) {
+                continue;
+            }
             if prune_tool(root, *tool)? {
                 out.pruned.push(tool.name().to_string());
             }
         }
 
+        let legacy = root.join(".agent/skills");
+        if linked_within(root, &legacy) {
+            out.notes.push(format!("Skipped linked legacy skills directory: {}", legacy.display()));
+        } else {
+            if let Ok(entries) = std::fs::read_dir(&legacy) {
+                for entry in entries.flatten() {
+                    if entry.file_name().to_string_lossy().starts_with("speclink-")
+                        && entry.path().symlink_metadata().is_ok_and(|m| linked_metadata(&m))
+                    {
+                        out.notes.push(format!("Skipped linked legacy skill: {}", entry.path().display()));
+                    }
+                }
+            }
+            if prune_footprint(&legacy, None)? {
+                out.notes.push("Removed legacy Antigravity skills from .agent/skills; active skills use .agents/skills.".into());
+            }
+        }
         out.pruned.extend(pruned_customs);
         save_custom_state(root, &self.selection.customs)?;
 
@@ -926,11 +968,33 @@ fn prune_orphan_skills(skills_root: &Path, expected: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn linked_metadata(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    { metadata.file_type().is_symlink() }
+}
+
+fn linked_within(root: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(root) else { return true; };
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        if current.symlink_metadata().is_ok_and(|m| linked_metadata(&m)) { return true; }
+    }
+    false
+}
+
 /// Remove the generated artifacts of a deselected built-in tool.
 fn prune_tool(root: &Path, tool: Tool) -> Result<bool> {
     // 指令檔的遺留剝除已由 update() 對有指令檔的內建工具無條件跑過（選取與否都剝），
     // 這裡只清技能足跡——同一檔案不需要第二個剝除點。
-    prune_footprint(&root.join(tool.skills_dir()), None)
+    let path = root.join(tool.skills_dir());
+    if linked_within(root, &path) { return Ok(false); }
+    prune_footprint(&path, None)
 }
 
 /// Remove a generated footprint: speclink-* skill directories and any legacy SPECLINK
@@ -940,13 +1004,21 @@ fn prune_footprint(skills_root: &Path, md: Option<&Path>) -> Result<bool> {
     // A symlinked skills dir points at another tool's files (e.g. `.github/skills` →
     // `.claude/skills`): pruning through it would delete what that tool just wrote.
     let symlinked =
-        std::fs::symlink_metadata(skills_root).is_ok_and(|m| m.file_type().is_symlink());
+        std::fs::symlink_metadata(skills_root).is_ok_and(|m| linked_metadata(&m));
     if !symlinked {
-        if let Ok(entries) = std::fs::read_dir(skills_root) {
-            for entry in entries.flatten() {
+        let entries = match std::fs::read_dir(skills_root) {
+            Ok(entries) => Some(entries),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error).with_context(|| format!("failed to read managed skills directory {}", skills_root.display())),
+        };
+        if let Some(entries) = entries {
+            for entry in entries {
+                let entry = entry.with_context(|| format!("failed to read managed skills directory {}", skills_root.display()))?;
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("speclink-") && entry.path().is_dir() {
-                    std::fs::remove_dir_all(entry.path())?;
+                if name.starts_with("speclink-") && entry.file_type()?.is_dir()
+                    && !linked_metadata(&entry.metadata()?) {
+                    std::fs::remove_dir_all(entry.path())
+                        .with_context(|| format!("failed to remove managed skill {}", entry.path().display()))?;
                     removed = true;
                 }
             }
@@ -1286,13 +1358,13 @@ pub fn probe_assets(root: &Path) -> AssetProbe {
     for target in &plan.targets {
         let version = match probe_skills_dir(&target.skills_root) {
             SkillsProbe::Absent => {
-                tools.push(ToolAssetState {
-                    tool: target.label.clone(),
+                tools.extend(target.labels.iter().map(|label| ToolAssetState {
+                    tool: label.clone(),
                     workspace_version: None,
                     stale: false,
                     newer: false,
                     missing: true,
-                });
+                }));
                 continue;
             }
             // 技能檔在但讀不出版號（IO、壞 frontmatter）＝無法判定；
@@ -1302,13 +1374,13 @@ pub fn probe_assets(root: &Path) -> AssetProbe {
         };
         // 方向優先於相等判定：領先現版的版號是「較新」，不得再算成過期。
         let newer = workspace_is_newer(&version, ASSET_VERSION);
-        tools.push(ToolAssetState {
-            tool: target.label.clone(),
+        tools.extend(target.labels.iter().map(|label| ToolAssetState {
+            tool: label.clone(),
             stale: !newer && version != ASSET_VERSION,
             newer,
             missing: false,
-            workspace_version: Some(version),
-        });
+            workspace_version: Some(version.clone()),
+        }));
     }
 
     let status = if tools.iter().any(|t| t.newer) {
