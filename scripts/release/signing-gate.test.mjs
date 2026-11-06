@@ -1,6 +1,7 @@
 // OS 簽章 secrets 閘門的單元測試（desktop-release spec「OS 程式碼簽章為可插鑰匙開關」，
 // design D1）。以子行程執行 scripts/release/signing-gate.mjs，模擬三種 secrets 組合：
-// 全無（跳過簽章、綠燈）、全有（啟用對應路徑）、缺一（fail-closed 並點名缺項）。
+// 全無（macOS 由共用打包設定套 ad-hoc、Windows 保留平台現況）、全有（啟用對應路徑）、
+// 缺一（fail-closed 並點名缺項）。
 //
 // 閘門只讀「是否非空」，永不輸出 secret 值——洩漏面由專門案例守住。
 import assert from 'node:assert/strict';

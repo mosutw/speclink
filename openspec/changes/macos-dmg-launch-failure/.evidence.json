@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "change": "macos-dmg-launch-failure",
+  "touched": [
+    {
+      "task_id": "3",
+      "task_desc": "1.2 依 D5「文件與回歸邊界」排查同類位置：rg 搜尋 signingIdentity、SPECLINK_MACOS_SIGNING、codesign、notariz、Gatekeeper、簽章及公證；盤點 .github/workflows/release.yml、.github/workflows/desktop-build.yml、scripts/release/signing-gate.mjs、scripts/desktop/desktop-sidecar.mjs、scripts/desktop/desktop-install.mjs、README.md、README.zh-TW.md、docs/development.md、docs/development.zh-TW.md。驗證：在 docs/development/macos-dmg-launch-investigation.md 逐項寫明採修或保留理由，標明本機安裝既有簽章前置不改、updater 與發佈通路不擴大。",
+      "files": [
+        "docs/development/macos-dmg-launch-investigation.md"
+      ]
+    }
+  ],
+  "entries": [
+    {
+      "taskId": "tsk_01M6RJJBGGJ9KE2JCZHZYJVGJ0",
+      "taskDesc": "1.2 依 D5「文件與回歸邊界」排查同類位置：rg 搜尋 signingIdentity、SPECLINK_MACOS_SIGNING、codesign、notariz、Gatekeeper、簽章及公證；盤點 .github/workflows/release.yml、.github/workflows/desktop-build.yml、scripts/release/signing-gate.mjs、scripts/desktop/desktop-sidecar.mjs、scripts/desktop/desktop-install.mjs、README.md、README.zh-TW.md、docs/development.md、docs/development.zh-TW.md。驗證：在 docs/development/macos-dmg-launch-investigation.md 逐項寫明採修或保留理由，標明本機安裝既有簽章前置不改、updater 與發佈通路不擴大。",
+      "actor": "mosutw <luke1974@gmail.com>",
+      "repo": "main",
+      "headCommit": "fccf5c2d74722b65a7a849ec90a4828ec09d7255",
+      "touchedFiles": [
+        "docs/development/macos-dmg-launch-investigation.md"
+      ],
+      "recordedAt": "2026-11-06T14:41:23Z"
+    }
+  ]
+}

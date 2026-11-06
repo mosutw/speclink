@@ -111,13 +111,9 @@ jobs:
 
       - name: Prepare self-use bundle config and build information
         run: |
+          node scripts/release/desktop-bundle-config.mjs desktop-build > "$RUNNER_TEMP/desktop-build-config.json"
           node <<'NODE'
-          const { readFileSync, writeFileSync } = require('node:fs');
-          const config = { bundle: { createUpdaterArtifacts: false } };
-          if (process.platform === 'darwin') {
-            config.bundle.macOS = { signingIdentity: '-' };
-          }
-          writeFileSync('desktop-build-config.json', JSON.stringify(config));
+          const { readFileSync } = require('node:fs');
           const app = JSON.parse(readFileSync('apps/desktop/src-tauri/tauri.conf.json', 'utf8'));
           console.log([
             `Repository: ${process.env.GITHUB_REPOSITORY}`,
@@ -132,7 +128,21 @@ jobs:
           npm run -w apps/desktop tauri -- build
           --target ${{ matrix.target }}
           --bundles ${{ matrix.bundles }}
-          --config "$GITHUB_WORKSPACE/desktop-build-config.json"
+          --config "$RUNNER_TEMP/desktop-build-config.json"
+
+      - name: Verify macOS app and DMG
+        if: runner.os == 'macOS'
+        run: |
+          DMG=(target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          if [ "${#DMG[@]}" -ne 1 ]; then
+            echo "::error::預期恰有一個 macOS DMG，找到 ${#DMG[@]} 個"
+            exit 1
+          fi
+          node scripts/release/macos-artifact-verify.mjs \
+            --app "target/${{ matrix.target }}/release/bundle/macos/Speclink.app" \
+            --dmg "${DMG[0]}" \
+            --mode none \
+            --channel desktop-build
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

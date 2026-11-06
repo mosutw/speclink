@@ -50,7 +50,7 @@ if (partial.length > 0) {
   for (const { group, result } of partial) {
     console.error(
       `::error::簽章組「${group.label}」設定不完整，缺少：${result.missing.join('、')}` +
-        '——請補齊該組全部 secrets，或整組移除以產出未簽章安裝檔',
+        '——請補齊該組全部 secrets，或整組移除以使用無發行者憑證路徑',
     );
   }
   process.exit(1);

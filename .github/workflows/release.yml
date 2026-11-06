@@ -9,8 +9,8 @@
 # Desktop signing (design D3/D4):
 #   - Updater packages are minisign-signed with TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)
 #     secrets — REQUIRED; the desktop build fails closed without them.
-#   - OS code signing (Apple/Windows) is env-gated: the corresponding steps run only
-#     when their secrets exist. No secrets → unsigned installers, workflow stays green.
+#   - Apple code signing uses Developer ID + notarization when all secrets are present;
+#     otherwise macOS bundles use full ad-hoc signing. Windows remains env-gated.
 #
 # Usage:
 #   執行 /release 技能（.claude/skills/release/SKILL.md）：守門、版號、更新日誌、寫檔、
@@ -33,7 +33,29 @@ env:
   REGISTRY_IMAGE: ghcr.io/mosutw/speclink-server
 
 jobs:
+  # 正式 v* Release 也沿用 Desktop Build 的同 SHA CI gate；任何建置、上傳或發布
+  # 都等預設分支上這個 commit 的 push CI 成功後才開始。
+  ci-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Wait for successful CI on the same commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node scripts/desktop/desktop-ci-gate.mjs
+
   build:
+    needs: [ci-gate]
     strategy:
       fail-fast: false
       matrix:
@@ -149,6 +171,7 @@ jobs:
   #     更新包本體補進 Release assets、.sig 留在 job 內——簽章內容已內嵌 latest.json；
   #     Windows／AppImage 的更新包即安裝檔本身，重複上傳換取組裝契約單純）
   desktop:
+    needs: [ci-gate]
     strategy:
       fail-fast: false
       matrix:
@@ -265,6 +288,9 @@ jobs:
       - name: Stage CLI sidecar
         run: node scripts/desktop/desktop-sidecar.mjs --target ${{ matrix.target }}
 
+      - name: Prepare desktop bundle config
+        run: node scripts/release/desktop-bundle-config.mjs release > "$RUNNER_TEMP/desktop-release-config.json"
+
       # OS 簽章開關（design D1／D4）：條件來自上方閘門的決策，填鑰匙即啟用、
       # 無須改管線。macOS 六項一次注入——憑證三項讓 Tauri 簽章，公證三項讓它在
       # 簽章後送 Apple 公證並 staple 票證；少了公證，簽過的 app 一樣被 Gatekeeper 攔。
@@ -298,7 +324,27 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run -w apps/desktop tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        run: >-
+          npm run -w apps/desktop tauri -- build
+          --target ${{ matrix.target }}
+          --bundles ${{ matrix.bundles }}
+          --config "$RUNNER_TEMP/desktop-release-config.json"
+
+      - name: Verify macOS app, DMG, and updater
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          DMG=(target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          if [ "${#DMG[@]}" -ne 1 ]; then
+            echo "::error::預期恰有一個 macOS DMG，找到 ${#DMG[@]} 個"
+            exit 1
+          fi
+          node scripts/release/macos-artifact-verify.mjs \
+            --app "target/${{ matrix.target }}/release/bundle/macos/Speclink.app" \
+            --dmg "${DMG[0]}" \
+            --mode "$SPECLINK_MACOS_SIGNING" \
+            --channel release \
+            --updater "target/${{ matrix.target }}/release/bundle/macos/Speclink.app.tar.gz"
 
       # Windows portable ZIP（desktop-release spec）：安裝器之外，另提供可解壓使用的版本。
       # 內容與獨立 Desktop Build 流程相同，並檢查 CLI 設定會跟著資料夾搬移。
@@ -387,6 +433,7 @@ jobs:
   # （零 QEMU——模擬下的 Rust 編譯單跑逾 35 分鐘且是 SIGILL flaky 的根源），
   # push by digest 不打 tag；tag 由 docker-manifest 合併 job 統一打。
   docker:
+    needs: [ci-gate]
     strategy:
       fail-fast: false
       matrix:
@@ -622,6 +669,7 @@ jobs:
   # 同時前置把關版號格式：蓋章腳本只收 X.Y.Z，若留到 pack job 才擋，prerelease
   # tag 會白跑完五平台 matrix 才紅燈——而那種 tag 在 engine 上通路前是全綠的。
   engine-version:
+    needs: [ci-gate]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.strip.outputs.version }}

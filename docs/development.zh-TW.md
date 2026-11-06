@@ -2,7 +2,7 @@
 
 **繁體中文** · [English](development.md)
 
-這份文件給 clone 原始碼的開發者。它說明 repo 根目錄的五個一鍵入口、怎麼跑測試、repo 的結構，最後附上下載安裝檔時的未簽章放行步驟。
+這份文件給 clone 原始碼的開發者。它說明 repo 根目錄的五個一鍵入口、怎麼跑測試、repo 結構，最後說明下載安裝檔的首次啟動方式。
 
 只想在 checkout 之外自架 server，不需要這份文件：用 `npx @speclink/server`，見 [Remote 入門](remote-getting-started.zh-TW.md)。
 
@@ -192,17 +192,17 @@ git push origin desktop-v0.9.0
 
 此流程使用 GitHub 內建的 `GITHUB_TOKEN`，只有發布工作取得 `contents: write`，不需另外設定私鑰。macOS 使用 ad-hoc 簽章，Windows 未使用發行者憑證；安裝方式見下節。此發布通道沒有簽章更新包與 `latest.json`，請手動下載更新。App 更新網址已指向 origin 的 Latest Release，但此桌面通道不提供簽章更新清單；Fork 自動更新仍需補齊與公鑰相符的更新包及 manifest。
 
-`desktop-v*` 不觸發原本 `v*` 的完整 Release，也不發布 npm 或 Docker；桌面 Release 不取代儲存庫既有的 Latest Release。原本的簽章發布流程維持不變。
+`desktop-v*` 不觸發完整的 `v*` Release，也不發布 npm 或 Docker；桌面 Release 不取代儲存庫既有的 Latest Release。`v*` Release 保留既有資產與 updater 通路，現在會先等同 commit CI 通過，並在上傳前檢查 macOS 打包內容。
 
 一般 CI 與 Desktop Build 是兩個工作流程。push 或 PR 若只有明確列出的桌面發布設定、版號／CI 範圍腳本、相應測試與文件變更，只執行 `Workflow and scripts checks`，不啟動應用程式建置、smoke、React／Rust 測試、Docker 或 PostgreSQL。混入程式碼、相依套件或未列出的檔案時，仍跑原有完整 CI；無法判斷範圍時也跑完整 CI。桌面 Tag 本身仍會執行真正的四平台打包。
 
-## <a id="unsigned"></a>下載安裝檔的未簽章放行
+## <a id="unsigned"></a>允許下載安裝檔首次啟動
 
 桌面安裝檔都在 [Releases](https://github.com/MomoChenisMe/speclink/releases/latest)：
 
-| 平台 | 檔名 | 要不要放行 |
+| 平台 | 檔名 | 首次啟動 |
 | --- | --- | --- |
-| macOS（Apple Silicon 與 Intel 同一檔） | `Speclink_<版本>_universal.dmg` | 不用：已簽章並經 Apple 公證 |
+| macOS（Apple Silicon 與 Intel 同一檔） | `Speclink_<版本>_universal.dmg` | ad-hoc 發行版首次需在「系統設定」個別允許此 App；Developer ID 與公證依該版簽章模式而定 |
 | Windows（x64） | `Speclink_<版本>_x64-setup.exe` | 要：安裝器沒有程式碼簽章 |
 | Windows（x64 免安裝） | `Speclink_<版本>_x64-portable.zip` | 要：程式未使用發行者憑證 |
 | Linux（x86_64） | `Speclink_<版本>_amd64.AppImage` | 不用：加上執行權限即可 |
@@ -210,10 +210,7 @@ git push origin desktop-v0.9.0
 
 ### macOS
 
-打開 dmg，把 Speclink 拖進「應用程式」就好，不需要放行。只有你自己在本機建置、沒有簽章的 app 才會被擋：
-
-1. 先打開一次 app，看到無法打開的提示後關掉。
-2. 到「系統設定 > 隱私權與安全性」，在安全性區塊找到 Speclink，按「強制打開」。
+打開 DMG，把 Speclink 拖進「應用程式」。沒有 Apple 簽章憑證的 Release 會使用完整 ad-hoc 簽章；這不等於 Developer ID 簽章，也不代表已經 Apple 公證。首次啟動時 macOS 可能會阻擋：先開啟一次並關閉提示，再到「系統設定 > 隱私權與安全性」，在安全性區塊找到 Speclink，選擇「強制打開」。這項允許只套用到 Speclink。使用 Developer ID 建置的版本，只有在該版檢查確認公證成功時才標示為已公證。
 
 ### Windows
 
