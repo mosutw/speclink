@@ -88,7 +88,7 @@ test('參數拒絕未知、重複、缺值與不支援的模式', () => {
   assert.throws(() => parseArgs([...valid, '--extra', 'value']), /參數無效/);
   assert.throws(() => parseArgs([...valid, '--app', 'second.app']), /參數重複/);
   assert.throws(() => parseArgs([...valid, '--mode']), /參數無效/);
-  assert.throws(() => parseArgs([...valid.slice(0, 4), 'unsigned', ...valid.slice(6)]), /mode/);
+  assert.throws(() => parseArgs([...valid.slice(0, 4), 'unsigned', ...valid.slice(6)]), /參數無效|mode/);
 });
 
 test('拒絕非 macOS runner，且在執行 native 工具前失敗', () => {

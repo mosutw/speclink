@@ -71,8 +71,11 @@ function requireSigningIdentity(target, mode, runner) {
   }
 }
 
-function requireFile(file, label) {
-  if (!existsSync(file) || !statSync(file).isFile()) throw new Error(`${label} 不存在：${file}`);
+function requirePath(file, label, expectedType) {
+  if (!existsSync(file)) throw new Error(`${label} 不存在：${file}`);
+  const stat = statSync(file);
+  const valid = expectedType === 'directory' ? stat.isDirectory() : stat.isFile();
+  if (!valid) throw new Error(`${label} 不是${expectedType === 'directory' ? '目錄' : '檔案'}：${file}`);
 }
 
 function sha256(file) {
@@ -138,8 +141,12 @@ export function verifyArtifacts(options, { platform = process.platform, runner =
   if (!['none', 'full'].includes(mode)) throw new Error('mode 必須是 none 或 full');
   if (!['release', 'desktop-build'].includes(channel)) throw new Error('channel 必須是 release 或 desktop-build');
   if ((channel === 'release') !== Boolean(updater)) throw new Error('Release 必須提供 updater，Desktop Build 不可提供 updater');
-  for (const [file, label] of [[app, '建置 App'], [dmg, 'DMG'], ...(updater ? [[updater, 'updater']]: [])]) {
-    requireFile(file, label);
+  for (const [file, label, type] of [
+    [app, '建置 App', 'directory'],
+    [dmg, 'DMG', 'file'],
+    ...(updater ? [[updater, 'updater', 'file']] : []),
+  ]) {
+    requirePath(file, label, type);
   }
 
   const reference = appIdentity(app, mode, runner);
