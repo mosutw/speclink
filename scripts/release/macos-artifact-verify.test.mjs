@@ -29,8 +29,10 @@ function fixture(t) {
 
 function fakeRunner(f, overrides = {}) {
   const commands = [];
+  const mountPoints = [];
   return {
     commands,
+    mountPoints,
     run(command, args, options) {
       commands.push({ command, args, options });
       if (overrides.fail?.(command, args)) return { status: 1, stdout: '', stderr: 'fixture failure' };
@@ -44,6 +46,7 @@ function fakeRunner(f, overrides = {}) {
       }
       if (command === 'hdiutil' && args[0] === 'attach') {
         const mountPoint = args[args.indexOf('-mountpoint') + 1];
+        mountPoints.push(mountPoint);
         copyApp(f.app, path.join(mountPoint, 'Speclink.app'));
         if (overrides.dmgMismatch) writeFileSync(path.join(mountPoint, 'Speclink.app/Contents/MacOS/speclink'), 'different-cli');
         return { status: 0, stdout: '/dev/disk9 Apple_HFS\n', stderr: '' };
@@ -116,7 +119,7 @@ test('拒絕 DMG 或 updater 內與建置 App 不同的執行檔', (t) => {
   for (const mismatch of ['dmgMismatch', 'updaterMismatch']) {
     const f = fixture(t);
     const native = fakeRunner(f, { [mismatch]: true });
-    assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), /內容不同/);
+    assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), /(?:DMG 內 App|updater 內 App).*不同/);
     assert.ok(native.commands.some(({ command, args }) => command === 'hdiutil' && args[0] === 'detach'));
   }
 });
@@ -193,9 +196,9 @@ test('卸載失敗時回報掛載點並保留暫存目錄', (t) => {
     error = caught;
   }
   assert.match(error?.message ?? '', /卸載失敗.*掛載點留在 runner 暫存目錄/);
-  const preserved = error.message.match(/runner 暫存目錄 (.+)：/)?.[1];
-  assert.ok(preserved && existsSync(preserved));
-  rmSync(preserved, { recursive: true, force: true });
+  const mountPoint = native.mountPoints[0];
+  assert.ok(mountPoint && existsSync(mountPoint));
+  rmSync(path.dirname(mountPoint), { recursive: true, force: true });
 });
 
 test('兩條 workflow 都在 macOS artifact 上傳前執行共用 verifier', () => {

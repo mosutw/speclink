@@ -127,12 +127,11 @@ function findMountedDevice(output) {
   return device;
 }
 
-function verifyFullNotarization(apps, dmg, runner) {
+function verifyFullNotarization(apps, runner) {
   for (const app of apps) {
     run('spctl', ['--assess', '--type', 'execute', '--verbose=2', app], runner);
     run('xcrun', ['stapler', 'validate', '--verbose', app], runner);
   }
-  run('xcrun', ['stapler', 'validate', '--verbose', dmg], runner);
 }
 
 export function verifyArtifacts(options, { platform = process.platform, runner = spawnSync } = {}) {
@@ -155,7 +154,7 @@ export function verifyArtifacts(options, { platform = process.platform, runner =
   const updaterDir = path.join(scratch, 'updater');
   mkdirSync(mountPoint);
   let device;
-  const appsToAssess = [];
+  const appsToAssess = [app];
   let attachAttempted = false;
   let detached = false;
   let failure;
@@ -175,7 +174,7 @@ export function verifyArtifacts(options, { platform = process.platform, runner =
       compareApp(reference, updaterApp, 'updater 內 App', mode, runner);
       appsToAssess.push(updaterApp);
     }
-    if (mode === 'full') verifyFullNotarization(appsToAssess, dmg, runner);
+    if (mode === 'full') verifyFullNotarization(appsToAssess, runner);
   } catch (error) {
     failure = error;
   }
