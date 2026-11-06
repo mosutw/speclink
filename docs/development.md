@@ -2,7 +2,7 @@
 
 [繁體中文](development.zh-TW.md) · **English**
 
-This document is for developers who clone the source tree. It explains the five one-command entry points at the repo root, how to run the tests, and the repo layout. The last section shows how to open unsigned installers from Releases.
+This document is for developers who clone the source tree. It explains the five one-command entry points at the repo root, how to run the tests, and the repo layout. The last section explains first launch for downloaded installers.
 
 If you only want to host a server outside a checkout, you do not need this document. Use `npx @speclink/server` and see [Remote Getting Started](remote-getting-started.md).
 
@@ -192,17 +192,17 @@ After all four platforms succeed, the repository's Releases page receives five d
 
 The workflow uses the built-in `GITHUB_TOKEN`; only the release job receives `contents: write`. No additional private key is needed. macOS uses ad-hoc signing, and Windows has no publisher certificate; see the installation instructions below. This channel has no signed updater packages or `latest.json`; download updates manually. The app's updater URL now points to origin's Latest Release, but this desktop channel provides no signed update metadata. Fork auto-updates still need an update manifest and packages signed with a key matching the app's public key.
 
-`desktop-v*` does not trigger the existing full `v*` Release, npm publishing, or Docker publishing. Desktop releases do not replace the repository's existing Latest Release. The original signed release workflow is unchanged.
+`desktop-v*` does not trigger the full `v*` Release, npm publishing, or Docker publishing. Desktop releases do not replace the repository's existing Latest Release. The `v*` Release keeps its existing assets and updater path; it now waits for same-commit CI and checks the macOS bundles before upload.
 
 The general CI and Desktop Build are separate workflows. A push or PR that changes only the explicitly listed desktop delivery configuration, version/CI scope scripts, related tests, and documentation runs `Workflow and scripts checks` only. It does not start application builds, smoke tests, React/Rust tests, Docker, or PostgreSQL. Any source code, dependency, or unlisted file change still runs the original full CI; an unknown change scope also runs full CI. Desktop tags continue to run the actual four-platform packaging pipeline.
 
-## <a id="unsigned"></a>Open unsigned installers
+## <a id="unsigned"></a>Allow first launch of downloaded installers
 
 The desktop installers are on [Releases](https://github.com/MomoChenisMe/speclink/releases/latest):
 
-| Platform | File name | Bypass needed |
+| Platform | File name | First launch |
 | --- | --- | --- |
-| macOS (one file for Apple Silicon and Intel) | `Speclink_<version>_universal.dmg` | No: the project signs it, and Apple notarizes it |
+| macOS (one file for Apple Silicon and Intel) | `Speclink_<version>_universal.dmg` | Ad-hoc releases: allow this app in System Settings. Developer ID and notarization depend on the release's signing mode |
 | Windows (x64) | `Speclink_<version>_x64-setup.exe` | Yes: the installer has no code signature |
 | Windows (x64, portable) | `Speclink_<version>_x64-portable.zip` | Yes: the app has no publisher certificate |
 | Linux (x86_64) | `Speclink_<version>_amd64.AppImage` | No: make the file executable |
@@ -210,10 +210,7 @@ The desktop installers are on [Releases](https://github.com/MomoChenisMe/speclin
 
 ### macOS
 
-Open the dmg and drag Speclink into Applications. You do not need a bypass. macOS blocks only an unsigned app that you build on your own machine:
-
-1. Open the app once. When macOS says that it cannot open the app, close the message.
-2. Go to System Settings > Privacy & Security. Find Speclink in the Security area and click "Open Anyway".
+Open the dmg and drag Speclink into Applications. Releases without Apple signing credentials use a complete ad-hoc signature; this is not a Developer ID signature and is not notarized. On first launch, macOS may block it. Open the app once, close the alert, then go to **System Settings > Privacy & Security** and choose **Open Anyway** for Speclink. This permission applies to this app. Releases built with Developer ID are described as notarized only when the release checks confirm that result.
 
 ### Windows
 

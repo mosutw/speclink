@@ -22,6 +22,20 @@ macOS 的 Developer ID 簽章與公證、Windows 的發行者憑證簽章 SHALL 
 
 ## ADDED Requirements
 
+### Requirement: 正式 Release 等待同 commit CI
+
+一般 `v*` 正式 Release SHALL 在任何 build、資產上傳或發布工作開始前，等待 repo 預設分支上與 tag 指向完全相同 commit SHA 的 push CI 完成並成功。Release SHALL 重用既有 `scripts/desktop/desktop-ci-gate.mjs` 的成功判定；CI 失敗、SHA 不符或 40 分鐘內沒有成功結果時，gate SHALL 以非零結束並阻止 build、desktop、docker、engine-version 等獨立建置工作與其後的發布工作。通過 gate 後 SHALL 保留 `.github/workflows/release.yml` 原本的 `v*` 發布通路、DMG 與 updater 資產契約；SHALL NOT 改走只產出獨立桌面資產的 `desktop-v*` 通路。
+
+#### Scenario: 同 commit CI 成功後才建置正式 Release
+
+- **WHEN** `v*` tag 指向預設分支上的 commit，且該 SHA 的最新 push CI 已完成並成功
+- **THEN** gate 成功，原有正式 Release jobs 才開始，DMG 與 updater 維持原資產通路
+
+#### Scenario: CI 未成功時阻止 Release
+
+- **WHEN** 同 SHA CI 失敗、回報其他 SHA，或等待 40 分鐘仍沒有成功結果
+- **THEN** gate 以非零結束，打包與所有發布工作不執行，Release 不產生資產
+
 ### Requirement: 共用桌面打包設定
 
 Release 與 Desktop Build SHALL 使用同一個 repo 私有設定入口 node scripts/release/desktop-bundle-config.mjs，參數為 release 或 desktop-build，平台依執行環境決定。此入口 SHALL 不讀 stdin，成功 exit 0 並在 stdout 僅輸出一份 JSON 物件加換行；未知參數或 macOS Release 的未知簽章模式 SHALL 非零結束，說明走 stderr，不輸出可用設定，也不進入 Tauri 建置。輸出 SHALL 無 ANSI，不新增產品 CLI 的 --json 或 --no-color 介面。macOS Release 的 none 模式 SHALL 設定 signingIdentity 為 '-'；full 模式 SHALL 保留 Apple 憑證環境且不覆寫簽章身分。Desktop Build SHALL 保留停用 updater 產物，Windows／Linux SHALL 保留原有打包行為。腳本 SHALL NOT 輸出 secret 值。
@@ -48,7 +62,7 @@ Release 與 Desktop Build SHALL 使用同一個 repo 私有設定入口 node scr
 
 ### Requirement: macOS 最終產物驗證
 
-兩條桌面打包流程 SHALL 在 macOS 打包完成後、上傳前驗證最後交付內容：完整 App、DMG 內 App，以及完整 Release 的 updater 包內 App。repo 私有驗證入口 node scripts/release/macos-artifact-verify.mjs SHALL 接受 --app、--dmg、--mode none|full，Release SHALL 另提供 --updater；不讀 stdin，不提供產品 --json／--no-color，成功 exit 0 並以無 ANSI 的 stdout 列明模式及已驗證產物。缺少參數／檔案、未知模式、非 macOS 平台、native 命令逾時或驗證失敗 SHALL 非零結束，以 stderr 點名產物、階段與原因，不輸出環境或 secret。完整 App 與內附程式碼 SHALL 通過 strict／deep／all-architectures 簽章驗證，主程式與內附 CLI 均 SHALL 含 arm64 及 x86_64。容器內與參考 App 的版號、主程式、CLI、Info.plist 及資源封裝校驗值 SHALL 一致。none 模式 SHALL NOT 把 Gatekeeper 接受或 Apple 公證當作 ad-hoc 驗證成功的含義；full 模式 SHALL 另通過 Gatekeeper 與公證票證檢查。任一驗證失敗 SHALL 阻止該平台上傳，既有 Release 依賴 SHALL 阻止缺形態的 GitHub Release 建立；驗證 SHALL NOT 補簽或修改待發布產物。
+兩條桌面打包流程 SHALL 在 macOS 打包完成後、上傳前驗證最後交付內容：完整 App、DMG 內 App，以及完整 Release 的 updater 包內 App。repo 私有驗證入口 node scripts/release/macos-artifact-verify.mjs SHALL 接受 --app、--dmg、--mode none|full、--channel release|desktop-build，Release SHALL 另提供 --updater；不讀 stdin，不提供產品 --json／--no-color，成功 exit 0 並以無 ANSI 的 stdout 列明模式及已驗證產物。缺少參數／檔案、未知模式、非 macOS 平台、native 命令逾時或驗證失敗 SHALL 非零結束，以 stderr 點名產物、階段與原因，不輸出環境或 secret。完整 App 與內附程式碼 SHALL 通過 strict／deep／all-architectures 簽章驗證，none 模式 SHALL 確認簽章身分為 ad-hoc，full 模式 SHALL NOT 接受 ad-hoc 簽章，主程式與內附 CLI 均 SHALL 含 arm64 及 x86_64。容器內與參考 App 的版號、主程式、CLI、Info.plist 及資源封裝校驗值 SHALL 一致。none 模式 SHALL NOT 把 Gatekeeper 接受或 Apple 公證當作 ad-hoc 驗證成功的含義；full 模式 SHALL 另通過 Gatekeeper 與公證票證檢查。任一驗證失敗 SHALL 阻止該平台上傳，既有 Release 依賴 SHALL 阻止缺形態的 GitHub Release 建立；驗證 SHALL NOT 補簽或修改待發布產物。
 
 #### Scenario: 無 Apple 憑證的最終產物通過驗證
 
@@ -86,8 +100,8 @@ macOS 打包修正 SHALL 以真正的安裝包啟動作為接受證據：記錄�
 
 #### Scenario: ARM64 安裝版完成首次允許後顯示主視窗
 
-- **WHEN** 使用者在本次 ARM64 復現環境關閉開發版，從修正後 DMG 安裝 App，並依 macOS 完成首次個別允許
-- **THEN** App 顯示可操作的看板或專案選擇器主視窗，驗收紀錄包含產物及環境，Dock 不持續停在啟動狀態
+- **WHEN** 使用者在另一台未用於本次開發的 ARM64 Mac 關閉開發版，從同 commit CI 成功後的正式 v* Release DMG 安裝 App，並依 macOS 完成首次個別允許
+- **THEN** App 顯示可操作的看板或專案選擇器主視窗，驗收紀錄包含產物及環境，Dock 不持續停在啟動狀態；目前開發電腦不執行此測試
 
 #### Scenario: 啟動持續跳動不能視為通過
 

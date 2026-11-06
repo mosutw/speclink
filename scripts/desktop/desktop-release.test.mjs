@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { desktopReleaseVersion } from './desktop-release-version.mjs';
 
 const workflow = readFileSync(new URL('../../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
+const releaseWorkflow = readFileSync(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
 test('CI 版號檢查輸出可供後續工作使用，錯誤 Tag 不寫入輸出', (t) => {
@@ -88,15 +89,37 @@ test('手動與 Tag 建置都必須先通過同一 SHA 的主 CI，沒有略過�
   assert.doesNotMatch(prepare, /continue-on-error:|\n\s+if:/);
 });
 
-test('只發布五種桌面附件，缺任一檔案失敗，保留免私鑰建置方式', () => {
+test('正式 v* Release 的全部建置與發布都等待同 SHA 主 CI 通過', () => {
+  const jobs = releaseWorkflow.slice(releaseWorkflow.indexOf('\njobs:'));
+  const gate = jobs.slice(jobs.indexOf('\n  ci-gate:'), jobs.indexOf('\n  build:'));
+  const definitions = new Map(
+    [...jobs.matchAll(/^  ([a-z0-9-]+):\n([\s\S]*?)(?=^  [a-z0-9-]+:\n|$(?![\s\S]))/gm)]
+      .map(([, name, definition]) => [name, definition]),
+  );
+
+  assert.match(releaseWorkflow, /tags:\s*\['v\*'\]/);
+  assert.match(gate, /actions: read/);
+  assert.match(gate, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(gate, /CI_BRANCH: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(gate, /run: node scripts\/desktop\/desktop-ci-gate\.mjs/);
+
+  for (const job of ['build', 'desktop', 'docker', 'engine-version']) {
+    assert.match(definitions.get(job) ?? '', /needs: \[ci-gate\]/, `${job} must wait for CI gate`);
+  }
+
+  assert.match(jobs, /release:\s*\n\s+needs: \[build, desktop, docker-manifest\]/);
+  assert.match(jobs, /engine-npm-build:\s*\n\s+needs: \[engine-version\]/);
+});
+
+test('只發布五種桌面附件，缺任一檔案失敗，保留共用無私鑰設定', () => {
   const publish = workflow.slice(workflow.indexOf('\n  release:'));
   for (const suffix of ['universal.dmg', 'x64-setup.exe', 'amd64.AppImage', 'aarch64.AppImage', 'x64-portable.zip']) {
     assert.ok(publish.includes(`_${suffix}`), suffix);
   }
   assert.match(publish, /fail_on_unmatched_files: true/);
   assert.match(publish, /make_latest: false/);
-  assert.match(workflow, /createUpdaterArtifacts: false/);
-  assert.match(workflow, /signingIdentity: '-'/);
+  assert.match(workflow, /node scripts\/release\/desktop-bundle-config\.mjs desktop-build/);
+  assert.match(workflow, /--config "\$RUNNER_TEMP\/desktop-build-config\.json"/);
   assert.doesNotMatch(workflow, /TAURI_SIGNING_PRIVATE_KEY/);
   const files = publish.split('          files: |\n')[1].trim().split('\n');
   assert.equal(files.length, 5);
