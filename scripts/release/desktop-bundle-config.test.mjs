@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { bundleConfigFor } from './desktop-bundle-config.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const script = new URL('./desktop-bundle-config.mjs', import.meta.url);
+const script = fileURLToPath(new URL('./desktop-bundle-config.mjs', import.meta.url));
 const secret = 'fake-apple-secret-value';
 
 test('Release 在 macOS 無 Apple 憑證時明確使用 ad-hoc，full 保留 Tauri 簽章環境', () => {
@@ -39,7 +39,7 @@ test('未知 channel 或 macOS Release 簽章模式會明確失敗', () => {
 });
 
 test('CLI 只輸出 JSON 設定且不洩漏 secret', () => {
-  const result = spawnSync(process.execPath, [script.pathname, 'release'], {
+  const result = spawnSync(process.execPath, [script, 'release'], {
     cwd: root,
     encoding: 'utf8',
     env: { ...process.env, SPECLINK_MACOS_SIGNING: 'none', APPLE_CERTIFICATE: secret },
@@ -56,7 +56,7 @@ test('CLI 只輸出 JSON 設定且不洩漏 secret', () => {
 
 test('CLI 對未知 channel 或額外參數非零結束且不輸出設定 JSON', () => {
   for (const args of [['unknown'], ['release', 'extra']]) {
-    const result = spawnSync(process.execPath, [script.pathname, ...args], {
+    const result = spawnSync(process.execPath, [script, ...args], {
       cwd: root,
       encoding: 'utf8',
       env: { ...process.env, SPECLINK_MACOS_SIGNING: 'none' },
