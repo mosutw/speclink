@@ -89,7 +89,7 @@ function appIdentity(app, mode, runner) {
   const sidecar = path.join(contents, 'MacOS', 'speclink');
   const resources = path.join(contents, '_CodeSignature', 'CodeResources');
   for (const [file, label] of [[info, 'Info.plist'], [executable, '主程式'], [sidecar, 'CLI sidecar'], [resources, 'CodeResources']]) {
-    requireFile(file, label);
+    requirePath(file, label, 'file');
   }
 
   run('codesign', ['--verify', '--deep', '--strict', '--all-architectures', '--verbose=2', app], runner);
