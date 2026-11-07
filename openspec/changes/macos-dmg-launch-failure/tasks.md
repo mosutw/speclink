@@ -25,7 +25,7 @@
 ## 4. 文件與原生產物驗證
 
 - [x] 4.1 依 D5 修正「開發者入口文件雙語對」，讓 macOS 安裝表與步驟區分 ad-hoc、Developer ID 與 Apple 公證，無憑證流程說明首次個別允許，不宣稱所有正式 DMG 都免放行；保留五個 npm 入口、README 對應連結、實際檔名與 Windows／Linux 步驟。範圍 docs/development.md、docs/development.zh-TW.md。驗證：人工對照兩語章節及事實、重新搜尋簽章承諾無未解釋落差，並由 GitHub Actions PR CI 執行 `node --test scripts/*.test.mjs scripts/*/*.test.mjs`；本機不執行測試。 <!-- speclink-task:tsk_01M6RJJBGGNCV0BRE6YJ4CCFST -->
-- [ ] 4.2 在正式 `v*` Release workflow 的 GitHub-hosted macOS runner 執行 D3 native 閘門，取得 App 與 DMG 的真實驗證結果；測試 updater archive 若由同一 App 建立須標為測試包，真實 Developer ID 或 Intel 原生環境未實跑須列明。依 speclink instructions --skill audit 的清單核對路徑／模式輸入、native 失敗／期限、只讀掛載與清理及 full 不降級；不為此改舊 tag 或系統政策。範圍 .github/workflows/release.yml、.github/workflows/desktop-build.yml、scripts/release/macos-artifact-verify.mjs、docs/development/macos-dmg-launch-investigation.md。驗證：原生 codesign／lipo 與容器驗證成功或明確失敗、記錄產物來源及限制；確認一般 CI 範圍判定與原發佈依賴不變。 <!-- speclink-task:tsk_01M6RJJBGGTXVZV8HK8SQV95XZ -->
+- [x] 4.2 在正式 `v*` Release workflow 的 GitHub-hosted macOS runner 執行 D3 native 閘門，取得 App 與 DMG 的真實驗證結果；測試 updater archive 若由同一 App 建立須標為測試包，真實 Developer ID 或 Intel 原生環境未實跑須列明。依 speclink instructions --skill audit 的清單核對路徑／模式輸入、native 失敗／期限、只讀掛載與清理及 full 不降級；不為此改舊 tag 或系統政策。範圍 .github/workflows/release.yml、.github/workflows/desktop-build.yml、scripts/release/macos-artifact-verify.mjs、docs/development/macos-dmg-launch-investigation.md。驗證：原生 codesign／lipo 與容器驗證成功或明確失敗、記錄產物來源及限制；確認一般 CI 範圍判定與原發佈依賴不變。 <!-- speclink-task:tsk_01M6RJJBGGTXVZV8HK8SQV95XZ -->
 
 ## 5. 使用者啟動接受與整合檢查
 
