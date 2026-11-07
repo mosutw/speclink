@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.12.2",
+    "date": "2026-11-07",
+    "sections": [
+      {
+        "kind": "fixes",
+        "items": [
+          {
+            "en": "macOS releases without Apple signing credentials now use ad-hoc signing and check the app, DMG and updater contents before upload.",
+            "zh-TW": "修正 macOS 發版簽章流程：無 Apple 憑證時使用 ad-hoc 簽章，並在上傳前檢查 App、DMG 與更新包內容。"
+          }
+        ]
+      },
+      {
+        "kind": "improvements",
+        "items": [
+          {
+            "en": "Release builds now wait for successful CI on the same commit, and installation guidance explains macOS first-launch permissions.",
+            "zh-TW": "正式發版建置會先等待同一提交的 CI 通過，並更新 macOS 首次開啟的安裝說明。"
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.12.1",
     "date": "2026-11-06",
     "sections": [

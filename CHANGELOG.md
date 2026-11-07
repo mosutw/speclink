@@ -1,6 +1,16 @@
 # Changelog
 **English** · [繁體中文](CHANGELOG.zh-TW.md)
 
+## 0.12.2 (2026-11-07)
+
+### Fixes
+
+- macOS releases without Apple signing credentials now use ad-hoc signing and check the app, DMG and updater contents before upload.
+
+### Improvements
+
+- Release builds now wait for successful CI on the same commit, and installation guidance explains macOS first-launch permissions.
+
 ## 0.12.1 (2026-11-06)
 
 ### New features
