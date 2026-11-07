@@ -3,11 +3,17 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, w
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { parseArgs, verifyArtifacts } from './macos-artifact-verify.mjs';
+import { formatVerificationResult, parseArgs, verifyArtifacts } from './macos-artifact-verify.mjs';
 
 const app = 'target/universal-apple-darwin/release/bundle/macos/Speclink.app';
 const dmg = 'target/universal-apple-darwin/release/bundle/dmg/Speclink_0.12.1_universal.dmg';
 const updater = 'target/universal-apple-darwin/release/bundle/macos/Speclink.app.tar.gz';
+
+test('驗證成功訊息明示 ad-hoc 與已驗證產物', () => {
+  const output = formatVerificationResult({ mode: 'none', channel: 'release', version: '0.12.2', updater: true });
+  assert.match(output, /ad-hoc/);
+  assert.match(output, /app,dmg,updater/);
+});
 
 function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'macos-artifact-verify-test-'));
