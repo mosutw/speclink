@@ -4,7 +4,7 @@ section: 桌面 app
 order: 315
 keywords: [路線圖, 波次, 依賴線, 下一個, 尚未轉出, 刀, 看板切換, 無法排程, 依賴成環, 指令籤]
 sources: [desktop-roadmap, "desktop-app#以 speclink 網址開啟詳情頁"]
-generated: 2026-11-04T17:42:55+08:00
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # 路線圖

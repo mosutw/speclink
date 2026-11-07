@@ -1,0 +1,73 @@
+schema: spec-driven
+created: 2026-11-06T21:51:09+08:00
+created_by: mosutw <luke1974@gmail.com>
+created_with: codex
+from_discussion: macos-dmg-launch-failure
+started_at: 2026-11-06T22:11:50+08:00
+started_by: mosutw <luke1974@gmail.com>
+reviewed_at: 2026-11-07T21:19:20+08:00
+reviewed_by: mosutw <luke1974@gmail.com>
+reviewed_with: codex
+reviewed_tasks_total: 15
+reviewed_rounds: 2
+reviewed_scope:
+  - path: .github/workflows/ci.yml
+    hash: b052f0ee8417ec3dfe4f3fc54374578c509baef50c70d95c5ced85a118465390
+  - path: .github/workflows/desktop-build.yml
+    hash: 737847c1292b5b7a780f9a493cb935df4ab03107f4ed0d7827cad5b0343be80f
+  - path: .github/workflows/release.yml
+    hash: 7f4faf60ed7023d7a46c98181a3b5216025ee336e4e67895832b0999aba77ccd
+  - path: docs/development.md
+    hash: b787002df0a436219126a5fb222825f20d4c44cc6c40a9205d134d16d2cf62f0
+  - path: docs/development.zh-TW.md
+    hash: eeab4c189e44cca2a57678da7afb1aa658e2ace662c9559a66af8e2b410e9974
+  - path: docs/development/macos-dmg-launch-investigation.md
+    hash: 7270801eba8d5cfba98d7aac07ff53fcc8e43d14b3d7c4a98af133bd98b94689
+  - path: scripts/desktop/desktop-release.test.mjs
+    hash: 3d0d6a91b6e3888eff1413a96e7f0ef99a5e8b687130da0eed7688bd33b98d8d
+  - path: scripts/release/desktop-bundle-config.mjs
+    hash: 1a4f53c5f4d54016899cb0a59d966cb0a8977c96b8d77d0e525f25dd3464da4a
+  - path: scripts/release/desktop-bundle-config.test.mjs
+    hash: 9b0ff7c6ab6c3fbc6eb11d540161ec532bb1dc85bea33f705fc264fa94fd833e
+  - path: scripts/release/macos-artifact-verify.mjs
+    hash: 480b1a9f274e40f9f04596fcbcff7ddd8caa9417d64dc58ec33ecd0863a7fd91
+  - path: scripts/release/macos-artifact-verify.test.mjs
+    hash: f9474263694a5138c06a726e377063aeea032347a1a89ca02b09430148e3174d
+  - path: scripts/release/signing-gate.mjs
+    hash: 4a2476afd83acbc96043d620b6947746d93de6758ac5926464020fe787c92c87
+  - path: scripts/release/signing-gate.test.mjs
+    hash: d1edd749ee56e4f351aaaa5c0a8a39e9d64067f7dd148935190fec4d8495cab6
+verified_at: 2026-11-07T21:19:26+08:00
+verified_by: mosutw <luke1974@gmail.com>
+verified_with: codex
+verified_tasks_total: 15
+verified_rounds: 2
+verified_scope:
+  - path: .github/workflows/ci.yml
+    hash: b052f0ee8417ec3dfe4f3fc54374578c509baef50c70d95c5ced85a118465390
+  - path: .github/workflows/desktop-build.yml
+    hash: 737847c1292b5b7a780f9a493cb935df4ab03107f4ed0d7827cad5b0343be80f
+  - path: .github/workflows/release.yml
+    hash: 7f4faf60ed7023d7a46c98181a3b5216025ee336e4e67895832b0999aba77ccd
+  - path: docs/development.md
+    hash: b787002df0a436219126a5fb222825f20d4c44cc6c40a9205d134d16d2cf62f0
+  - path: docs/development.zh-TW.md
+    hash: eeab4c189e44cca2a57678da7afb1aa658e2ace662c9559a66af8e2b410e9974
+  - path: docs/development/macos-dmg-launch-investigation.md
+    hash: 7270801eba8d5cfba98d7aac07ff53fcc8e43d14b3d7c4a98af133bd98b94689
+  - path: scripts/desktop/desktop-release.test.mjs
+    hash: 3d0d6a91b6e3888eff1413a96e7f0ef99a5e8b687130da0eed7688bd33b98d8d
+  - path: scripts/release/desktop-bundle-config.mjs
+    hash: 1a4f53c5f4d54016899cb0a59d966cb0a8977c96b8d77d0e525f25dd3464da4a
+  - path: scripts/release/desktop-bundle-config.test.mjs
+    hash: 9b0ff7c6ab6c3fbc6eb11d540161ec532bb1dc85bea33f705fc264fa94fd833e
+  - path: scripts/release/macos-artifact-verify.mjs
+    hash: 480b1a9f274e40f9f04596fcbcff7ddd8caa9417d64dc58ec33ecd0863a7fd91
+  - path: scripts/release/macos-artifact-verify.test.mjs
+    hash: f9474263694a5138c06a726e377063aeea032347a1a89ca02b09430148e3174d
+  - path: scripts/release/signing-gate.mjs
+    hash: 4a2476afd83acbc96043d620b6947746d93de6758ac5926464020fe787c92c87
+  - path: scripts/release/signing-gate.test.mjs
+    hash: d1edd749ee56e4f351aaaa5c0a8a39e9d64067f7dd148935190fec4d8495cab6
+archived_by: mosutw <luke1974@gmail.com>
+archived_at: 2026-11-07T21:21:51+08:00

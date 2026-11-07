@@ -4,7 +4,7 @@ section: Claude Code
 order: 380
 keywords: ["Claude Code", "焦點", "對話標題", "clear", "resume", "worktree", "封存"]
 sources: ["claude-code-session-focus"]
-generated: 2026-10-29T05:54:00+08:00
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # Claude Code：目前工作與對話標題
@@ -13,11 +13,13 @@ generated: 2026-10-29T05:54:00+08:00
 
 ## 哪些操作會換焦點
 
-送出的訊息以 Speclink 技能指令開頭時，步驟跟著更新。帶已知變更名稱時改用該名稱；沒帶名稱就保留上一個變更。例如先送出 `/speclink-apply add-auth`，再送出 `/speclink-quality`，步驟變成 quality，變更仍是 add-auth。
+送出的訊息以 Speclink 技能指令開頭時，步驟跟著更新。變更操作技能帶已知變更名稱時改用該名稱；沒帶名稱就保留上一個變更。例如先送出 `/speclink-apply add-auth`，再送出 `/speclink-quality`，步驟變成 quality，變更仍是 add-auth。discuss、propose、improve、audit、trace、manual、baseline 與 config 會清除上一個變更焦點；propose 後續建立變更時，主代理的 Speclink 操作可確認新焦點。
 
 一般聊天、面板開關與其他指令不會換步驟。在句子中問「幫我看 /speclink-apply 怎麼用」也不會。變更名稱以完整詞比對，不把檔名裡相似的片段當作變更。
 
 主代理呼叫技能時也會更新步驟；執行 Speclink 指令辨識出新變更時，技能列立即更新，對話標題等你下次送出訊息才跟上。子代理的操作不改主對話焦點。尚無焦點時，不加焦點文字，也不改標題。
+
+在 Herdr 裡確認目前變更時，Claude Code 會即時回報焦點，供 Herdr 面板與 Agent 清單顯示；切到沒有變更的技能時不沿用舊歸屬。沒有 Herdr 時，技能列與標題照常運作，不會自動安裝 Herdr 或寫入它的設定。
 
 ## 接回、worktree 與清空
 

@@ -304,7 +304,7 @@ updated: 2026-10-08T10:00:10+08:00
 ---
 ### Requirement: 開發者入口文件雙語對
 
-docs/development.md（英文）與 docs/development.zh-TW.md（繁體中文）SHALL 存在且章節結構與事實內容對等（僅語言不同），並受既有「中英文文件保持結構與事實對等」與「文件準確性具可重複驗證清單」需求約束。內容 SHALL 涵蓋：npm run dev、npm run dev:server、npm run dev:desktop、npm run dev:reset、npm run cli 五個入口各自的用途、前置條件與預期可觀察結果；下載安裝檔的未簽章放行步驟（macOS 系統設定放行、Windows SmartScreen 仍要執行），放行一節的產物名稱 SHALL 與 desktop-release 規格一致。文件中出現的指令 SHALL 全部為已驗證可執行的入口。README.md 與 README.zh-TW.md SHALL 各含一處指向對應語言 development 文件的連結。
+docs/development.md（英文）與 docs/development.zh-TW.md（繁體中文）SHALL 存在且章節結構與事實內容對等（僅語言不同），並受既有「中英文文件保持結構與事實對等」與「文件準確性具可重複驗證清單」需求約束。內容 SHALL 涵蓋：npm run dev、npm run dev:server、npm run dev:desktop、npm run dev:reset、npm run cli 五個入口各自的用途、前置條件與預期可觀察結果；下載安裝檔的未使用發行者憑證時放行步驟（macOS 系統設定對個別 App 明確允許、Windows SmartScreen 仍要執行），放行一節的產物名稱 SHALL 與 desktop-release 規格一致。macOS 說明 SHALL 區分完整 ad-hoc 簽章與 Developer ID 簽章加 Apple 公證：無 Apple 憑證的 Release 或 Desktop Build 產物 SHALL NOT 被描述為已經 Apple 公證，首次開啟說明 SHALL 指向 macOS 的個別 App 允許操作；完整 Developer ID 與公證模式 SHALL 依實際驗證結果標示。文件 SHALL NOT 將全域停用 Gatekeeper、永久移除原安裝 quarantine 或修改原安裝簽章作為一般交付方案。文件中出現的指令 SHALL 全部為已驗證可執行的入口。README.md 與 README.zh-TW.md SHALL 各含一處指向對應語言 development 文件的連結。
 
 #### Scenario: 一鍵入口涵蓋完整
 
@@ -323,13 +323,23 @@ docs/development.md（英文）與 docs/development.zh-TW.md（繁體中文）SH
 
 #### Scenario: 未簽章放行教學可依循
 
-- **WHEN** 使用者依放行一節在 macOS 開啟未簽章 dmg 安裝的 app、或在 Windows 執行未簽章安裝器
-- **THEN** 文件步驟足以完成放行（macOS：系統設定 > 隱私權與安全性的強制打開；Windows：SmartScreen 其他資訊 > 仍要執行），且步驟中的產物名稱與實際 Release assets 相符
+- **WHEN** 使用者依放行一節在 macOS 開啟無 Apple 發行者憑證、但完成完整 ad-hoc 簽章的 DMG 安裝版 App，或在 Windows 執行未簽章安裝器
+- **THEN** 文件步驟足以完成個別放行（macOS：系統設定 > 隱私權與安全性的強制打開；Windows：SmartScreen 其他資訊 > 仍要執行），且步驟中的產物名稱與實際 Release assets 相符
+
+#### Scenario: ad-hoc 下載產物不宣稱 Apple 公證
+
+- **WHEN** 使用者閱讀任一語言的 macOS 安裝說明，且下載的產物來自無 Apple 憑證的 Release 或 Desktop Build
+- **THEN** 說明明列產物採 ad-hoc、不具 Developer ID／Apple 公證，列出首次對個別 App 明確允許的步驟，不寫所有正式 DMG 都無需放行，也不要求停用全域安全檢查
+
+#### Scenario: 完整 Developer ID 模式依證據說明
+
+- **WHEN** 文件介紹完整 Apple 憑證模式，且該模式的簽章、公證票證與 Gatekeeper 驗證已通過
+- **THEN** 說明將已完成的 Developer ID／公證結果限定於該模式，不延伸到 ad-hoc 或尚未實際驗證的產物
 
 
 <!-- @trace
-source: readme-open-source-refresh
-updated: 2026-10-15T14:00:05+08:00
+source: macos-dmg-launch-failure
+updated: 2026-11-07T21:21:51+08:00
 -->
 
 ---

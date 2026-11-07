@@ -3,8 +3,8 @@ title: 工作流總覽：站別與交棒
 section: 開始使用
 order: 50
 keywords: [工作流, 技能, 交棒, 下一步, SDD, 站別, baseline, 手冊, 蓋章, CI, rebase]
-sources: [skill-routing, user-documentation, "change-plan#apply 技能以 plan 挑選與守門", "workspace-tools#Copilot 渲染目標"]
-generated: 2026-10-29T05:54:00+08:00
+sources: [skill-routing, "user-documentation#完整工作流指南說明用途與使用時機", "user-documentation#工作流正典逐站列出技能與完成判準", "user-documentation#品質站蓋章效果與非成員錯誤碼的文件揭露", "user-documentation#workflow 文件載明蓋章前的預防規矩", "review-station#審查完成紀錄查詢", "verify-station#驗證完成紀錄查詢", "change-plan#apply 技能以 plan 挑選與守門", "workspace-tools#Copilot 渲染目標", "workspace-tools#Codex 與 Antigravity 共用技能內容"]
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # 工作流總覽：站別與交棒
@@ -17,7 +17,7 @@ Speclink 的工作流由一組 AI 技能串起來。每個技能就是一站：�
 - 技能只會「建議」下一步，不會自動呼叫另一個技能。要不要走下一站，由你決定。
 
 > [!NOTE]
-> 本手冊把技能一律寫成 `/speclink-*`，這是 Claude 與 GitHub Copilot 的叫法；Codex 要寫成 `$speclink-*`，例如 `$speclink-propose`。三個工具的技能分別放在 `.claude/skills/`、`.agents/skills/`、`.github/skills/`。`/speclink-analyze` 只有 Claude 有，Codex 與 Copilot 沒有這個技能；要做產物一致性檢查時，直接執行 `speclink analyze`，見[分析：交叉檢查變更的產物](analyze.md)。
+> 本手冊把技能一律寫成 `/speclink-*`，這是 Claude、GitHub Copilot 與 Antigravity 的叫法；Codex 要寫成 `$speclink-*`，例如 `$speclink-propose`。Claude 使用 `.claude/skills/`，Copilot 使用 `.github/skills/`，Codex 與 Antigravity 共用 `.agents/skills/`。`/speclink-analyze` 只有 Claude 有；要做產物一致性檢查時，可直接執行 `speclink analyze`，見[分析：交叉檢查變更的產物](analyze.md)。
 
 ## 每一站的入口情境
 
@@ -99,9 +99,9 @@ review 與 verify 蓋章時，會在同一個寫入裡寫下章欄位並刪除�
 
 - 已蓋章的變更封存後，封存目錄裡沒有工單檔。
 - 只有未結的工單能經 carry 旗標隨封存移動。
-- 本地模式的工單文字只留在 git 歷史；remote 模式蓋章後工單文字讀不回來。
+- 已保存的完成紀錄可在本地或 remote 模式查詢，活動中與已封存的變更都適用。較舊且沒有保存紀錄的變更，查詢結果可能為空。
 
-蓋章後執行 show 回報「無工單」是預期行為。細節見[品質關卡總覽](quality-stations.md)。
+蓋章後執行 show 回報「無工單」是預期行為；要查已保存的紀錄，可執行 `speclink review history <change>` 或 `speclink verify history <change>`。細節見[品質關卡總覽](quality-stations.md)。
 
 ### 蓋章前的兩條預防規矩
 
@@ -127,4 +127,4 @@ review 與 verify 蓋章時，會在同一個寫入裡寫下章欄位並刪除�
 13. [產出流程 schema 管理](schemas.md)
 14. [操作手冊：生成與導覽](manual.md)
 
-**出處**：`skill-routing`、`user-documentation`、`change-plan`、`workspace-tools`
+**出處**：`skill-routing`、`user-documentation`、`change-plan`、`workspace-tools`、`review-station`、`verify-station`
