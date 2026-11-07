@@ -3,8 +3,8 @@ title: 安裝 CLI 與桌面 app
 section: 開始使用
 order: 20
 keywords: [安裝, CLI, 桌面 app, npm, Homebrew, 安裝腳本, 未簽章, universal, AppImage]
-sources: [cli-distribution, user-documentation]
-generated: 2026-10-29T05:54:00+08:00
+sources: [cli-distribution, "user-documentation#開發者入口文件雙語對", "user-documentation#安裝通路文件與發布狀態誠實化", "user-documentation#安裝章節載明桌面 app 與 CLI 的佈署衝突", "desktop-release#Release 產出三平台桌面安裝檔", "desktop-release#OS 程式碼簽章為可插鑰匙開關"]
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # 安裝 CLI 與桌面 app
@@ -18,7 +18,7 @@ Speclink 有兩個可以安裝的東西：命令列工具 `speclink`（下稱 CL
 | CLI | npm 全域安裝（一行指令） | macOS、Linux、Windows |
 | CLI | 安裝腳本（curl 一行指令） | macOS、Linux |
 | CLI | Homebrew tap | macOS、Linux（arm64 與 x86_64） |
-| 桌面 app | 安裝檔下載 | macOS（單一 universal dmg，兩種晶片同一檔）、Windows（安裝器）、Linux（AppImage，依架構各一） |
+| 桌面 app | 安裝檔下載 | macOS（單一 universal DMG）、Windows（安裝器或免安裝 ZIP）、Linux（依架構的 AppImage） |
 | 從原始碼建置 | 開發者導向 | 全平台 |
 
 Windows 沒有安裝腳本：走 npm 全域安裝，或裝桌面 app 由安裝器處理。沒有圖形介面的 Linux 主機走 CLI 的一行安裝。Linux 不再提供 deb 套件；已經用 deb 裝過的人，移除 deb 套件後改裝 AppImage。
@@ -73,15 +73,17 @@ speclink --version
 桌面 app 的安裝檔分三個平台：
 
 - macOS：單一 universal dmg，Apple 晶片與 Intel 都用同一個檔。
-- Windows：安裝器。
+- Windows：安裝器或免安裝 ZIP。
 - Linux：AppImage，依 CPU 架構各一個。
 
-### 未簽章安裝檔的放行步驟
+### 首次開啟與放行
 
-安裝檔沒有作業系統的程式碼簽章時，系統會擋下它。放行方法：
+macOS 版本沒有 Apple 發行者憑證時，App 使用完整的 ad-hoc 簽章。這不代表有 Developer ID 身分或已通過 Apple 公證；首次啟動可能需要對個別 App 明確允許。使用完整 Apple 憑證的版本，簽章與公證結果依該版本的實際驗證為準。
 
-- macOS：開啟「系統設定 > 隱私權與安全性」，對該 app 選「強制打開」。
-- Windows：SmartScreen 出現時，點「其他資訊」，再點「仍要執行」。
+1. 下載 `Speclink_<版本>_universal.dmg` 並安裝 Speclink。
+2. 若首次開啟時系統阻擋，關閉提示，到「系統設定 > 隱私權與安全性」對 Speclink 選「強制打開」。
+
+Windows 安裝器未使用發行者憑證時，SmartScreen 出現警告：點「其他資訊」，再點「仍要執行」。不需要為了開啟單一 App 而關閉全系統安全檢查。
 
 ## 桌面 app 與 CLI 同時安裝時的覆蓋行為
 
@@ -104,4 +106,4 @@ speclink --version
 
 下一步：[建立工作區與指令檔](init-workspace.md)。
 
-**出處**：`cli-distribution`、`user-documentation`
+**出處**：`cli-distribution`、`user-documentation`、`desktop-release`

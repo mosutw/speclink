@@ -3,11 +3,17 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, w
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { parseArgs, verifyArtifacts } from './macos-artifact-verify.mjs';
+import { formatVerificationResult, parseArgs, verifyArtifacts } from './macos-artifact-verify.mjs';
 
 const app = 'target/universal-apple-darwin/release/bundle/macos/Speclink.app';
 const dmg = 'target/universal-apple-darwin/release/bundle/dmg/Speclink_0.12.1_universal.dmg';
 const updater = 'target/universal-apple-darwin/release/bundle/macos/Speclink.app.tar.gz';
+
+test('驗證成功訊息明示 ad-hoc 與已驗證產物', () => {
+  const output = formatVerificationResult({ mode: 'none', channel: 'release', version: '0.12.2', updater: true });
+  assert.match(output, /ad-hoc/);
+  assert.match(output, /app,dmg,updater/);
+});
 
 function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'macos-artifact-verify-test-'));
@@ -39,7 +45,7 @@ function fakeRunner(f, overrides = {}) {
       if (command === 'codesign' && args[0] === '--display') {
         return { status: 0, stdout: '', stderr: `${overrides.signature ?? 'Signature=adhoc'}\n` };
       }
-      if (command === '/usr/libexec/PlistBuddy') return { status: 0, stdout: '0.12.1\n', stderr: '' };
+      if (command === '/usr/libexec/PlistBuddy') return { status: 0, stdout: `${overrides.version?.(args) ?? '0.12.1'}\n`, stderr: '' };
       if (command === 'lipo') {
         const archs = overrides.archs?.(args) ?? 'arm64 x86_64';
         return { status: 0, stdout: `${archs}\n`, stderr: '' };
@@ -48,13 +54,13 @@ function fakeRunner(f, overrides = {}) {
         const mountPoint = args[args.indexOf('-mountpoint') + 1];
         mountPoints.push(mountPoint);
         copyApp(f.app, path.join(mountPoint, 'Speclink.app'));
-        if (overrides.dmgMismatch) writeFileSync(path.join(mountPoint, 'Speclink.app/Contents/MacOS/speclink'), 'different-cli');
+        overrides.mutate?.('dmg', path.join(mountPoint, 'Speclink.app'));
         return { status: 0, stdout: '/dev/disk9 Apple_HFS\n', stderr: '' };
       }
       if (command === 'tar') {
         const destination = args[args.indexOf('-C') + 1];
         copyApp(f.app, path.join(destination, 'Speclink.app'));
-        if (overrides.updaterMismatch) writeFileSync(path.join(destination, 'Speclink.app/Contents/MacOS/speclink'), 'different-cli');
+        overrides.mutate?.('updater', path.join(destination, 'Speclink.app'));
       }
       if (overrides.timeout?.(command, args)) {
         const error = new Error('timed out');
@@ -115,11 +121,45 @@ test('成功時驗證 App、DMG 與 updater，none 不呼叫 Gatekeeper 或 stap
   assert.equal(native.commands.some(({ command }) => command === 'spctl' || command === 'xcrun'), false);
 });
 
-test('拒絕 DMG 或 updater 內與建置 App 不同的執行檔', (t) => {
-  for (const mismatch of ['dmgMismatch', 'updaterMismatch']) {
+test('DMG 與 updater 的每個關鍵檔案不一致均拒絕交付', (t) => {
+  for (const container of ['dmg', 'updater']) {
+    for (const file of ['Contents/Info.plist', 'Contents/MacOS/speclink-desktop', 'Contents/MacOS/speclink', 'Contents/_CodeSignature/CodeResources']) {
+      const f = fixture(t);
+      const native = fakeRunner(f, {
+        mutate: (kind, appPath) => {
+          if (kind === container) writeFileSync(path.join(appPath, file), 'different');
+        },
+      });
+      assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), /不同/);
+      assert.ok(native.commands.some(({ command, args }) => command === 'hdiutil' && args[0] === 'detach'));
+    }
+  }
+});
+
+test('容器內簽章失敗或任一程式缺少任一架構均拒絕交付', (t) => {
+  for (const container of ['dmg', 'updater']) {
+    for (const executable of ['speclink-desktop', 'speclink']) {
+      for (const missing of ['arm64', 'x86_64']) {
+        const f = fixture(t);
+        const native = fakeRunner(f, {
+          archs: (args) => args[1].includes(`${path.sep}${container}${path.sep}`) && path.basename(args[1]) === executable
+            ? (missing === 'arm64' ? 'x86_64' : 'arm64') : 'arm64 x86_64',
+        });
+        assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), new RegExp(`缺少 ${missing}`));
+        assert.ok(native.commands.some(({ command, args }) => command === 'hdiutil' && args[0] === 'detach'));
+      }
+    }
     const f = fixture(t);
-    const native = fakeRunner(f, { [mismatch]: true });
-    assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), /(?:DMG 內 App|updater 內 App).*不同/);
+    const native = fakeRunner(f, { fail: (command, args) => command === 'codesign' && args[0] === '--verify' && args.at(-1).includes(`${path.sep}${container}${path.sep}`) });
+    assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), /codesign.*失敗/);
+  }
+});
+
+test('DMG 或 updater 內版號不同時拒絕交付', (t) => {
+  for (const container of ['dmg', 'updater']) {
+    const f = fixture(t);
+    const native = fakeRunner(f, { version: (args) => args[2].includes(`${path.sep}${container}${path.sep}`) ? '0.12.2' : '0.12.1' });
+    assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), /版號不符/);
     assert.ok(native.commands.some(({ command, args }) => command === 'hdiutil' && args[0] === 'detach'));
   }
 });
@@ -166,6 +206,7 @@ test('DMG checksum 或 updater 解包失敗時拒絕交付', (t) => {
 
 test('full 模式要求每個 App 的 Gatekeeper 與公證票證驗證', (t) => {
   const f = fixture(t);
+  assert.throws(() => verifyArtifacts({ ...f, mode: 'full', channel: 'release' }, { platform: 'darwin', runner: fakeRunner(f).run }), /簽章模式不符/);
   const native = fakeRunner(f, { signature: 'Signature=Developer ID Application: Speclink' });
   verifyArtifacts({ ...f, mode: 'full', channel: 'release' }, { platform: 'darwin', runner: native.run });
   assert.equal(native.commands.filter(({ command }) => command === 'spctl').length, 3);
@@ -175,6 +216,11 @@ test('full 模式要求每個 App 的 Gatekeeper 與公證票證驗證', (t) => 
     fail: (command) => command === 'xcrun',
   });
   assert.throws(() => verifyArtifacts({ ...f, mode: 'full', channel: 'release' }, { platform: 'darwin', runner: rejected.run }), /xcrun.*失敗/);
+  const gatekeeper = fakeRunner(f, {
+    signature: 'Signature=Developer ID Application: Speclink',
+    fail: (command) => command === 'spctl',
+  });
+  assert.throws(() => verifyArtifacts({ ...f, mode: 'full', channel: 'release' }, { platform: 'darwin', runner: gatekeeper.run }), /spctl.*失敗/);
 });
 
 test('native timeout 失敗且先卸載已掛載 DMG', (t) => {

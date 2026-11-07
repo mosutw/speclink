@@ -197,13 +197,16 @@ export function verifyArtifacts(options, { platform = process.platform, runner =
   return { mode, version: reference.version, channel, updater: Boolean(updater) };
 }
 
+export function formatVerificationResult(result) {
+  return `macOS 產物驗證通過：channel=${result.channel} mode=${result.mode} ` +
+    `signing=${result.mode === 'none' ? 'ad-hoc' : 'Developer ID'} version=${result.version} ` +
+    `artifacts=${result.updater ? 'app,dmg,updater' : 'app,dmg'}`;
+}
+
 function main(argv) {
   const options = parseArgs(argv);
   const result = verifyArtifacts(options);
-  console.log(
-    `macOS 產物驗證通過：channel=${result.channel} mode=${result.mode} version=${result.version} ` +
-      `artifacts=${result.updater ? 'app,dmg,updater' : 'app,dmg'}`,
-  );
+  console.log(formatVerificationResult(result));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

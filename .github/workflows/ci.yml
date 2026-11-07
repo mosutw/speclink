@@ -57,6 +57,12 @@ jobs:
       - name: Build (release)
         run: cargo build --release --locked -p speclink-cli
 
+      - name: Analyze and validate macOS DMG change
+        if: runner.os == 'Linux' && hashFiles('openspec/changes/macos-dmg-launch-failure/tasks.md') != ''
+        run: |
+          target/release/speclink analyze macos-dmg-launch-failure --json
+          target/release/speclink validate macos-dmg-launch-failure --strict
+
       - name: Smoke test (init → new → artifact → status → validate)
         shell: bash
         run: |
