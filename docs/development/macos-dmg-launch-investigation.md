@@ -21,8 +21,9 @@ Dock 問題的唯一根因仍未證實。使用者要求不得在本開發電腦
 - 目前分支已讓正式 Release 與 Desktop Build 共用打包設定：沒有 Apple 憑證時明確傳 `signingIdentity: '-'`，完成 ad-hoc 簽章；有憑證時不覆寫 Tauri 設定。macOS runner 在上傳前會檢查 App、DMG 內容及正式 Release updater archive 內的 App。
 - Tauri 官方說明指出 notarization/stapler 處理的是 App bundle，不能推定 `.dmg` 也附有公證票證；因此驗證器檢查 App 的 Gatekeeper 與 stapler 結果，並用 `hdiutil verify` 檢查 DMG 映像完整性。[Tauri macOS 簽章說明](https://v2.tauri.app/distribute/sign/macos/)。
 - PR #18 的 CI run [42247712018](https://github.com/mosutw/speclink/actions/runs/42247712018) 在提交 `8aae41662165878422e285b21af8f5c3c20ea70d` 上通過；macOS 工作於第二次嘗試通過，Windows、Linux 與其他工作亦通過。這次 PR CI 執行的是腳本測試與一般建置測試，並未執行正式 Release 的 DMG 與 updater 原生產物驗證。
+- 補充的容器異常與清理測試，以及 Linux 的 Speclink 分析和嚴格驗證，由 PR #19 的 [CI run 42338204607](https://github.com/mosutw/speclink/actions/runs/42338204607) 執行。原規劃的實作前失敗紀錄未留存，後補測試不能視為該歷史紀錄。
 - 正式 [v0.12.2 Release](https://github.com/mosutw/speclink/releases/tag/v0.12.2) 的 [GitHub Actions run 42331853628](https://github.com/mosutw/speclink/actions/runs/42331853628) 通過；macOS runner 的驗證紀錄為 `channel=release mode=none version=0.12.2 artifacts=app,dmg,updater`。它使用正式建置的 App、DMG 與 updater 產物，並完成原生簽章、架構及容器內容檢查。
-- 真實 Developer ID／公證模式及 Intel 原生啟動尚未驗證。另一台 Mac 的安裝與 GUI 啟動驗收仍待使用者執行。本開發電腦不執行測試、掛載 DMG、重簽或啟動實驗。
+- 使用者回報 macOS 測試已能正常安裝並開啟，並自行勾選人工驗收；目前尚未提供測試產物版號、Mac 架構或首次允許條件，不能推定實際驗收的環境。真實 Developer ID／公證模式及 Intel 原生啟動尚無驗證紀錄。本開發電腦不執行測試、掛載 DMG、重簽或啟動實驗。
 
 ## 同類位置盤點與處理範圍
 

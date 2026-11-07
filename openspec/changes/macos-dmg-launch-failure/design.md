@@ -81,12 +81,12 @@ CI 的 native 產物驗證與人手啟動驗收分開記錄。開發電腦不安
 
 ## Implementation Contract
 
-- 範圍內：D1 的同 SHA CI gate 與既有 v* Release 流程對齊；D2 的兩條 workflow 及共用設定產生器；D3 的共用 native 產物驗證與其測試；D4 的另一台 Mac GUI 啟動驗收；D5 的中英文件與既有打包接線測試。
+- 範圍內：D1 的同 SHA CI gate 與既有 v* Release 流程對齊；D2 的兩條 workflow 及共用設定產生器；D3 的共用 native 產物驗證與其測試；D4 的另一台 Mac GUI 啟動驗收；D5 的中英文件與既有打包接線測試。一般 CI 的 Linux 建置另執行本變更的分析與嚴格驗證，變更封存後自動略過，不改 CI 範圍判定。
 - 不在目前開發電腦執行產品測試或啟動實驗；scripts 測試與 macOS native 產物驗證只在 GitHub Actions runner 執行。具體路徑以 proposal Impact 為清單。
 - 範圍外：應用程式與核心 crate、UI、IPC、Local／Remote 行為、新套件相依、產品設定 schema、生成技能、發版號／tag 與更新來源金鑰。沒有 serde 或資料儲存格式遷移。
 - 設定產生器以純政策轉換測試所有 channel／平台／模式組合，並以 CLI 子程序確認 JSON、exit code 與 stderr；共用兩條實際 workflow 呼叫，不加測試專用產品旗標。
 - 產物驗證測試以暫存命令 fixture 模擬 native 成敗、缺檔、缺架構、簽章錯誤、包內內容不一致、full 公證拒絕、逾時與卸載失敗，斷言不補簽、不漏清理及非 0 錯誤；真實 DMG 與 native 工具驗證只在 GitHub-hosted macOS runner 執行。命令 fixture 通過不得宣稱原生啟動通過。
-- TDD 順序：D0 的分支與起始點提交先完成；先新增 D1 CI gate 與 D2／D3 的失敗案例，再完成對應 workflow 與工具。測試僅由 GitHub Actions 執行；D4 的另一台 Mac 人工接受不阻止品質站檢查，但封存仍等待手動任務。
+- D0 的分支與起始點提交先完成。原規劃要求 D1／D2／D3 先取得失敗測試結果再實作；當時沒有留下可驗證的先失敗紀錄，此順序無法事後補證。本次補充失敗情境測試並由 GitHub Actions 執行，保留此歷史限制，不將後補測試說成實作前證據。D4 的另一台 Mac 人工接受不阻止品質站檢查，但封存仍等待手動任務。
 - GitHub Actions CI 使用 node --test scripts/*.test.mjs scripts/*/*.test.mjs；不得在目前開發電腦執行這些產品測試。此變更不改產品輸出，既有 golden／CLI 基線維持，不因只改打包而重跑整個 Rust／前端套件；完整應用程式回歸由既有 CI 決定。
 
 ## Risks / Trade-offs
