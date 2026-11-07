@@ -8,12 +8,12 @@
 - [x] 1.2 依 D5「文件與回歸邊界」排查同類位置：rg 搜尋 signingIdentity、SPECLINK_MACOS_SIGNING、codesign、notariz、Gatekeeper、簽章及公證；盤點 .github/workflows/release.yml、.github/workflows/desktop-build.yml、scripts/release/signing-gate.mjs、scripts/desktop/desktop-sidecar.mjs、scripts/desktop/desktop-install.mjs、README.md、README.zh-TW.md、docs/development.md、docs/development.zh-TW.md。驗證：在 docs/development/macos-dmg-launch-investigation.md 逐項寫明採修或保留理由，標明本機安裝既有簽章前置不改、updater 與發佈通路不擴大。 <!-- speclink-task:tsk_01M6RJJBGGJ9KE2JCZHZYJVGJ0 -->
 
 - [ ] 1.3 先為「正式 Release 等待同 commit CI」建立失敗案例：正式 `v*` workflow 重用 `scripts/desktop/desktop-ci-gate.mjs`，所有 build／desktop／docker／engine-version 獨立 jobs 等待 gate，並授予 gate 僅需的 actions:read 權限。範圍 scripts/desktop/desktop-release.test.mjs。驗證：由 GitHub Actions PR CI 執行 `node --test scripts/*.test.mjs scripts/*/*.test.mjs`，確認缺 gate、錯誤 job 依賴或權限不足會使案例失敗；本機不執行測試。 <!-- speclink-task:new-release-gate-red -->
-- [ ] 1.4 實作 D1：一般 `v*` Release 在任何建置及發布前等待預設分支同 SHA 的 push CI 成功，CI 失敗／SHA 不符／40 分鐘逾時時 fail closed；保留一般 Release 的 DMG、updater 與其他 assets，不改接 `desktop-v*`。範圍 .github/workflows/release.yml、scripts/desktop/desktop-release.test.mjs。驗證：GitHub Actions PR CI 的同組 scripts 測試通過，並確認 build、desktop、docker、engine-version 均依賴 gate，且 engine-npm-build 與後續發布沿用 needs 被阻擋；本機不執行測試。 <!-- speclink-task:new-release-gate-green -->
+- [x] 1.4 實作 D1：一般 `v*` Release 在任何建置及發布前等待預設分支同 SHA 的 push CI 成功，CI 失敗／SHA 不符／40 分鐘逾時時 fail closed；保留一般 Release 的 DMG、updater 與其他 assets，不改接 `desktop-v*`。範圍 .github/workflows/release.yml、scripts/desktop/desktop-release.test.mjs。驗證：GitHub Actions PR CI 的同組 scripts 測試通過，並確認 build、desktop、docker、engine-version 均依賴 gate，且 engine-npm-build 與後續發布沿用 needs 被阻擋；本機不執行測試。 <!-- speclink-task:new-release-gate-green -->
 
 ## 2. 共用打包設定的 Red／Green
 
 - [ ] 2.1 先為 D2「共用桌面打包設定」與「OS 程式碼簽章為可插鑰匙開關」建立失敗案例：Release macOS none／full、非 macOS、Desktop Build 三平台、未知 channel／模式、JSON camelCase 欄位、stdout／stderr／exit code，以及 full 不被 '-' 覆寫、partial secrets 仍拒絕、secret 不洩漏。範圍 scripts/release/desktop-bundle-config.test.mjs、scripts/release/signing-gate.test.mjs、scripts/desktop/desktop-release.test.mjs。驗證：由 GitHub Actions PR CI 執行 `node --test scripts/*.test.mjs scripts/*/*.test.mjs`，確認缺少共用設定或工作流程接線時新案例失敗；本機不執行測試。 <!-- speclink-task:tsk_01M6RJJBGG6BFGAMF58K8GP7N5 -->
-- [ ] 2.2 實作 D2 共用設定產生器並讓兩條 workflow 使用同一份政策，保留 Desktop Build 的來源資訊輸出與 createUpdaterArtifacts=false、Release updater 預設及 full 的 Apple 環境路徑；未知模式失敗且不進 Tauri。範圍 scripts/release/desktop-bundle-config.mjs、.github/workflows/release.yml、.github/workflows/desktop-build.yml。驗證：前項案例由 GitHub Actions PR CI 轉綠，確認生成 JSON 只包含設計表的覆寫，不增加產品設定或套件相依；本機不執行測試。 <!-- speclink-task:tsk_01M6RJJBGGW6WPRFTAZP4W97W7 -->
+- [x] 2.2 實作 D2 共用設定產生器並讓兩條 workflow 使用同一份政策，保留 Desktop Build 的來源資訊輸出與 createUpdaterArtifacts=false、Release updater 預設及 full 的 Apple 環境路徑；未知模式失敗且不進 Tauri。範圍 scripts/release/desktop-bundle-config.mjs、.github/workflows/release.yml、.github/workflows/desktop-build.yml。驗證：前項案例由 GitHub Actions PR CI 轉綠，確認生成 JSON 只包含設計表的覆寫，不增加產品設定或套件相依；本機不執行測試。 <!-- speclink-task:tsk_01M6RJJBGGW6WPRFTAZP4W97W7 -->
 
 ## 3. 最終產物驗證的 Red／Green
 
@@ -24,7 +24,7 @@
 
 ## 4. 文件與原生產物驗證
 
-- [ ] 4.1 依 D5 修正「開發者入口文件雙語對」，讓 macOS 安裝表與步驟區分 ad-hoc、Developer ID 與 Apple 公證，無憑證流程說明首次個別允許，不宣稱所有正式 DMG 都免放行；保留五個 npm 入口、README 對應連結、實際檔名與 Windows／Linux 步驟。範圍 docs/development.md、docs/development.zh-TW.md。驗證：人工對照兩語章節及事實、重新搜尋簽章承諾無未解釋落差，並由 GitHub Actions PR CI 執行 `node --test scripts/*.test.mjs scripts/*/*.test.mjs`；本機不執行測試。 <!-- speclink-task:tsk_01M6RJJBGGNCV0BRE6YJ4CCFST -->
+- [x] 4.1 依 D5 修正「開發者入口文件雙語對」，讓 macOS 安裝表與步驟區分 ad-hoc、Developer ID 與 Apple 公證，無憑證流程說明首次個別允許，不宣稱所有正式 DMG 都免放行；保留五個 npm 入口、README 對應連結、實際檔名與 Windows／Linux 步驟。範圍 docs/development.md、docs/development.zh-TW.md。驗證：人工對照兩語章節及事實、重新搜尋簽章承諾無未解釋落差，並由 GitHub Actions PR CI 執行 `node --test scripts/*.test.mjs scripts/*/*.test.mjs`；本機不執行測試。 <!-- speclink-task:tsk_01M6RJJBGGNCV0BRE6YJ4CCFST -->
 - [ ] 4.2 在正式 `v*` Release workflow 的 GitHub-hosted macOS runner 執行 D3 native 閘門，取得 App 與 DMG 的真實驗證結果；測試 updater archive 若由同一 App 建立須標為測試包，真實 Developer ID 或 Intel 原生環境未實跑須列明。依 speclink instructions --skill audit 的清單核對路徑／模式輸入、native 失敗／期限、只讀掛載與清理及 full 不降級；不為此改舊 tag 或系統政策。範圍 .github/workflows/release.yml、.github/workflows/desktop-build.yml、scripts/release/macos-artifact-verify.mjs、docs/development/macos-dmg-launch-investigation.md。驗證：原生 codesign／lipo 與容器驗證成功或明確失敗、記錄產物來源及限制；確認一般 CI 範圍判定與原發佈依賴不變。 <!-- speclink-task:tsk_01M6RJJBGGTXVZV8HK8SQV95XZ -->
 
 ## 5. 使用者啟動接受與整合檢查

@@ -20,7 +20,8 @@ Dock 問題的唯一根因仍未證實。使用者要求不得在本開發電腦
 - `.github/workflows/release.yml` 的一般 `v*` workflow 原本沒有等待同一 SHA 主 CI；目前分支已新增前置 gate，並讓 build、desktop、docker、engine-version 依賴它。正式 Release、npm、Docker 與其他發布步驟沿既有依賴鏈等待建置完成。
 - 目前分支已讓正式 Release 與 Desktop Build 共用打包設定：沒有 Apple 憑證時明確傳 `signingIdentity: '-'`，完成 ad-hoc 簽章；有憑證時不覆寫 Tauri 設定。macOS runner 在上傳前會檢查 App、DMG 內容及正式 Release updater archive 內的 App。
 - Tauri 官方說明指出 notarization/stapler 處理的是 App bundle，不能推定 `.dmg` 也附有公證票證；因此驗證器檢查 App 的 Gatekeeper 與 stapler 結果，並用 `hdiutil verify` 檢查 DMG 映像完整性。[Tauri macOS 簽章說明](https://v2.tauri.app/distribute/sign/macos/)。
-- 目前尚未有 GitHub PR CI 或正式 Release runner 的結果；程式測試、DMG 建置及 native 產物驗證只由 GitHub Actions 執行。本開發電腦不執行測試、掛載 DMG、重簽或啟動實驗。
+- PR #18 的 CI run [42247712018](https://github.com/mosutw/speclink/actions/runs/42247712018) 在提交 `8aae41662165878422e285b21af8f5c3c20ea70d` 上通過；macOS 工作於第二次嘗試通過，Windows、Linux 與其他工作亦通過。這次 PR CI 執行的是腳本測試與一般建置測試，並未執行正式 Release 的 DMG 與 updater 原生產物驗證。
+- 尚無本次修正的正式 `v*` Release 產物驗證結果；真實 Developer ID／公證模式及 Intel 原生啟動也尚未驗證。另一台 Mac 的安裝與 GUI 啟動驗收仍待使用者執行。本開發電腦不執行測試、掛載 DMG、重簽或啟動實驗。
 
 ## 同類位置盤點與處理範圍
 
