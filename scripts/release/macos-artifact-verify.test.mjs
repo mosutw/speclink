@@ -55,14 +55,12 @@ function fakeRunner(f, overrides = {}) {
         mountPoints.push(mountPoint);
         copyApp(f.app, path.join(mountPoint, 'Speclink.app'));
         overrides.mutate?.('dmg', path.join(mountPoint, 'Speclink.app'));
-        if (overrides.dmgMismatch) writeFileSync(path.join(mountPoint, 'Speclink.app/Contents/MacOS/speclink'), 'different-cli');
         return { status: 0, stdout: '/dev/disk9 Apple_HFS\n', stderr: '' };
       }
       if (command === 'tar') {
         const destination = args[args.indexOf('-C') + 1];
         copyApp(f.app, path.join(destination, 'Speclink.app'));
         overrides.mutate?.('updater', path.join(destination, 'Speclink.app'));
-        if (overrides.updaterMismatch) writeFileSync(path.join(destination, 'Speclink.app/Contents/MacOS/speclink'), 'different-cli');
       }
       if (overrides.timeout?.(command, args)) {
         const error = new Error('timed out');
@@ -121,15 +119,6 @@ test('成功時驗證 App、DMG 與 updater，none 不呼叫 Gatekeeper 或 stap
   assert.ok(native.commands.some(({ command, args }) => command === 'hdiutil' && args[0] === 'detach' && args[1] === '/dev/disk9'));
   assert.ok(native.commands.every(({ options }) => options.timeout === 120_000));
   assert.equal(native.commands.some(({ command }) => command === 'spctl' || command === 'xcrun'), false);
-});
-
-test('拒絕 DMG 或 updater 內與建置 App 不同的執行檔', (t) => {
-  for (const mismatch of ['dmgMismatch', 'updaterMismatch']) {
-    const f = fixture(t);
-    const native = fakeRunner(f, { [mismatch]: true });
-    assert.throws(() => verifyArtifacts({ ...f, mode: 'none', channel: 'release' }, { platform: 'darwin', runner: native.run }), /(?:DMG 內 App|updater 內 App).*不同/);
-    assert.ok(native.commands.some(({ command, args }) => command === 'hdiutil' && args[0] === 'detach'));
-  }
 });
 
 test('DMG 與 updater 的每個關鍵檔案不一致均拒絕交付', (t) => {

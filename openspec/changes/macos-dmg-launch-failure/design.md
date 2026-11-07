@@ -10,12 +10,12 @@
 
 - 依既有 CI 後 Release 順序修正式 `v*` Release，等同一 commit 的主 CI 成功後才建置及發布 DMG。
 - 無 Apple 憑證時完成真正的 App ad-hoc 簽章，並驗證最後交付容器內的內容。
-- 由 GitHub Actions 驗證打包產物；需要 GUI 啟動驗收時由使用者在另一台 Mac 執行。文件明確區分 ad-hoc 與 Developer ID／公證。
+- 由 GitHub Actions 驗證打包產物；GUI 啟動驗收由使用者自行執行，可在開發電腦或另一台 Mac。文件明確區分 ad-hoc 與 Developer ID／公證。
 
 **Non-Goals:**
 
 - 不要求本次提供 Apple 憑證，不全域停用 Gatekeeper，不以移除原安裝 quarantine 作為修正。
-- 不在目前開發電腦執行產品測試、掛載 DMG、重簽副本或啟動測試 App；打包、測試與 native 產物檢查交給 GitHub Actions，人工啟動驗收使用另一台 Mac。
+- 代理不在目前開發電腦執行產品測試、掛載 DMG、重簽副本或啟動測試 App；打包、測試與 native 產物檢查交給 GitHub Actions，使用者可自行驗收安裝版。
 - 不修改 Rust／Tauri／前端、產品 CLI 或 Local／Remote 契約；因果對照指向其他問題時先 ingest，不直接擴大實作。
 - 不更改版號、既有 tag、更新端點／公鑰、updater minisign、發佈通路、資產檔名與 CI 範圍判定。
 
@@ -35,7 +35,7 @@
 
 DMG 只在 GitHub-hosted macOS runner 建置。無 Apple 憑證時沿用 Desktop Build 已有的 `signingIdentity` 設定為 `-` ad-hoc 設定；完整憑證模式與既有資產、updater minisign、更新端點及公鑰維持原狀。打包後的 App、DMG 與 updater 內容由同一 runner 上的唯讀 native 驗證檢查，再進入原有 artifact 上傳與 Release 組裝。
 
-本次不在開發電腦建置或測試 App，不掛載本機 DMG、不重簽副本、不取樣本機啟動程序。程式測試與產物檢查由 GitHub Actions 執行；CI 簽章或檔案結構通過不代表 GUI 啟動已成功，必要的安裝啟動驗收由使用者在另一台 Mac 執行，否則明列為未驗證。
+代理不在開發電腦建置或測試 App，不掛載本機 DMG、不重簽副本、不取樣本機啟動程序。程式測試與產物檢查由 GitHub Actions 執行；CI 簽章或檔案結構通過不代表 GUI 啟動已成功，安裝啟動驗收由使用者自行執行並記錄設備。
 
 ### D2 共用桌面打包設定
 
@@ -69,7 +69,7 @@ native 子程序各有最長 120 秒期限，錯誤、逾時或驗證不符皆 e
 
 ### D4 打包版啟動驗收
 
-CI 的 native 產物驗證與人手啟動驗收分開記錄。開發電腦不安裝、不啟動本次測試產物。若進行 GUI 接受測試，使用者在另一台 Mac 關閉開發模式後，從本次修正的正式 v* Release DMG 安裝 App，依系統完成首次對該 App 明確允許，確認版號與可操作的看板或專案選擇器主視窗；不能以 CLI、程序存在或簽章檢查代替。沒有另一台 Mac 時，明列 GUI 啟動未驗證。
+CI 的 native 產物驗證與人手啟動驗收分開記錄。使用者選擇接受自己在開發電腦執行的驗收；代理仍不得在該電腦測試或啟動 App。使用者關閉開發模式後，從本次修正的正式 v* Release DMG 安裝 App，依系統完成首次對該 App 明確允許，確認版號與可操作的看板或專案選擇器主視窗；不能以 CLI、程序存在或簽章檢查代替。驗收紀錄須明列使用同一台開發電腦或另一台 Mac。
 
 這項使用者操作與接受結果以 [M] 任務記錄，代理不得代勾。ARM64／Intel 的架構與簽章在自動化閘門檢查；有 Intel 原生環境時補實際啟動，無環境時明列「Intel 原生啟動未驗證」，不把交叉編譯、lipo 或簽章檢查冒充實機啟動。
 
@@ -81,19 +81,19 @@ CI 的 native 產物驗證與人手啟動驗收分開記錄。開發電腦不安
 
 ## Implementation Contract
 
-- 範圍內：D1 的同 SHA CI gate 與既有 v* Release 流程對齊；D2 的兩條 workflow 及共用設定產生器；D3 的共用 native 產物驗證與其測試；D4 的另一台 Mac GUI 啟動驗收；D5 的中英文件與既有打包接線測試。一般 CI 的 Linux 建置另執行本變更的分析與嚴格驗證，變更封存後自動略過，不改 CI 範圍判定。
+- 範圍內：D1 的同 SHA CI gate 與既有 v* Release 流程對齊；D2 的兩條 workflow 及共用設定產生器；D3 的共用 native 產物驗證與其測試；D4 的使用者 GUI 啟動驗收；D5 的中英文件與既有打包接線測試。一般 CI 的 Linux 建置另執行本變更的分析與嚴格驗證，變更封存後自動略過，不改 CI 範圍判定。
 - 不在目前開發電腦執行產品測試或啟動實驗；scripts 測試與 macOS native 產物驗證只在 GitHub Actions runner 執行。具體路徑以 proposal Impact 為清單。
 - 範圍外：應用程式與核心 crate、UI、IPC、Local／Remote 行為、新套件相依、產品設定 schema、生成技能、發版號／tag 與更新來源金鑰。沒有 serde 或資料儲存格式遷移。
 - 設定產生器以純政策轉換測試所有 channel／平台／模式組合，並以 CLI 子程序確認 JSON、exit code 與 stderr；共用兩條實際 workflow 呼叫，不加測試專用產品旗標。
 - 產物驗證測試以暫存命令 fixture 模擬 native 成敗、缺檔、缺架構、簽章錯誤、包內內容不一致、full 公證拒絕、逾時與卸載失敗，斷言不補簽、不漏清理及非 0 錯誤；真實 DMG 與 native 工具驗證只在 GitHub-hosted macOS runner 執行。命令 fixture 通過不得宣稱原生啟動通過。
-- D0 的分支與起始點提交先完成。原規劃要求 D1／D2／D3 先取得失敗測試結果再實作；當時沒有留下可驗證的先失敗紀錄，此順序無法事後補證。本次補充失敗情境測試並由 GitHub Actions 執行，保留此歷史限制，不將後補測試說成實作前證據。D4 的另一台 Mac 人工接受不阻止品質站檢查，但封存仍等待手動任務。
+- D0 的分支與起始點提交先完成。原規劃要求 D1／D2／D3 先取得失敗測試結果再實作；當時沒有留下可驗證的先失敗紀錄，此順序無法事後補證。本次補充失敗情境測試並由 GitHub Actions 執行，保留此歷史限制，不將後補測試說成實作前證據。D4 的使用者人工接受不阻止品質站檢查，但封存仍等待手動任務。
 - GitHub Actions CI 使用 node --test scripts/*.test.mjs scripts/*/*.test.mjs；不得在目前開發電腦執行這些產品測試。此變更不改產品輸出，既有 golden／CLI 基線維持，不因只改打包而重跑整個 Rust／前端套件；完整應用程式回歸由既有 CI 決定。
 
 ## Risks / Trade-offs
 
 - [golden／CLI 輸出意外漂移] → 不修改產品原始碼或生成來源，確認 Git 差異範圍；新增私有腳本輸出不冒充產品 API。
 - [Windows／Linux 打包行為變動] → D2 明確保留 updater 覆寫值，native 閘門僅 macOS 執行，維持原 CI 範圍判定及各平台產物集合。
-- [ad-hoc 驗證通過但 macOS 仍拒絕首次開啟] → D4 由另一台 Mac 做人工安裝啟動驗收；目前開發電腦不測試，不宣稱 Apple 公證，沒有人工結果就標示未驗證。
+- [ad-hoc 驗證通過但 macOS 仍拒絕首次開啟] → D4 由使用者做人工安裝啟動驗收並記錄設備；代理不在開發電腦測試，不宣稱 Apple 公證，沒有人工結果就標示未驗證。
 - [有 Apple 憑證的路徑被 '-' 覆寫] → full 的設定必須為空覆寫，fixture 覆蓋 full／none／partial，原生 full 閘門再要求公證結果。
 - [掛載或子程序卡住] → D3 使用命令期限、唯一暫存目錄與失敗清理；退出失敗阻止產物上傳。
 - [缺 Intel 原生機或真實 Apple 憑證] → 如實記錄未執行範圍，使用架構／native 簽章檢查與政策 fixture 保護既有契約，不把模擬結果當成實機驗證。
@@ -104,4 +104,4 @@ CI 的 native 產物驗證與人手啟動驗收分開記錄。開發電腦不安
 
 ## Open Questions
 
-簽章缺口是否完整解釋 Dock 問題仍未知；本次修正已知的 Release 簽章及 CI gate 缺口，不宣稱已證實唯一根因。所有本機產品實驗皆禁止；CI 測試在 GitHub Actions 執行，GUI 啟動若無另一台 Mac 則列為未驗證。Intel 原生啟動及真實 Developer ID 產物若缺環境也明列未實跑；本次不要求購置憑證或改變憑證政策。
+簽章缺口是否完整解釋 Dock 問題仍未知；本次修正已知的 Release 簽章及 CI gate 缺口，不宣稱已證實唯一根因。代理不得進行本機產品實驗；CI 測試在 GitHub Actions 執行。使用者回報同機 GUI 啟動成功並選擇接受該結果；Intel 原生啟動及真實 Developer ID 產物若缺環境也明列未實跑。
