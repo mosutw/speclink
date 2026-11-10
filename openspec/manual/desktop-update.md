@@ -3,8 +3,8 @@ title: 自動更新、CLI、技能檔過期與關於頁
 section: 桌面 app
 order: 350
 keywords: [檢查更新, 更新頁, 回到前景, 更新日誌, 安裝 CLI, PATH, 技能檔過期, 保留現狀, speclink update, 關於 Speclink, 版本資訊, 第三方授權]
-sources: ["desktop-app#桌面自動更新", "desktop-app#更新日誌彈窗", "desktop-app#安裝 CLI 指令到 PATH", "desktop-app#指令檔過期提示", "desktop-app#指令檔過期提示捲動釘選", "desktop-app#關於頁", "workspace-tools#技能檔過期探測", "workspace-tools#受管檔再生的降級守門", "workspace-tools#引擎版號查詢面", "workspace-tools#產物層版本戳同源", "workspace-tools#內嵌資產版本鎖定紀律", "workspace-tools#update 清除孤兒技能目錄", "desktop-app#更新日誌依介面語言呈現", "desktop-app#更新頁內附資訊不依賴網路成功", "desktop-network-diagnostics"]
-generated: 2026-10-28T20:20:00+08:00
+sources: ["desktop-app#桌面自動更新", "desktop-app#更新日誌彈窗", "desktop-app#安裝 CLI 指令到 PATH", "desktop-app#指令檔過期提示", "desktop-app#指令檔過期提示捲動釘選", "desktop-app#關於頁", "workspace-tools#技能檔過期探測", "workspace-tools#受管檔再生的降級守門", "workspace-tools#引擎版號查詢面", "workspace-tools#產物層版本戳同源", "workspace-tools#內嵌資產版本鎖定紀律", "workspace-tools#update 清除孤兒技能目錄", "desktop-app#更新日誌依介面語言呈現", "desktop-app#更新頁內附資訊不依賴網路成功", "desktop-network-diagnostics#公司 Proxy 更新失敗的定位與呈現"]
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # 自動更新、CLI、技能檔過期與關於頁
@@ -139,7 +139,7 @@ PATH 的處理：
 
 本地專案成為作用中專案時，app 探測一次。更新動作完成後，以及專案檔案有外部變動時，再探測一次。不是作用中的背景專案不會主動探測。remote 專案不探測、不提示。探測只讀不寫。
 
-探測比對 `.speclink.yaml` 列出的每個工具：內建的 Claude、Codex 與 Copilot，以及通過驗證的自訂描述子（描述子的技能檔路徑以它自己的 skills 目錄起頭）。沒通過驗證的描述子不參與探測，也不會讓結果變成無法判定；它的錯誤由更新動作報出。結果是五種之一：
+探測比對 `.speclink.yaml` 列出的每個工具：內建的 Claude、Codex、Copilot 與 Antigravity，以及通過驗證的自訂描述子。Codex 與 Antigravity 共用 `.agents/skills/`；兩者都選取而共用檔案缺失時，同一路徑只列一次。沒通過驗證的描述子不參與探測，也不會讓結果變成無法判定；它的錯誤由更新動作報出。結果是五種之一：
 
 | 結果 | 意思 |
 | --- | --- |
@@ -231,4 +231,4 @@ CLI 端 `speclink update` 的其他行為（孤兒技能目錄清理、worktree 
 
 關於頁沒有「檢查更新」與「更新日誌」，兩者只在更新頁。版本資訊由 app 一次取得，引擎版號與 `speclink --version` 顯示的 engine 版號相同。頁內文案跟隨介面語言。
 
-**出處**：`desktop-app`、`workspace-tools`
+**出處**：`desktop-app`、`workspace-tools`、`desktop-network-diagnostics`

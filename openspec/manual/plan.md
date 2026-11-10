@@ -4,7 +4,7 @@ section: SDD 工作流
 order: 125
 keywords: [plan, 執行順序, 波次, 依賴, 前置, depends, 阻擋, 並行, 依賴成環, change depends, 封存順序, 同名重疊, 衝突, change rank, 插隊, strict-overlap, 尚未轉出, 分刀, Unpromoted cuts]
 sources: [change-plan, "desktop-roadmap#路線圖列出尚未轉出的刀", "desktop-app#討論結論以欄位標籤呈現"]
-generated: 2026-11-04T17:13:07+08:00
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # 執行順序：plan 與依賴

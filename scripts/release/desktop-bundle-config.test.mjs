@@ -67,6 +67,33 @@ test('CLI 對未知 channel 或額外參數非零結束且不輸出設定 JSON',
   }
 });
 
+test('macOS CLI 拒絕未知簽章模式且不輸出設定', { skip: process.platform !== 'darwin' }, () => {
+  const result = spawnSync(process.execPath, [script, 'release'], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, SPECLINK_MACOS_SIGNING: 'partial' },
+  });
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /SPECLINK_MACOS_SIGNING/);
+});
+
+test('兩條 workflow 的設定與建置步驟明確使用 bash 展開暫存目錄', () => {
+  for (const [file, steps] of [
+    ['release.yml', ['Prepare desktop bundle config', 'Build desktop bundles (Tauri)']],
+    ['desktop-build.yml', ['Prepare self-use bundle config and build information', 'Build desktop installer']],
+  ]) {
+    const workflow = readFileSync(new URL(`../../.github/workflows/${file}`, import.meta.url), 'utf8');
+    for (const name of steps) {
+      const start = workflow.indexOf(`- name: ${name}\n`);
+      assert.notEqual(start, -1, `${file}: ${name}`);
+      const end = workflow.indexOf('\n      - name:', start + 1);
+      const step = workflow.slice(start, end === -1 ? undefined : end);
+      assert.match(step, /\n\s+shell: bash\n/, `${file}: ${name}`);
+    }
+  }
+});
+
 test('兩條 workflow 都用共用設定檔，Desktop Build 不改來源資訊輸出', () => {
   const release = readFileSync(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
   const desktop = readFileSync(new URL('../../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');

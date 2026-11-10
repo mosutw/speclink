@@ -4,7 +4,7 @@ section: 桌面 app
 order: 370
 keywords: [speclink 網址, deep link, 開啟詳情頁, 路線圖, 切專案, 帶到前景, 第二個 app, 格式錯誤, 找不到]
 sources: ["desktop-app#以 speclink 網址開啟詳情頁"]
-generated: 2026-11-04T17:42:55+08:00
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # 用 speclink 網址開啟畫面

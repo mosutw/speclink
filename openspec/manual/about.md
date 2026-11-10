@@ -4,7 +4,7 @@ section: 附錄
 order: 900
 keywords: [來源, 矛盾, 限制, 編纂日期, 規格]
 sources: []
-generated: 2026-10-29T05:54:00+08:00
+generated: 2026-11-07T21:34:37+08:00
 ---
 
 # 本手冊的來源
@@ -13,9 +13,11 @@ generated: 2026-10-29T05:54:00+08:00
 
 本手冊全部內容只取材自 `openspec/specs/` 底下的正式規格。README、`docs/` 與原始碼都不是來源。規格沒寫的，手冊就不寫，或在該處標明「規格未載」。每一頁的最後一行列出它取材的能力名稱。
 
-正式規格共 96 個能力。其中 69 個是使用者會操作或看到的東西（畫面、指令、技能、輸出、檔案），已入冊。其餘 26 個是引擎內部（儲存、wire 契約、host 執行期、測試骨架、建置與發布管線、本 repo 自用的發版技能、更新日誌的資料契約、技能原稿的寫法規範），不入冊：
+正式規格共 98 個能力。其中 74 個是使用者會操作或看到的東西（畫面、指令、技能、輸出、檔案），已入冊。其餘 24 個是引擎內部（儲存、wire 契約、host 執行期、測試骨架、建置與發布管線、本 repo 自用的發版技能、更新日誌的資料契約、技能原稿的寫法規範），不入冊：
 
-`client-protocol`、`command-runtime`、`delivery-baseline`、`desktop-release`、`dev-harness`、`host-runtime`、`node-sdk`、`node-sdk-release`、`phase2-acceptance`、`phase3-acceptance`、`postgres-team-store`、`reference-server`、`release-notes`、`release-skill`、`remote-board-order`、`remote-workspace-data`、`server-context-api`、`server-drift-api`、`server-event-stream`、`server-read-api`、`server-verb-api`、`serverfs-team-store`、`sqlite-team-store`、`store-abstraction`、`teamstore-contract`、`workspace-session`。（註：`skill-authoring` 僅其中「技能共用的對話語言段落」一段寫進[工作流政策與設定](policy-config.md)）
+`client-protocol`、`command-runtime`、`delivery-baseline`、`host-runtime`、`node-sdk`、`node-sdk-release`、`phase2-acceptance`、`phase3-acceptance`、`postgres-team-store`、`reference-server`、`release-notes`、`release-skill`、`remote-board-order`、`remote-workspace-data`、`server-context-api`、`server-drift-api`、`server-event-stream`、`server-read-api`、`server-verb-api`、`serverfs-team-store`、`sqlite-team-store`、`store-abstraction`、`teamstore-contract`、`workspace-session`。（註：`skill-authoring` 僅其中「技能共用的對話語言段落」一段寫進[工作流政策與設定](policy-config.md)）
+
+`desktop-release` 的安裝與簽章說明納入[安裝](install.md)；`dev-harness` 的操作入口納入[開發環境](development-entry.md)，內部測試契約不另寫成操作。Herdr 的操作見[Herdr 工作區中的 Speclink](herdr.md)。
 
 `release-notes` 定義的更新日誌，使用者看得到的那一面（桌面 app 的更新日誌）由 `desktop-app` 載明，寫在[自動更新、CLI、技能檔過期與關於頁](desktop-update.md)。`desktop-app` 裡有兩段需求講前端元件怎麼共用（「前端元件庫與資料源解耦」「共用元件唯一來源」），屬於內部結構，沒有任何一頁取材。
 
@@ -75,6 +77,7 @@ generated: 2026-10-29T05:54:00+08:00
 - 詞彙：`desktop-app` 的需求名與內文仍有舊詞——「歸檔」見於「歸檔清單經衍生快取加速且可重建」與幾段 2026-10-10 改寫過的需求；「品質站」見於「品質站蓋章配色與主色分離」等；「workspace」「工作區」見於「看板首訪以 skeleton 佔位」與 `desktop-connections`。詳情自 2026-10-10 起改成佔滿主區的頁，需求內文已改稱「詳情頁」。桌面 app 各頁依 `openspec/LANGUAGE.md` 一律用「封存」「詳情頁」「品質關卡」「專案」，引用需求名稱時保留原字。CLI 與 remote 模式的頁沿用規格的「工作區」。
 
 29. **reader 能不能調專案設定**：`desktop-config`「設定頁圖形化讀寫兩層設定」寫四頁唯讀；`desktop-app`「裝置層專案圖示底色」明定 Remote reader 能調自己的圖示底色（兩段皆為2026-10-19T23:00:19+08:00）。內文保留團隊政策唯讀，並說明本機圖示偏好的例外。
+30. **Antigravity 使用的技能目錄**：`desktop-config`「AI 工具名稱顯示技能目錄」（2026-10-23）仍寫 `antigravity [.agent]` 並描述 `.agent/skills`；較新的 `workspace-tools`「Antigravity 技能生成與獨立清理」（2026-11-05）寫 `antigravity [.agents]`，與 Codex 共用 `.agents/skills`。本次更新的[建立工作區與指令檔](init-workspace.md)依較新規格撰寫；[專案、新增專案與設定頁](desktop-projects.md)的來源未標為過期，本輪保留舊字面。
 
 本次規格同步已消除先前的應用程式設定分類差異：`desktop-app`「側欄導覽結構」與 `desktop-config`「設定頁圖形化讀寫兩層設定」都已列入「網路與診斷」及「安全標準資料」。新增操作寫在[網路與診斷](desktop-network-diagnostics.md)，離線資料交換補入[安全標準資料](security-data.md)。
 
@@ -82,7 +85,7 @@ generated: 2026-10-29T05:54:00+08:00
 
 本次新增兩種內建產出流程與切換、品質輪數及完整時間、已封存流程成本摘要，以及品質關卡前的主分支與 CI 提醒；相關操作已補入各頁。規格資料夾的刻意差異見[規格資料夾與舊佈局遷移](spec-folder.md)：本 Fork 明寫 `spec_dir: openspec`，原地保留資料，新寫入使用 `.meta.yaml`，缺席才讀舊 `.openspec.yaml`。不保證 OpenSpec CLI 的完整互通。
 
-本次整合的正式規格仍待變更封存後合入；手冊補充依 `merge-upstream-0-11-0` 的設計與 delta 規格核對。原有 Fork 的安全審查、品質歷史、四種工具、語言與桌面偏好說明保留。
+31. **蓋章後能否查閱工單紀錄**：`user-documentation`「品質站蓋章效果與非成員錯誤碼的文件揭露」（2026-08-27）說本地工單文字只留在 Git 歷史、remote 蓋章後讀不回來；較新的 `review-station`「審查完成紀錄查詢」與 `verify-station`「驗證完成紀錄查詢」（2026-10-23）允許查閱已保存的完成紀錄。本次更新的[工作流總覽](workflow-overview.md)依較新規格撰寫。
 
 ## 已知限制
 
@@ -97,10 +100,6 @@ generated: 2026-10-29T05:54:00+08:00
 
 ## 編纂日期
 
-2026-10-29
+2026-11-07
 
 **出處**：本頁為說明頁，不直接取材自單一能力；各頁末行列出自己的出處。
-
-## 0.12.0 整合補充
-
-本次新增[路線圖](desktop-roadmap.md)與[speclink 網址](desktop-deep-link.md)操作頁，並更新[執行順序](plan.md)與[討論瀏覽](desktop-browse.md)。新增能力的正式規格將於本次變更封存後合併，既有 Fork 的安全、品質與網路功能說明保留。

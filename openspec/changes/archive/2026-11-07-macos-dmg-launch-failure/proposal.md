@@ -20,7 +20,7 @@
 
 ## Success Criteria
 
-- 同一 commit 的主 CI 通過後才允許正式 Release 建置；GitHub Actions 驗證主 App、DMG 內 App、updater 內 App 及其 universal 架構。實際安裝啟動驗收若執行，須使用另一台 Mac，不使用本開發電腦。未取得啟動證據時不宣稱已修復 Dock 問題。
+- 同一 commit 的主 CI 通過後才允許正式 Release 建置；GitHub Actions 驗證主 App、DMG 內 App、updater 內 App 及其 universal 架構。使用者可自行在開發電腦或另一台 Mac 執行安裝啟動驗收，代理仍不得在開發電腦實驗。未取得啟動證據時不宣稱已修復 Dock 問題。
 - 無 Apple 憑證時，最後交付的 App 及其巢狀程式碼完整簽章驗證成功，主程式與內附 CLI 均保留 arm64／x86_64，DMG 與 updater 包的驗證失敗會使交付失敗。
 - 使用者從修正後的 DMG 安裝 App，完成 macOS 首次明確允許後能看到主視窗；簽章靜態檢查不得代替實際啟動驗收，未實跑的原生架構須明確記錄。
 - 完整 Apple 憑證模式、部分設定拒絕、updater minisign、七個 Release assets、Windows／Linux 交付及一般 CI 範圍判定維持既有契約。
@@ -40,7 +40,7 @@
 
 - 已掃描 desktop-release、user-documentation 及相鄰的 cli-distribution；本次沿用前兩項能力，不新增能力，CLI 安裝通路不變。
 - 影響 apps/desktop 的 macOS 交付與 scripts/、CI 工作流程；不更改任何 Rust crate、Tauri command、前端功能或 Local／Remote 資料契約。
-- Modified: `.github/workflows/release.yml`、`.github/workflows/desktop-build.yml`、`scripts/desktop/desktop-ci-gate.mjs`、`scripts/desktop/desktop-release.test.mjs`、`scripts/release/signing-gate.test.mjs`、`docs/development.md`、`docs/development.zh-TW.md`。
+- Modified: `.github/workflows/release.yml`、`.github/workflows/desktop-build.yml`、`.github/workflows/ci.yml`（Linux 上分析及驗證此變更，封存後略過）、`scripts/desktop/desktop-ci-gate.mjs`、`scripts/desktop/desktop-release.test.mjs`、`scripts/release/signing-gate.mjs`、`scripts/release/signing-gate.test.mjs`、`docs/development.md`、`docs/development.zh-TW.md`。
 - New: `scripts/release/desktop-bundle-config.mjs`、`scripts/release/desktop-bundle-config.test.mjs`、`scripts/release/macos-artifact-verify.mjs`、`scripts/release/macos-artifact-verify.test.mjs`、`docs/development/macos-dmg-launch-investigation.md`。
 - 相容性影響：沒有新增產品 CLI 動詞、旗標、stdin 或設定鍵，既有人眼、JSON、no-color、SDK 與技能生成輸出不變；新增腳本僅供 repo 打包流程使用。無 Apple 憑證的產物會從未完成封裝的臨時簽章改為完整 ad-hoc，仍不宣稱 Apple 公證，首次開啟可能需要手動允許。
 - 不新增套件相依，不變更產品版號、既有發布 tag、updater endpoint／pubkey、Windows 憑證政策或 npm／Docker 通路。

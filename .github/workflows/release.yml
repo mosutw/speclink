@@ -289,6 +289,7 @@ jobs:
         run: node scripts/desktop/desktop-sidecar.mjs --target ${{ matrix.target }}
 
       - name: Prepare desktop bundle config
+        shell: bash
         run: node scripts/release/desktop-bundle-config.mjs release > "$RUNNER_TEMP/desktop-release-config.json"
 
       # OS 簽章開關（design D1／D4）：條件來自上方閘門的決策，填鑰匙即啟用、
@@ -321,6 +322,7 @@ jobs:
       # 更新包簽章（design D3）：TAURI_SIGNING_* 為必要 secrets——缺席時建置以
       # 非零結束（desktop-release spec「缺私鑰時建置失敗」），與 OS 簽章正交。
       - name: Build desktop bundles (Tauri)
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
