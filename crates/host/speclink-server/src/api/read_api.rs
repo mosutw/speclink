@@ -270,6 +270,14 @@ fn archived_item(documents: &BTreeMap<DocumentId, String>, dated_name: String) -
     });
     let parsed_meta = ChangeMeta::from_text(meta.map(String::as_str)).unwrap_or_default();
     let from_discussions = parsed_meta.from_discussions();
+    let progress = tasks.map(|(total, done)| {
+        let stage = speclink_core::model::stage_of(done, total, parsed_meta.started_at.is_some());
+        let ready_at = speclink_core::model::shown_ready_at(parsed_meta.ready_at.as_deref(), done, total);
+        (stage.as_str().to_string(), ready_at)
+    });
+    let why_excerpt = documents
+        .get(&DocumentId::ArchivedChange { change: dated_name.clone(), doc: "proposal.md".to_string() })
+        .and_then(|proposal| speclink_core::listing::why_excerpt(proposal));
     ArchivedItem {
         dated_name: dated_name.clone(),
         date: date.to_string(),
@@ -278,6 +286,11 @@ fn archived_item(documents: &BTreeMap<DocumentId, String>, dated_name: String) -
         tasks_done: tasks.map(|counts| counts.1),
         spec_count: archived_capability_names(documents, &dated_name).len(),
         created_by: parsed_meta.created_by,
+        created_by_id: parsed_meta.created_by_id,
+        why_excerpt,
+        stage: progress.as_ref().map(|(stage, _)| stage.clone()),
+        ready_at: progress.and_then(|(_, ready_at)| ready_at),
+        fields: parsed_meta.fields,
         from_discussions,
     }
 }

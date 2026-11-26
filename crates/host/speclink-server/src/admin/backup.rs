@@ -7,6 +7,7 @@
 //! database, and a per-member digest chain rooted in a side file. Credentials are
 //! never in plaintext: the identity database holds only hashes.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -14,10 +15,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use speclink_store::{
-    Bundle, BundleDoc, DocumentId, ImportMode, ProjectId, RepoId, Revision, Scope, TeamStore,
+    content_digest, Bundle, BundleDoc, DocumentId, ImportMode, ProjectId, RepoId, Revision, Scope, TeamStore,
+    BUNDLE_FORMAT_VERSION,
 };
 
-use crate::config::{IdentityConfig, ServerConfig};
+use crate::config::{IdentityConfig, ServerConfig, StoreConfig};
 use crate::identity::IdentityStore;
 use crate::identity::IdentitySqlite;
 
@@ -444,7 +446,9 @@ fn read_members(input: &Path) -> Result<std::collections::BTreeMap<String, Vec<u
         entry
             .read_to_end(&mut bytes)
             .map_err(|e| BackupError::Io(e.to_string()))?;
-        members.insert(name, bytes);
+        if members.insert(name.clone(), bytes).is_some() {
+            return Err(BackupError::Integrity(format!("duplicate archive member {name}")));
+        }
     }
     Ok(members)
 }
@@ -485,7 +489,11 @@ fn load_verified(
 
     // Every listed member must be present and match its digest — this is where
     // a single-bit change to any member is caught.
+    let mut verified = BTreeSet::new();
     for member in &manifest.members {
+        if !verified.insert(member.name.as_str()) {
+            return Err(BackupError::Integrity(format!("duplicate manifest member {}", member.name)));
+        }
         let bytes = members
             .get(&member.name)
             .ok_or_else(|| BackupError::Integrity(format!("missing member {}", member.name)))?;
@@ -497,14 +505,29 @@ fn load_verified(
         }
     }
 
-    // Every bundle must parse as an export bundle (structure check).
+    if manifest.identity.member != IDENTITY_MEMBER || !verified.contains(IDENTITY_MEMBER) {
+        return Err(BackupError::Integrity("identity snapshot is missing from the verified members".into()));
+    }
+    let mut scopes = BTreeSet::new();
     for scope in &manifest.scopes {
-        let bytes = members
-            .get(&scope.member)
-            .ok_or_else(|| BackupError::Integrity(format!("missing bundle {}", scope.member)))?;
-        serde_json::from_slice::<BundleDto>(bytes).map_err(|e| {
+        if !scopes.insert((&scope.project, &scope.repo)) || !verified.contains(scope.member.as_str()) {
+            return Err(BackupError::Integrity(format!("duplicate scope or unverified bundle {}", scope.member)));
+        }
+        let bundle: BundleDto = serde_json::from_slice(&members[&scope.member]).map_err(|e| {
             BackupError::Integrity(format!("unparseable bundle {}: {e}", scope.member))
         })?;
+        if bundle.project != scope.project || bundle.repo != scope.repo {
+            return Err(BackupError::Integrity(format!("bundle {} does not match its manifest scope", scope.member)));
+        }
+        if bundle.format_version != BUNDLE_FORMAT_VERSION || bundle.documents.len() != scope.doc_count {
+            return Err(BackupError::Integrity(format!("bundle {} has an invalid version or document count", scope.member)));
+        }
+        let mut documents = std::collections::HashSet::<DocumentId>::new();
+        for document in bundle.documents {
+            if !documents.insert(document.doc.into()) || content_digest(&document.content) != document.digest {
+                return Err(BackupError::Integrity(format!("bundle {} has a duplicate document or an incorrect content digest", scope.member)));
+            }
+        }
     }
 
     Ok((manifest, members))
@@ -646,6 +669,16 @@ pub fn validate(config: &ServerConfig, input: &Path) -> Result<ValidationReport,
     // Identity: counts and schema version against the manifest.
     let identity = crate::build_identity(&config.identity)
         .map_err(|e| BackupError::Identity(e.to_string()))?;
+    validate_identity(identity.as_ref(), &manifest, &mut differences)?;
+
+    Ok(ValidationReport {
+        ok: differences.is_empty(),
+        differences,
+        scopes_checked: manifest.scopes.len(),
+    })
+}
+
+fn validate_identity(identity: &dyn IdentityStore, manifest: &Manifest, differences: &mut Vec<String>) -> Result<(), BackupError> {
     let user_count = identity.list_users().map_err(idn)?.len();
     let projects = identity.list_projects().map_err(idn)?;
     let project_count = projects.len();
@@ -676,11 +709,96 @@ pub fn validate(config: &ServerConfig, input: &Path) -> Result<ValidationReport,
         ));
     }
 
-    Ok(ValidationReport {
-        ok: differences.is_empty(),
-        differences,
-        scopes_checked: manifest.scopes.len(),
-    })
+    Ok(())
+}
+
+/// Restore a verified format-1 backup into a Store Port configuration.
+/// Preflight each scope in memory before opening the destination. The identity
+/// database is published last so a failed import cannot activate a partial restore.
+pub fn restore_to_port(config: &ServerConfig, input: &Path) -> Result<ValidationReport, BackupError> {
+    use speclink_host::transfer;
+    use speclink_protocol::query::{ImportBundle, ImportBundleDocument, ImportScope};
+    use speclink_store_port::{Actor, MemoryStorePort, Timestamp};
+
+    let (manifest, members) = load_verified(input)?;
+    let identity_path = match &config.identity {
+        IdentityConfig::Sqlite { path } => path,
+        IdentityConfig::Memory => return Err(BackupError::Unsupported("the target identity must be a sqlite database".into())),
+    };
+    if let StoreConfig::Memory = config.store {
+        return Err(BackupError::Unsupported("the target store must be persistent".into()));
+    }
+
+    let scratch = MemoryStorePort::new();
+    let actor = Actor::new("speclink-server", "Speclink restore").expect("fixed actor");
+    let now = Timestamp::new(Utc::now().timestamp_millis().max(0) as u64)
+        .map_err(|e| BackupError::Store(e.to_string()))?;
+    let mut bundles = Vec::with_capacity(manifest.scopes.len());
+    for entry in &manifest.scopes {
+        let old: BundleDto = serde_json::from_slice(&members[&entry.member])
+            .map_err(|e| BackupError::Integrity(e.to_string()))?;
+        let scope = crate::native_storage::scope_id(&old.project, &old.repo)
+            .map_err(|e| BackupError::Integrity(e.to_string()))?;
+        let bundle = transfer::from_first_version(ImportBundle {
+            format_version: old.format_version,
+            scope: ImportScope { project: old.project, repo: old.repo },
+            project_revision: old.project_revision,
+            documents: old.documents.into_iter().map(|document| ImportBundleDocument {
+                document: transfer::legacy_document_id(document.doc.into()),
+                content: document.content,
+                digest: document.digest,
+            }).collect(),
+        }).map_err(|e| BackupError::Integrity(format!("{}: {e}", entry.member)))?;
+        transfer::import(&scratch, &scope, &actor, bundle.clone(), now)
+            .map_err(|e| BackupError::Integrity(format!("{}: {e}", entry.member)))?;
+        bundles.push((scope, bundle));
+    }
+
+    let identity_bytes = &members[&manifest.identity.member];
+    let staged = tempfile::NamedTempFile::new_in(identity_path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")))
+        .map_err(|e| BackupError::Io(e.to_string()))?;
+    std::fs::write(staged.path(), identity_bytes).map_err(|e| BackupError::Io(e.to_string()))?;
+    {
+        let identity = IdentitySqlite::open(staged.path()).map_err(idn)?;
+        let mut differences = Vec::new();
+        validate_identity(&identity, &manifest, &mut differences)?;
+        if !differences.is_empty() {
+            return Err(BackupError::Integrity(differences.join("; ")));
+        }
+    }
+
+    let identity_present = identity_path.try_exists().map_err(|e| BackupError::Io(e.to_string()))?;
+    if identity_present {
+        let connection = rusqlite::Connection::open_with_flags(identity_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| BackupError::Identity(e.to_string()))?;
+        let occupied: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM users) OR EXISTS(SELECT 1 FROM projects) OR EXISTS(SELECT 1 FROM audit_log)",
+            [], |row| row.get(0),
+        ).map_err(|e| BackupError::Identity(e.to_string()))?;
+        if occupied {
+            return Err(BackupError::TargetNotEmpty("identity database contains records".into()));
+        }
+    }
+
+    let store = crate::native_storage::open(&config.store).map_err(|e| BackupError::Store(e.to_string()))?;
+    if store.has_committed_scopes().map_err(|e| BackupError::Store(e.to_string()))? {
+        return Err(BackupError::TargetNotEmpty("store already contains committed scopes".into()));
+    }
+    let scopes_checked = bundles.len();
+    for (scope, bundle) in bundles {
+        let expected = bundle.documents.iter().map(|doc| (doc.key.clone(), doc.digest.clone())).collect::<std::collections::BTreeMap<_, _>>();
+        transfer::import(&*store, &scope, &actor, bundle, now)
+            .map_err(|e| BackupError::Store(format!("restore stopped at scope {}: {e}", scope.as_str())))?;
+        let loaded = transfer::export(&*store, &scope)
+            .map_err(|e| BackupError::Store(format!("verify scope {}: {e}", scope.as_str())))?;
+        let actual = loaded.documents.into_iter().map(|doc| (doc.key, doc.digest)).collect::<std::collections::BTreeMap<_, _>>();
+        if actual != expected {
+            return Err(BackupError::Store(format!("restored documents differ from the backup in scope {}", scope.as_str())));
+        }
+    }
+    let published = if identity_present { staged.persist(identity_path) } else { staged.persist_noclobber(identity_path) };
+    published.map_err(|e| BackupError::Io(e.error.to_string()))?;
+    Ok(ValidationReport { ok: true, differences: Vec::new(), scopes_checked })
 }
 
 /// A sorted multiset of digests, for order-independent set comparison.

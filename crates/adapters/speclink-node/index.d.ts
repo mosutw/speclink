@@ -212,6 +212,7 @@ export interface DispatchOptions {
 }
 
 export interface Engine {
+  exportScope(): Promise<ScopeBundle>
   /**
    * Dispatch one speclink verb. `argv` mirrors the CLI vocabulary one-to-one
    * (shell argv without the program name, e.g. `['list', '--json']`).
@@ -245,6 +246,11 @@ export interface RenderOptions {
   specDir?: string
   /** Neutral target only: the identity in the skill body (`{{TOOL}}`, e.g. `--agent`). Default: `"speclink"`. */
   toolName?: string
+  /** The available skill names, including the skill being rendered. */
+  skills?: string[]
+  checkout?: boolean
+  /** Whether the host can run Git commands. Defaults to the value of checkout. */
+  gitHistory?: boolean
 }
 
 export interface SkillInfo {
@@ -261,3 +267,272 @@ export const skills: {
    */
   render(name: string, options: RenderOptions): string
 }
+
+/** A document of the store port. Versions and times are integers from 0 to 2^53 − 1 (`Number.MAX_SAFE_INTEGER`); times are milliseconds since the Unix epoch. */
+export interface PortDocument {
+  content: string
+  /** The scope version of the commit that last wrote this document. */
+  version: number
+  modifiedAt: number
+}
+
+export interface PortListEntry {
+  key: string
+  version: number
+  modifiedAt: number
+}
+
+/** The scope's current version and the matching documents, in byte order of their keys. */
+export interface PortListing {
+  version: number
+  entries: PortListEntry[]
+}
+
+/** One change in a commit. `expected: null` means the document must not exist; a number is the version it must have. */
+export type PortOp =
+  | { op: 'put'; key: string; content: string; expected: number | null }
+  | { op: 'delete'; key: string; expected: number }
+
+export interface PortEvent {
+  name: string
+  payload: unknown
+}
+
+/** Everything one command writes, in one commit. */
+export interface PortCommit {
+  actor: { id: string; displayName: string }
+  /** The command's stable name, e.g. `new-change`. */
+  command: string
+  at: number
+  ops: PortOp[]
+  /** The domain events of the command: the only way events reach the host. */
+  events: PortEvent[]
+}
+
+/**
+ * The storage contract a host implements: three functions, each on one scope
+ * (an opaque string). Each function may return its value or a Promise.
+ *
+ * - `commit` applies all of its operations or none: run it as one database
+ *   transaction, and check every `expected` before the first write. One
+ *   expectation that does not hold rejects the whole commit. Give the written
+ *   documents the new scope version as their version and `at` as their time,
+ *   and keep the events in the same transaction when you need them delivered.
+ * - `read` returns one result per key, in the same order (`null` for a
+ *   missing document), all from one completed commit. `list` returns the
+ *   documents whose key starts with `prefix`.
+ *
+ * Errors: throw an object whose `code` is `'conflict'` (with the `key` that
+ * does not match and its `actual` version, or null when it does not exist) or
+ * `'unavailable'` (a temporary failure). Anything else is another failure.
+ * `StoreConflictError` and `StoreUnavailableError` set these fields for you;
+ * the SDK reads only the fields, never `instanceof`.
+ *
+ * WARNING: do not wait for a `dispatch` of the same host inside these
+ * functions — the dispatch waits for them, so it would never finish.
+ */
+export interface StorePort {
+  list(scope: string, prefix: string): MaybePromise<PortListing>
+  read(scope: string, keys: string[]): MaybePromise<(PortDocument | null)[]>
+  commit(scope: string, commit: PortCommit): MaybePromise<number>
+}
+
+/** Who acts: an id that stays when the user is renamed, and the name document stamps carry. Neither may be empty or only white space. */
+export interface HostIdentity {
+  id: string
+  displayName: string
+}
+
+export interface BeforeCommandInfo {
+  identity: HostIdentity
+  scope: string
+  /** The engine command's stable name, e.g. `archive` or `workflow-config-edit`. */
+  command: string
+  /** The command's params, camelCase (e.g. `{ change: 'demo', carryReview: true, … }`). Read them; changing them changes nothing. */
+  params: Record<string, unknown>
+  /** Only for the workflow-config writes: the keys the write changes, e.g. `['tdd']`. */
+  changedKeys?: string[]
+}
+
+/** `undefined` or `{ allow: true }` allows; `{ allow: false, reason }` refuses with that reason. */
+export type BeforeCommandAnswer = void | { allow: true } | { allow: false; reason: string }
+
+export interface AfterCommitInfo {
+  identity: HostIdentity
+  scope: string
+  command: string
+  /** The scope version the commit returned. */
+  scopeVersion: number
+  /** The events of the commit, the same the store's `commit` received. */
+  events: PortEvent[]
+}
+
+/**
+ * The host's two points to step in; both are optional. An unknown name is
+ * refused at `createHost`.
+ *
+ * WARNING: do not wait for a `dispatch` of the same host inside a hook —
+ * the dispatch waits for `beforeCommand`, so it would never finish.
+ */
+export interface HostHooks {
+  /**
+   * Asked exactly once per call, before anything is written. A refusal ends
+   * the call with code `refused` and your reason; for any command but the
+   * workflow-config writes it comes before the store sees a call. A throw, a
+   * rejected Promise or an answer of another shape does not allow: the call
+   * ends with code `internal`.
+   */
+  beforeCommand?(info: BeforeCommandInfo, tools: { read(argv: string[]): Promise<unknown> }): MaybePromise<BeforeCommandAnswer>
+  /**
+   * Called after a successful commit; it only watches. The dispatch does not
+   * wait for it, and its throw or rejected Promise is swallowed. Delivery is
+   * not guaranteed: a host that needs every event handles them in the store's
+   * `commit`, in the same transaction as the writes.
+   */
+  afterCommit?(info: AfterCommitInfo): MaybePromise<void>
+}
+
+export interface HostAuthMethods {
+  methods: string[]
+  browser?: { issuer: string; clientId: string; scopes?: string[] }
+}
+
+export interface CreateHostOptions {
+  authMethods?: HostAuthMethods
+  /** Keys with one of these prefixes can only be written by the host. */
+  reservedFieldPrefixes?: string[]
+  limits?: { importBytes?: number }
+  scopes?(identity: HostIdentity): MaybePromise<{ key: string; name: string; repos: { key: string; name: string; scope: string; canWrite?: boolean; canWritePolicy?: boolean }[] }[]>
+  store: StorePort
+  hooks?: HostHooks
+}
+
+export interface HostDispatchCall {
+  /** Trusted fields attached by the host when the command creates a record. */
+  fields?: Record<string, string>
+  /** From your own code (your session), never from the model: argv and stdin cannot change it. */
+  identity: HostIdentity
+  scope: string
+  /** The verb text without the program name, as for `engine.dispatch`. */
+  argv: string[]
+  stdin?: string
+}
+
+export interface ScopeBundle {
+  formatVersion: 2
+  scopeVersion?: number
+  documents: { key: string; content: string; digest: string }[]
+}
+
+export interface ScopeCall {
+  identity: HostIdentity
+  scope: string
+}
+
+export interface ScopeImportOptions extends ScopeCall {
+  bundle: ScopeBundle | { formatVersion: 1; scope: { project: string; repo: string }; projectRevision: number; documents: unknown[] }
+  mode?: 'create' | 'replace'
+  dryRun?: boolean
+}
+
+export interface ScopeImportReport {
+  scopeVersion: number
+  documents: number
+  added: string[]
+  changed: string[]
+  removed: string[]
+}
+
+export interface HostRequest {
+  method: string
+  path: string
+  query?: string
+  headers?: Record<string, string>
+  body?: Uint8Array
+}
+
+export interface HostResponse {
+  status: number
+  headers: Record<string, string>
+  body: Uint8Array
+}
+
+export interface HostRequestExtras {
+  /** Trusted fields from the host, used when a request creates a record. */
+  fields?: Record<string, string>
+}
+
+export interface Host {
+  handleRequest(request: HostRequest, identity: HostIdentity | null, extras?: HostRequestExtras): Promise<HostResponse | null>
+  importScope(call: ScopeImportOptions): Promise<ScopeImportReport>
+  exportScope(call: ScopeCall): Promise<ScopeBundle>
+  /**
+   * Run one verb for `identity` on `scope`. The verbs, the stdin rules, the
+   * result and the Error shape are those of `engine.dispatch`; the verbs that
+   * need a checkout reject with `invalid_argv`. An identity or scope that is
+   * empty rejects with `invalid_argv` before any store call. Store failures
+   * reject with `revision_conflict`, `unavailable` or `internal`; a refusal
+   * of `beforeCommand` with `refused`.
+   */
+  dispatch(call: HostDispatchCall): Promise<unknown>
+}
+
+/**
+ * Build one host kit for every user over a store port and optional hooks. A
+ * store without `list`, `read` or `commit` throws synchronously, naming the
+ * missing functions.
+ */
+export function createHost(options: CreateHostOptions): Host
+
+export class StoreConflictError extends Error {
+  readonly code: 'conflict'
+  readonly key: string
+  /** The document's current version, or null when it does not exist. */
+  readonly actual: number | null
+  constructor(key: string, actual: number | null)
+}
+
+/** A temporary failure for a store port's function to throw; the caller can retry. */
+export class StoreUnavailableError extends Error {
+  readonly code: 'unavailable'
+  constructor(message: string)
+}
+
+export interface ConformanceHarness {
+  /** The store port under test. */
+  store: StorePort
+  /** A new, unused scope on every call. */
+  newScope(): MaybePromise<string>
+  /** OPTIONAL: the events the store kept for `scope`, oldest first, each with its commit's version. Without it, `events-with-commit` is skipped. */
+  recordedEvents?(scope: string): MaybePromise<{ name: string; payload: unknown; version: number }[]>
+}
+
+export interface ConformanceCheck {
+  /** The check's stable name, the same as in the Rust suite (e.g. `conflict-stale-version`). */
+  name: string
+  outcome: 'passed' | 'failed' | 'skipped'
+  detail?: string
+}
+
+export interface ConformanceReport {
+  /** True when no check failed. */
+  passed: boolean
+  checks: ConformanceCheck[]
+}
+
+/**
+ * Run the store contract's conformance checks — the same sixteen checks the
+ * Rust implementations run — on a host's store port. Runs on a background
+ * thread; the two concurrent checks call the store from several threads at
+ * once, so they test the host's transactions.
+ */
+export function runStoreConformance(harness: ConformanceHarness): Promise<ConformanceReport>
+
+export const eventNames: readonly string[]
+export function eventResource(name: string, payload: unknown): {
+  scope: 'change' | 'discussion' | 'spec' | 'unknown'
+  resourceId: string
+}
+
+export const commandNames: readonly string[]
+export function agentToolDescription(options?: { exclude?: string[] }): string

@@ -4,91 +4,25 @@
 //! `plan`, `change depends` and `change schema` are Dual (add-change-plan-remote
 //! D4; change-schema-verb D5): the fs
 //! arms read and write the local openspec/ tree; the remote arms call the
-//! server endpoints and render the response through the same functions, so
-//! both modes print alike. `change rank` is FsOnly: it writes the card metas'
+//! server endpoints and pass the response to the same output functions
+//! (speclink-verbs' `render::plan`), so both modes print alike. `change rank` is FsOnly: it writes the card metas'
 //! board rank, and a remote scope keeps its order in the board resource.
 
 use anyhow::Result;
-use clap::{Args, Subcommand};
 use speclink_core as core;
 
-use crate::color;
-use crate::common::{open_project, print_json, run, worktree_facts, worktree_overlay};
+use crate::common::{
+    emit, open_project, plain_command, render_options, run, worktree_facts, worktree_overlay,
+};
 use crate::remote_base::RemoteCtx;
 use core::store::Store;
 use core::workspace::Workspace;
-
-#[derive(Args)]
-pub(crate) struct PlanArgs {
-    /// Let a delta capability shared with an earlier change push the wave and block it again (the rule before requirement-level overlap)
-    #[arg(long)]
-    pub(crate) strict_overlap: bool,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
-
-#[derive(Args)]
-pub(crate) struct ChangeVerbArgs {
-    #[command(subcommand)]
-    command: ChangeCommands,
-}
-
-impl ChangeVerbArgs {
-    /// `change rank` — the one FsOnly member of the Dual `change` family.
-    pub(crate) fn is_rank(&self) -> bool {
-        matches!(self.command, ChangeCommands::Rank { .. })
-    }
-}
-
-#[derive(Subcommand)]
-enum ChangeCommands {
-    /// Declare (or with --remove, drop) prerequisite changes in a change's metadata
-    Depends {
-        /// Change name
-        name: String,
-        /// Prerequisite change name(s)
-        #[arg(long, num_args = 1.., required = true, value_name = "OTHER")]
-        on: Vec<String>,
-        /// Remove the given prerequisites instead of adding them
-        #[arg(long)]
-        remove: bool,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// Switch a change's workflow schema in its metadata
-    Schema {
-        /// Change name
-        name: String,
-        /// Schema name to switch to
-        schema: String,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// Move a change right before or after another change of its stage by rewriting its board rank
-    #[command(group(clap::ArgGroup::new("side").required(true).args(["before", "after"])))]
-    Rank {
-        /// Change name
-        name: String,
-        /// Place it right before this change
-        #[arg(long, value_name = "OTHER")]
-        before: Option<String>,
-        /// Place it right after this change
-        #[arg(long, value_name = "OTHER")]
-        after: Option<String>,
-        /// Move it even when it already has a board rank (someone ordered it by hand)
-        #[arg(long)]
-        force: bool,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
-    },
-}
+use speclink_verbs::families::plan::{ChangeCommands, ChangeVerbArgs, PlanArgs};
+use speclink_verbs::render::fields::{self as render_fields, FieldKind};
+use speclink_verbs::render::plan::{self as render, Depends, Ranked};
 
 pub(crate) fn cmd_change(a: ChangeVerbArgs) -> Result<()> {
-    match a.command {
+    match &a.command {
         ChangeCommands::Depends {
             name,
             on,
@@ -102,28 +36,27 @@ pub(crate) fn cmd_change(a: ChangeVerbArgs) -> Result<()> {
             // a write through the overlay would land on the main copy and
             // silently split the change's read and write.
             let (ws, fs_store) = open_project()?;
-            let home = home_store_for(&ws, &worktree_facts(&ws, &fs_store), &name);
-            let o: core::command::DependsOutcome = run(
-                &home,
-                Some(&ws),
-                core::command::Command::ChangeDepends {
-                    name,
-                    on: on.clone(),
-                    remove,
-                },
-            )?;
-            render_depends(&o.change, &o.depends_on, &on, remove, json)
+            let home = home_store_for(&ws, &worktree_facts(&ws, &fs_store), name);
+            let cmd = plain_command(&a)?;
+            let o: core::command::DependsOutcome = run(&home, Some(&ws), cmd)?;
+            emit(render::depends_declared(&o, on, *remove, render_options(*json)));
         }
-        ChangeCommands::Schema { name, schema, json } => {
+        ChangeCommands::Schema { name, json, .. } => {
             // Routed like `change depends`: a mapped change switches in its
             // worktree copy, the one `list` and `plan` read — and a
             // project-layer schema resolves from that same copy.
             let (ws, fs_store) = open_project()?;
-            let home = home_workspace_for(&ws, &worktree_facts(&ws, &fs_store), &name);
+            let home = home_workspace_for(&ws, &worktree_facts(&ws, &fs_store), name);
             let store = speclink_fs::FsStore::new(&home.root, &home.spec_dir_name);
-            let o: core::command::SchemaOutcome =
-                run(&store, Some(&home), core::command::Command::ChangeSchema { name, schema })?;
-            render_schema(&o, json)
+            let cmd = plain_command(&a)?;
+            let o: core::command::SchemaOutcome = run(&store, Some(&home), cmd)?;
+            emit(render::schema(&o, render_options(*json)));
+        }
+        ChangeCommands::Field(field) => {
+            let (ws, store) = open_project()?;
+            let home = home_store_for(&ws, &worktree_facts(&ws, &store), field.subject());
+            let outcome: core::command::FieldsOutcome = run(&home, Some(&ws), plain_command(&a)?)?;
+            emit(render_fields::edited(FieldKind::Change, &outcome, render_options(field.json())));
         }
         ChangeCommands::Rank {
             name,
@@ -133,8 +66,11 @@ pub(crate) fn cmd_change(a: ChangeVerbArgs) -> Result<()> {
             json,
         } => {
             let (anchor, side) = match before {
-                Some(anchor) => (anchor, core::plan::Side::Before),
-                None => (after.expect("clap requires --before or --after"), core::plan::Side::After),
+                Some(anchor) => (anchor.clone(), core::plan::Side::Before),
+                None => (
+                    after.clone().expect("clap requires --before or --after"),
+                    core::plan::Side::After,
+                ),
             };
             // The column is read as `plan` orders it — the main roster with each
             // mapped change's worktree copy — and each rank is written into its
@@ -145,10 +81,14 @@ pub(crate) fn cmd_change(a: ChangeVerbArgs) -> Result<()> {
             let write = |change: &str, key: &str| {
                 core::model::set_board_rank(&home_store_for(&ws, &facts, change), change, key)
             };
-            core::plan::set_rank(&overlaid, &write, &name, &anchor, side, force)?;
-            render_rank(&name, &anchor, side, json)
+            core::plan::set_rank(&overlaid, &write, name, &anchor, side, *force)?;
+            emit(render::rank(
+                &Ranked { change: name, anchor: &anchor, side },
+                render_options(*json),
+            ));
         }
     }
+    Ok(())
 }
 
 /// Remote arm: the server runs the same guards and write; its 404 and refused
@@ -162,7 +102,15 @@ pub(crate) fn remote_change(ctx: &RemoteCtx, a: ChangeVerbArgs) -> Result<()> {
             json,
         } => {
             let written = ctx.client.set_depends(&name, &on, remove)?;
-            render_depends(&written.change, &written.depends_on, &on, remove, json)
+            emit(render::depends(
+                &Depends {
+                    change: &written.change,
+                    depends_on: &written.depends_on,
+                    on: &on,
+                    remove,
+                },
+                render_options(json),
+            ));
         }
         ChangeCommands::Schema { name, schema, json } => {
             let w = ctx.client.set_schema(&name, &schema)?;
@@ -173,54 +121,20 @@ pub(crate) fn remote_change(ctx: &RemoteCtx, a: ChangeVerbArgs) -> Result<()> {
                 changed: w.changed,
                 verify_stamp_cleared: w.verify_stamp_cleared,
             };
-            render_schema(&o, json)
+            emit(render::schema(&o, render_options(json)));
+        }
+        ChangeCommands::Field(field) => {
+            let edit = field.edit()?;
+            let response = ctx.client.set_change_fields(&edit.subject, &edit.set, &edit.unset)?;
+            let outcome = core::command::FieldsOutcome {
+                subject: edit.subject, fields: response.fields, changed: response.changed,
+            };
+            emit(render_fields::edited(FieldKind::Change, &outcome, render_options(field.json())));
         }
         ChangeCommands::Rank { .. } => {
             unreachable!("dispatch refuses change rank in remote mode before the handshake")
         }
     }
-}
-
-/// One success line, and a second when the switch removed the verify stamp
-/// (design D5); `--json` carries the four facts — the clearing line is human
-/// output only.
-fn render_schema(o: &core::command::SchemaOutcome, json: bool) -> Result<()> {
-    if json {
-        return print_json(&serde_json::json!({
-            "change": o.change,
-            "schema": o.schema,
-            "previous": o.previous,
-            "changed": o.changed,
-        }));
-    }
-    if o.changed {
-        println!("{} {} schema: {} → {}", color::green("✓"), o.change, o.previous, o.schema);
-    } else {
-        println!("{} {} schema: {} (unchanged)", color::green("✓"), o.change, o.schema);
-    }
-    if o.verify_stamp_cleared {
-        println!("  verify stamp cleared — re-run verify under {}", o.schema);
-    }
-    Ok(())
-}
-
-/// One success line naming the side it landed on; `--json` carries the same
-/// three facts — the rank value itself never reaches CLI output.
-fn render_rank(change: &str, anchor: &str, side: core::plan::Side, json: bool) -> Result<()> {
-    if json {
-        return print_json(&serde_json::json!({
-            "change": change,
-            "anchor": anchor,
-            "position": side.as_str(),
-        }));
-    }
-    println!(
-        "{} {} ranked {} {}",
-        color::green("✓"),
-        change,
-        side.as_str(),
-        anchor
-    );
     Ok(())
 }
 
@@ -251,151 +165,27 @@ fn home_workspace_for(
         .unwrap_or_else(|| ws.clone())
 }
 
-/// One success line (design D4): the full declaration after an add, the
-/// dropped names after a remove; `--json` is the declaration after the write.
-fn render_depends(
-    change: &str,
-    depends_on: &[String],
-    on: &[String],
-    remove: bool,
-    json: bool,
-) -> Result<()> {
-    if json {
-        return print_json(&serde_json::json!({
-            "change": change,
-            "dependsOn": depends_on,
-        }));
-    }
-    if remove {
-        println!(
-            "{} {} no longer depends on: {}",
-            color::green("✓"),
-            change,
-            on.join(", ")
-        );
-    } else {
-        println!(
-            "{} {} depends on: {}",
-            color::green("✓"),
-            change,
-            depends_on.join(", ")
-        );
-    }
-    Ok(())
-}
-
 pub(crate) fn cmd_plan(a: PlanArgs) -> Result<()> {
     let (ws, fs_store) = open_project()?;
     // Same observation surface as `list` (design D6): in a main checkout with
     // the worktree policy on, a worktree's checked tasks and started stamp feed
     // the stage derivation; everywhere else the plain store is read.
     let (facts, overlaid) = worktree_overlay(&ws, &fs_store);
-    let plan: core::command::PlanReport = run(
-        if facts.is_empty() {
-            &fs_store
-        } else {
-            &overlaid
-        },
-        Some(&ws),
-        if a.strict_overlap {
-            core::command::Command::PlanStrict
-        } else {
-            core::command::Command::Plan { ranks: None }
-        },
-    )?;
-    render_plan(&plan, a.json)
+    // fs mode gives no rank table: each change's own board rank orders it.
+    let cmd = plain_command(&a)?;
+    let plan: core::command::PlanReport =
+        run(if facts.is_empty() { &fs_store } else { &overlaid }, Some(&ws), cmd)?;
+    emit(render::plan(&plan, render_options(a.json)));
+    Ok(())
 }
 
 /// Remote arm: the server plans the scope (its board resource is the rank
-/// source); the response converts back to the engine's report so the renderer
-/// below prints it — a cycle arrives as a refused 409 carrying the engine line.
+/// source); the response converts back to the engine's report so the shared
+/// output function renders it — a cycle arrives as a refused 409 carrying the
+/// engine line.
 pub(crate) fn remote_plan(ctx: &RemoteCtx, a: &PlanArgs) -> Result<()> {
     let plan = speclink_remote::convert::plan_report(ctx.client.plan()?)?;
-    render_plan(&plan, a.json)
-}
-
-/// Human rendering (design D3): one `Wave N` heading per wave (`(parallel)`
-/// when it holds more than one change), one line per change with its stage
-/// and up to three notes in a fixed order — `blocked by:`, `archive after:`,
-/// `conflicts with:`, each left out when empty — skipped changes after the
-/// waves, and `next:` last. Every styled piece goes through `color`, so
-/// `--no-color` prints no ANSI at all.
-fn render_plan(plan: &core::command::PlanReport, json: bool) -> Result<()> {
-    if json {
-        return print_json(plan);
-    }
-    for wave in &plan.waves {
-        let title = if wave.changes.len() > 1 {
-            format!("Wave {} (parallel)", wave.index)
-        } else {
-            format!("Wave {}", wave.index)
-        };
-        println!("{}", color::bold(&title));
-        for name in &wave.changes {
-            let c = plan
-                .changes
-                .iter()
-                .find(|c| &c.name == name)
-                .expect("wave members are plan changes");
-            let mut conflicts: Vec<&str> = Vec::new();
-            for o in c.requirement_overlap.iter().filter(|o| o.conflict) {
-                if !conflicts.contains(&o.change.as_str()) {
-                    conflicts.push(&o.change);
-                }
-            }
-            let mut notes = String::new();
-            for (label, names) in [
-                ("blocked by", c.blocked_by.iter().map(String::as_str).collect()),
-                ("archive after", c.archive_after.iter().map(String::as_str).collect()),
-                ("conflicts with", conflicts),
-            ] {
-                if !names.is_empty() {
-                    notes.push_str(&format!(" — {label}: {}", names.join(", ")));
-                }
-            }
-            if !notes.is_empty() {
-                notes = color::dim(&notes);
-            }
-            println!(
-                "  {} {} [{}]{notes}",
-                color::cyan("•"),
-                c.name,
-                c.stage.as_str()
-            );
-        }
-    }
-    if !plan.skipped.is_empty() {
-        println!("{}", color::bold("Skipped"));
-        for s in &plan.skipped {
-            println!(
-                "  {} {} {}",
-                color::cyan("•"),
-                s.change,
-                color::red("(invalid .meta.yaml)")
-            );
-        }
-    }
-    if !plan.unpromoted_cuts.is_empty() {
-        println!("{}", color::bold("Unpromoted cuts"));
-        for cut in &plan.unpromoted_cuts {
-            let title = if cut.title.is_empty() {
-                String::new()
-            } else {
-                color::dim(&format!(" — {}", cut.title))
-            };
-            println!(
-                "  {} {} {}: {}{title}",
-                color::cyan("•"),
-                cut.discussion,
-                cut.cut,
-                cut.unpromoted.join(", ")
-            );
-        }
-    }
-    match &plan.next {
-        Some(next) => println!("next: {next}"),
-        None => println!("next: none"),
-    }
+    emit(render::plan(&plan, render_options(a.json)));
     Ok(())
 }
 

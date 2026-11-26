@@ -5,7 +5,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use speclink_core::config::{CustomTool, Invocation};
-use speclink_core::skills::{self, RenderTarget, Tool};
+use speclink_core::skills::{self, CodeAccess, HarnessLimits, RenderTarget, Tool};
 
 /// One entry of `skills.list()`.
 #[napi(object)]
@@ -24,12 +24,16 @@ pub struct RenderOptions {
     pub invocation: Option<String>,
     pub spec_dir: Option<String>,
     pub tool_name: Option<String>,
+    pub skills: Option<Vec<String>>,
+    pub checkout: Option<bool>,
+    pub git_history: Option<bool>,
 }
 
 /// The resolved matrix point.
 struct Matrix {
     target: TargetKind,
     spec_dir: String,
+    limits: HarnessLimits,
 }
 
 enum TargetKind {
@@ -65,7 +69,14 @@ fn resolve_matrix(opts: &RenderOptions) -> Result<Matrix> {
             }
         },
     };
+    let code_access = match (opts.checkout.unwrap_or(true), opts.git_history) {
+        (true, None | Some(true)) => CodeAccess::WithGit,
+        (true, Some(false)) => CodeAccess::WithoutGit,
+        (false, None | Some(false)) => CodeAccess::NoCheckout,
+        (false, Some(true)) => return Err(Error::from_reason("checkout: false contradicts gitHistory: true")),
+    };
     Ok(Matrix {
+        limits: HarnessLimits { skills: opts.skills.clone(), code_access },
         target,
         spec_dir: opts
             .spec_dir
@@ -98,5 +109,6 @@ pub fn skills_render(name: String, opts: RenderOptions) -> Result<String> {
         TargetKind::Builtin(tool) => RenderTarget::Builtin(*tool),
         TargetKind::Neutral(custom) => RenderTarget::Custom(custom),
     };
-    Ok(skills::render_skill_file_for(target, &skill, &matrix.spec_dir))
+    skills::render_skill_file_with_limits(target, &skill, &matrix.spec_dir, &matrix.limits)
+        .map_err(Error::from_reason)
 }

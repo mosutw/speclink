@@ -111,6 +111,11 @@ impl ApiError {
         )
     }
 
+    /// 422 — valid JSON that does not have the required request shape.
+    pub fn invalid_payload(message: impl Into<String>) -> ApiError {
+        ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, ErrorReason::InvalidArgument, message)
+    }
+
     /// 422 — a config document exists but cannot be parsed.
     pub fn invalid_config(message: impl Into<String>) -> ApiError {
         ApiError::new(

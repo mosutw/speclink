@@ -45,6 +45,8 @@ fn classify(name: &str, payload: &Value) -> (InvalidationScope, String) {
         | "change-in-progress-removed"
         | "change-depends-changed"
         | "change-schema-changed"
+        | "change-fields-changed"
+
         | "change-discarded" => (InvalidationScope::Change, str_field(payload, "change")),
         "change-archived" => (InvalidationScope::Spec, str_field(payload, "change")),
         "discussion-created"
@@ -54,6 +56,8 @@ fn classify(name: &str, payload: &Value) -> (InvalidationScope, String) {
         | "discussion-promoted"
         | "discussion-linked"
         | "discussion-sealed"
+        | "discussion-fields-changed"
+
         | "discussion-archived"
         | "discussion-discarded" => (InvalidationScope::Discussion, str_field(payload, "slug")),
         _ => (

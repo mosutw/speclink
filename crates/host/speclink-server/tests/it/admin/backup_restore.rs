@@ -273,6 +273,33 @@ fn an_unknown_format_version_is_rejected() {
 }
 
 #[test]
+fn restore_checks_the_scope_inside_each_bundle_before_opening_the_target() {
+    use sha2::{Digest, Sha256};
+    let (dir, backup) = fresh_backup();
+    let mut members = read_tar(&backup);
+    let mut manifest: serde_json::Value = serde_json::from_slice(&members["manifest.json"]).unwrap();
+    let member = manifest["scopes"][0]["member"].as_str().unwrap().to_string();
+    let mut bundle: serde_json::Value = serde_json::from_slice(&members[&member]).unwrap();
+    bundle["repo"] = "other-repo".into();
+    let bundle = serde_json::to_vec(&bundle).unwrap();
+    for entry in manifest["members"].as_array_mut().unwrap() {
+        if entry["name"] == member {
+            entry["digest"] = format!("sha256:{:x}", Sha256::digest(&bundle)).into();
+        }
+    }
+    let manifest = serde_json::to_vec(&manifest).unwrap();
+    members.insert(member, bundle);
+    members.insert("manifest.json.sha256".into(), format!("sha256:{:x}", Sha256::digest(&manifest)).into_bytes());
+    members.insert("manifest.json".into(), manifest);
+    write_tar(&backup, &members);
+
+    let error = speclink_server::backup::restore(&target_config(dir.path()), &backup).unwrap_err();
+    assert!(error.to_string().contains("scope"), "{error}");
+    assert!(!dir.path().join("tgt-store.db").exists());
+    assert!(!dir.path().join("tgt-identity.db").exists());
+}
+
+#[test]
 fn restore_into_empty_target_validates_green() {
     let dir = tempfile::tempdir().expect("tempdir");
     let backup = seed_and_backup(dir.path());
@@ -346,4 +373,49 @@ fn restore_validation_reports_a_post_restore_mismatch() {
         "the difference names the drifted scope: {:?}",
         report.differences
     );
+}
+
+#[path = "../../fixtures/legacy_backup.rs"]
+mod legacy_backup;
+
+#[test]
+fn legacy_backup_preserves_policy_history_and_reader_access_on_sqlite() {
+    let fixture = tempfile::tempdir().unwrap();
+    legacy_backup::assert_legacy_backup(
+        StoreConfig::Sqlite { path: fixture.path().join("old-store.db") },
+        StoreConfig::Sqlite { path: fixture.path().join("restored-store.db") },
+        fixture.path(),
+    );
+}
+
+#[test]
+fn legacy_backup_preserves_policy_history_and_reader_access_on_filesystem() {
+    let fixture = tempfile::tempdir().unwrap();
+    legacy_backup::assert_legacy_backup(
+        StoreConfig::ServerFs { path: fixture.path().join("old-store") },
+        StoreConfig::ServerFs { path: fixture.path().join("restored-store") },
+        fixture.path(),
+    );
+}
+
+#[test]
+fn native_restore_refuses_existing_data_outside_the_backups_scopes() {
+    use speclink_store_port::{keys, Actor, Commit, Expected, Op, Timestamp};
+    let (dir, backup) = fresh_backup();
+    let config = target_config(dir.path());
+    let scope = speclink_server::native_storage::scope_id("unrelated", "repo").unwrap();
+    let key = keys::language();
+    let store = speclink_server::native_storage::open(&config.store).unwrap();
+    store.commit(&scope, &Commit::new(
+        Actor::new("fixture", "Fixture").unwrap(), "seed", Timestamp::new(1).unwrap(),
+        vec![Op::Put { key: key.clone(), content: "Existing language".into(), expected: Expected::Absent }],
+        Vec::new(),
+    ).unwrap()).unwrap();
+    drop(store);
+
+    let error = speclink_server::backup::restore_to_port(&config, &backup).unwrap_err();
+    assert!(matches!(error, speclink_server::backup::BackupError::TargetNotEmpty(_)), "{error}");
+    assert!(!dir.path().join("tgt-identity.db").exists());
+    let store = speclink_server::native_storage::open(&config.store).unwrap();
+    assert_eq!(store.read(&scope, &[key]).unwrap()[0].as_ref().unwrap().content, "Existing language");
 }

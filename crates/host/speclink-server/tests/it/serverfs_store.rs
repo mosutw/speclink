@@ -91,6 +91,7 @@ fn drive(store: SharedStore) -> Outcome {
     client.handshake().expect("handshake");
     let created = client
         .create_change(CreateChangeRequest {
+            fields: Default::default(),
             name: "demo".into(),
             schema: None,
             description: None,

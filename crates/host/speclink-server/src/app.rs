@@ -44,6 +44,7 @@ pub fn router(state: AppState) -> Router {
             "/changes/{name}",
             get(routes::get_change).delete(routes::delete_change),
         )
+        .route("/changes/{name}/fields", put(routes::set_change_fields))
         .route("/changes/{name}/drift", get(routes::drift))
         .route("/changes/{name}/validate", get(routes::validate_change))
         .route("/changes/{name}/analyze", get(routes::analyze_change))
@@ -101,6 +102,7 @@ pub fn router(state: AppState) -> Router {
             "/discussions/{slug}",
             get(routes::show_discussion).delete(routes::delete_discussion),
         )
+        .route("/discussions/{slug}/fields", put(routes::set_discussion_fields))
         .route("/discussions/{slug}/link", post(routes::link_discussion))
         .route("/discussions/{slug}/seal", post(routes::seal_discussion))
         .route(
@@ -150,6 +152,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/whoami", get(routes::whoami))
         .route("/sync-state", get(routes::sync_state))
+        .route("/export", get(routes::export_bundle))
         .route("/events", get(routes::events))
         // 寫入檢查（fail-closed）：以上每條路由的非 GET／HEAD 方法都要 editor。
         .route_layer(middleware::from_fn_with_state(state.clone(), require_editor));
@@ -161,6 +164,7 @@ pub fn router(state: AppState) -> Router {
         .merge(read_only_posts)
         .layer(middleware::from_fn(read_body_before_routing));
     Router::new()
+        .route("/api/speclink/v1/auth-methods", get(auth_methods))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         // 唯一保留的 /admin HTML route：scope export bundle 下載（session-admin gated）。
@@ -241,6 +245,13 @@ async fn require_editor(State(state): State<AppState>, req: Request, next: Next)
 
 /// `GET /healthz` — process liveness. Answers as long as the process serves,
 /// independent of store health.
+async fn auth_methods() -> Json<speclink_protocol::auth::AuthMethodsResponse> {
+    Json(speclink_protocol::auth::AuthMethodsResponse {
+        methods: vec!["device".into(), "token".into()],
+        browser: None,
+    })
+}
+
 async fn healthz() -> StatusCode {
     StatusCode::OK
 }

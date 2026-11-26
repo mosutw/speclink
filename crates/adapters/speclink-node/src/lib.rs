@@ -8,6 +8,8 @@
 //! is idiomatic, while the semantic message and code are produced here.
 
 pub mod render;
+mod host;
+mod port_bridge;
 mod store_bridge;
 
 fn security_repository(application_data:&std::path::Path)->anyhow::Result<speclink_fs::security::FsSecurityData> {
@@ -29,6 +31,8 @@ use store_bridge::{BridgeFailure, JsStoreBridge};
 struct DispatchError {
     code: String,
     message: String,
+    reason: Option<String>,
+    location: Option<(String, String)>,
 }
 
 impl DispatchError {
@@ -36,6 +40,8 @@ impl DispatchError {
         DispatchError {
             code: code.to_string(),
             message: message.into(),
+            reason: None,
+            location: None,
         }
     }
 }
@@ -55,6 +61,8 @@ impl From<BridgeFailure> for DispatchError {
         DispatchError {
             code: f.code.clone().unwrap_or_else(|| "store_error".to_string()),
             message: f.to_string(),
+            reason: None,
+            location: None,
         }
     }
 }
@@ -111,6 +119,7 @@ fn run_engine(
                 .as_ref()
                 .and_then(|ws| speclink_host::context::git_identity(&ws.root))
         }),
+        actor_id: None,
         // Node dispatch carries no task verbs (list/status/new/claim), so no
         // completion evidence is recorded through this path.
         repo: None,
@@ -186,6 +195,20 @@ fn normalize_actor(actor: Option<String>) -> Option<Arc<str>> {
 
 #[napi]
 impl Engine {
+    #[napi(ts_return_type = "Promise<unknown>")]
+    pub fn export_scope(&self, env: Env) -> Result<JsObject> {
+        let workspace = self.backend.workspace();
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::spawn(move || {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let workspace = workspace.ok_or_else(|| DispatchError::new("invalid_argv", "exportScope requires a local workspace"))?;
+                export_local(&workspace)
+            })).unwrap_or_else(|_| Err(DispatchError::new("internal", "speclink export panicked")));
+            deferred.resolve(move |_| Ok(envelope(result)));
+        });
+        Ok(promise)
+    }
+
     /// argv dispatch on a background worker thread. Resolves to the envelope
     /// unwrapped by the JS wrapper; never blocks the JS event loop.
     #[napi(ts_return_type = "Promise<unknown>")]
@@ -489,6 +512,7 @@ fn verb_new_change(backend: &Backend, actor: Option<&str>, args: &[String]) -> D
             // `--last` mirrors the CLI flag (last cut of a staged discussion); the
             // engine only reads it alongside from_discussion.
             last: a.flags.contains("last"),
+            fields: Default::default(),
         },
     )?;
     let core::command::CommandOutcome::NewChange(o) = outcome else {
@@ -797,4 +821,118 @@ fn security_dispatch(backend:&Backend,actor:Option<&str>,args:&[String],stdin:Op
         "accept"=>{anyhow::ensure!(text.len()<=16*1024,"size_limit: acceptance input");let input:AcceptRiskInput=serde_json::from_str(text).map_err(|_|anyhow::anyhow!("invalid_security_decision"))?;Ok(serde_json::to_value(host::accept_current_risk(&target,&reader,&data,store.as_ref(),input,actor.map(str::to_owned),&budget)?)?)},
         _=>anyhow::bail!("invalid_argument: unknown security review command"),
     }
+}
+
+/// Run the store contract's conformance checks on a host's JS store port, on
+/// a background thread. `invoker` is index.js's port invoker over the store's
+/// three functions plus the harness's `newScope` and `recordedEvents`;
+/// `keeps_events` says whether `recordedEvents` was given.
+#[napi(js_name = "runStoreConformance", ts_return_type = "Promise<unknown>")]
+pub fn run_store_conformance(env: Env, invoker: JsFunction, keeps_events: bool) -> Result<JsObject> {
+    let bridge = store_bridge::create_bridge(env, invoker)?;
+    let (deferred, promise) = env.create_deferred()?;
+    std::thread::spawn(move || {
+        let report = port_bridge::run_conformance(bridge, keeps_events);
+        deferred.resolve(move |_| Ok(report));
+    });
+    Ok(promise)
+}
+
+pub(crate) fn envelope(result: DispatchResult) -> serde_json::Value {
+    match result {
+        Ok(value) => serde_json::json!({ "ok": true, "value": value }),
+        Err(e) => {
+            let mut value = serde_json::json!({ "ok": false, "code": e.code, "message": e.message });
+            if let Some(reason) = e.reason { value["reason"] = serde_json::json!(reason); }
+            if let Some((change, path)) = e.location { value["change"] = serde_json::json!(change); value["path"] = serde_json::json!(path); }
+            value
+        },
+    }
+}
+
+/// Parse one verb's argv with the CLI's vocabulary. A usage or help text is
+/// an `invalid_argv` failure carrying clap's text.
+pub(crate) fn parse_verb(argv: &[String]) -> std::result::Result<speclink_verbs::ParsedVerb, DispatchError> {
+    speclink_verbs::parse(argv).map_err(|e| DispatchError::new("invalid_argv", e.message))
+}
+
+/// The engine command of a parsed verb, under the stdin rules every door
+/// shares. A verb with no engine command is refused with `invalid_argv`.
+pub(crate) fn command_of(
+    parsed: &speclink_verbs::ParsedVerb,
+    stdin: Option<&str>,
+) -> std::result::Result<core::command::Command, DispatchError> {
+    use speclink_verbs::ToCommand;
+    let name = parsed.name();
+    let policy = parsed.stdin_policy();
+    // Content passed without --stdin to a verb that reads stdin only with the
+    // flag is refused: a forgotten flag must not drop the content silently.
+    if stdin.is_some() && matches!(policy, speclink_verbs::StdinPolicy::WhenFlagged { flagged: false }) {
+        return Err(DispatchError::new(
+            "invalid_argv",
+            format!("'{name}' reads stdin only with --stdin — add --stdin, or pass no stdin"),
+        ));
+    }
+    // A host has no terminal: stdin content it passed counts as piped.
+    let inputs = speclink_verbs::VerbInputs {
+        stdin: if policy.reads(stdin.is_some()) { stdin.map(str::to_string) } else { None },
+        ..Default::default()
+    };
+    match parsed.to_command(inputs)? {
+        speclink_verbs::CommandTarget::Command(cmd) => Ok(cmd),
+        speclink_verbs::CommandTarget::LocalOnly { verb, reason } => Err(local_only(verb, reason)),
+    }
+}
+
+/// A verb with no engine command runs only in the CLI; the message says why.
+fn local_only(verb: &str, reason: speclink_verbs::LocalOnlyReason) -> DispatchError {
+    let message = match reason {
+        speclink_verbs::LocalOnlyReason::CliSkillText => {
+            format!("'{verb}' prints skill text built into the CLI — dispatch does not carry it")
+        }
+        speclink_verbs::LocalOnlyReason::NeedsCheckout => {
+            format!("'{verb}' only runs where a checkout exists — dispatch has none")
+        }
+    };
+    DispatchError::new("invalid_argv", message)
+}
+
+pub(crate) fn value_of(
+    parsed: &speclink_verbs::ParsedVerb,
+    outcome: &core::command::CommandOutcome,
+) -> DispatchResult {
+    use speclink_verbs::render::{render, RenderOptions};
+    let rendered = render(parsed, outcome, RenderOptions { json: false, color: false })?;
+    Ok(match rendered.json {
+        Some(value) => value,
+        None if rendered.stderr.is_empty() => serde_json::json!({ "output": rendered.stdout }),
+        // A note the CLI prints to stderr (archive's zero-evidence note).
+        None => serde_json::json!({ "output": rendered.stdout, "stderr": rendered.stderr }),
+    })
+}
+
+fn export_local(workspace: &core::workspace::Workspace) -> DispatchResult {
+    use speclink_host::transfer;
+    use speclink_protocol::query::{ImportBundle, ImportScope};
+    let store = speclink_fs::FsStore::new(&workspace.root, &workspace.spec_dir_name);
+    let documents = transfer::local_documents(workspace, &store, &speclink_host::context::global_config_dir())
+        .map_err(|error| {
+            let mut out = DispatchError::new("error", error.to_string());
+            out.reason = error.reason().map(|reason| reason.as_str().to_owned());
+            out.location = error.location().map(|loc| (loc.change.clone(), loc.path.clone()));
+            out
+        })?;
+    if !core::workspace::is_spec_folder(&workspace.spec_dir()) {
+        let mut error = DispatchError::new("error", format!("no spec folder: {:?}", workspace.spec_dir_name));
+        error.reason = Some("no_spec_folder".into());
+        return Err(error);
+    }
+    let mut bundle = transfer::from_first_version(ImportBundle {
+        format_version: transfer::FIRST_VERSION,
+        scope: ImportScope { project: String::new(), repo: String::new() },
+        project_revision: 0,
+        documents,
+    }).map_err(|e| DispatchError::new("error", e.to_string()))?;
+    bundle.documents.sort_by(|a, b| a.key.cmp(&b.key));
+    Ok(serde_json::to_value(bundle).expect("bundle serializes"))
 }

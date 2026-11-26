@@ -488,6 +488,7 @@ pub fn complete(
             touched_files: Vec::new(),
         });
     }
+    record_ready(store, change, &new_content)?;
     store.write_artifact(change, "tasks.md", &new_content)?;
 
     // Record touched files: only those not already attributed to an earlier task;
@@ -529,6 +530,20 @@ pub fn complete(
         stable_id,
         touched_files: files,
     })
+}
+
+/// Record when the change becomes ready. An undone task hides this date at
+/// read time; completing the final task again records a fresh date.
+fn record_ready(store: &dyn Store, change: &str, tasks_md: &str) -> Result<()> {
+    let counts = counts(&parse(tasks_md));
+    if counts.total > 0 && counts.complete == counts.total {
+        let timestamp = crate::util::now_rfc3339();
+        crate::model::edit_meta(store, change, |meta| {
+            meta.set("ready_at", &crate::util::yaml_scalar(&timestamp))?;
+            Ok(())
+        })?;
+    }
+    Ok(())
 }
 
 /// Outcome of [`uncomplete`]: the task's cleaned description, whether it was

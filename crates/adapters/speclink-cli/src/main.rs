@@ -2,6 +2,17 @@ use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use verbs::security::{cmd_security, SecurityArgs};
 use speclink_core as core;
+use speclink_verbs::families::{
+    checks::{ChangeArg, ValidateArgs},
+    discuss::DiscussArgs,
+    documents::{ArtifactArgs, LanguageArgs},
+    instructions::InstructionsArgs,
+    new::NewArgs,
+    plan::{ChangeVerbArgs, PlanArgs},
+    progress::{InProgressArgs, TaskArgs},
+    query::{ListArgs, ShowArgs, StatusArgs},
+    trace::TraceArgs,
+};
 
 mod color;
 mod common;
@@ -11,38 +22,35 @@ use common::{warn_leftover_remote_file, warn_spec_layout};
 use remote_base::{remote_ctx, RemoteCtx};
 use std::process::ExitCode;
 use verbs::checks::{
-    cmd_analyze, cmd_drift, cmd_validate, remote_analyze, remote_drift, remote_validate, ChangeArg,
-    ValidateArgs,
+    cmd_analyze, cmd_drift, cmd_validate, remote_analyze, remote_drift, remote_validate,
+
 };
 use verbs::config::{cmd_config, cmd_workflow_config, ConfigArgs, WorkflowConfigArgs};
 use verbs::connection::{cmd_auth, cmd_link, cmd_unlink, AuthArgs, LinkArgs};
-use verbs::discuss::{cmd_discuss, remote_discuss, DiscussArgs};
-use verbs::documents::{
-    cmd_artifact, cmd_language, remote_artifact, remote_language, ArtifactArgs, LanguageArgs,
-};
+use verbs::discuss::{cmd_discuss, remote_discuss};
+use verbs::documents::{cmd_document, remote_artifact, remote_language};
 use verbs::init::{cmd_init, cmd_update, InitArgs, UpdateArgs};
 use verbs::instructions::{
-    cmd_instructions, cmd_instructions_skill, remote_instructions, InstructionsArgs,
+    cmd_instructions, cmd_instructions_skill, remote_instructions,
 };
 use verbs::lifecycle::{
     cmd_archive, cmd_discard, remote_archive, remote_claim, remote_discard, ArchiveArgs, ClaimArgs,
     DiscardArgs,
 };
-use verbs::new::{cmd_new, remote_new, NewArgs};
-use verbs::plan::{cmd_change, cmd_plan, remote_change, remote_plan, ChangeVerbArgs, PlanArgs};
+use verbs::new::{cmd_new, remote_new};
+use verbs::plan::{cmd_change, cmd_plan, remote_change, remote_plan};
 use verbs::progress::{
-    cmd_in_progress, cmd_task, remote_in_progress, remote_task, InProgressArgs, TaskArgs,
+    cmd_in_progress, cmd_task, remote_in_progress, remote_task,
 };
 use verbs::query::{
-    cmd_list, cmd_show, cmd_status, remote_list, remote_show, remote_status, ListArgs, ShowArgs,
-    StatusArgs,
+    cmd_list, cmd_show, cmd_status, remote_list, remote_show, remote_status,
 };
 use verbs::station::{cmd_review, cmd_verify, ReviewArgs, VerifyArgs};
 use verbs::toolchain::{
     cmd_completion, cmd_demo, cmd_feedback, cmd_schema, cmd_schemas, cmd_templates, CompletionArgs,
     FeedbackArgs, JsonFlag, SchemaArgs, TemplatesArgs,
 };
-use verbs::trace::{cmd_trace, TraceArgs};
+use verbs::trace::cmd_trace;
 
 /// The frozen architecture suffix, absent on architectures we do not ship.
 const ARCH: Option<&str> = {
@@ -207,8 +215,8 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Drift(a) => dual(a, cmd_drift, |ctx, a| remote_drift(ctx, &a)),
         Commands::Archive(a) => dual(a, cmd_archive, |ctx, a| remote_archive(ctx, &a)),
         Commands::Discard(a) => dual(a, cmd_discard, |ctx, a| remote_discard(ctx, &a)),
-        Commands::Artifact(a) => dual(a, cmd_artifact, remote_artifact),
-        Commands::Language(a) => dual(a, cmd_language, remote_language),
+        Commands::Artifact(a) => dual(a, cmd_document, remote_artifact),
+        Commands::Language(a) => dual(a, cmd_document, remote_language),
         Commands::Status(a) => dual(a, cmd_status, |ctx, a| remote_status(ctx, &a)),
         Commands::Instructions(a) => {
             // `--skill` 印常數技能文本、不消費 store——檢查先於模式解析（凍結行為）。

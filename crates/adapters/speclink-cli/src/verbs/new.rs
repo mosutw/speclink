@@ -4,70 +4,17 @@
 //! nothing to a local caller — so the two modes differ there on purpose.
 
 use anyhow::{bail, Result};
-use clap::{Args, Subcommand};
 use speclink_core as core;
 use speclink_protocol::command::CreateChangeRequest;
 
-use crate::color;
-use crate::common::{open_project, read_stdin, run};
+use crate::common::{
+    emit, engine_command, open_project, plain_command, read_stdin, render_options, run, stdin_for,
+};
 use crate::remote_base::{remote_resolve_change, RemoteCtx};
+use speclink_verbs::families::new::{NewArgs, NewArtifactArgs, NewChangeArgs, NewCommands};
+use speclink_verbs::render::new::{self as render, NewArtifact, NewChangeLines};
+use speclink_verbs::{ToCommand, VerbInputs};
 
-#[derive(Args)]
-pub(crate) struct NewArgs {
-    #[command(subcommand)]
-    command: NewCommands,
-}
-#[derive(Subcommand)]
-enum NewCommands {
-    /// Create a new change
-    Change(NewChangeArgs),
-    /// Create a new artifact file for a change
-    Artifact(NewArtifactArgs),
-}
-#[derive(Args)]
-struct NewChangeArgs {
-    /// Change name (kebab-case)
-    name: String,
-    /// Description
-    #[arg(long)]
-    description: Option<String>,
-    /// Workflow schema to use
-    #[arg(long)]
-    schema: Option<String>,
-    /// AI agent that created this change (e.g., claude, codex, gemini)
-    #[arg(long)]
-    agent: Option<String>,
-    /// Link this change to a discussion document (writes from_discussion metadata)
-    #[arg(long = "from-discussion")]
-    from_discussion: Option<String>,
-    /// This change is the last cut the discussion's conclusion planned: release the
-    /// record's hold so the final archive co-archives the discussion
-    #[arg(long, requires = "from_discussion")]
-    last: bool,
-}
-#[derive(Args)]
-struct NewArtifactArgs {
-    /// Artifact type: proposal, design, tasks, spec
-    #[arg(name = "TYPE")]
-    artifact_type: String,
-    /// Capability name (required for spec type)
-    capability: Option<String>,
-    /// Change name
-    #[arg(long)]
-    change: Option<String>,
-    /// Read content from stdin instead of using empty template
-    #[arg(long)]
-    stdin: bool,
-    /// Overwrite existing artifact
-    #[arg(long)]
-    force: bool,
-    /// Declare a new capability (required when the spec capability is not in the canonical specs)
-    #[arg(long)]
-    new: bool,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
 pub(crate) fn cmd_new(a: NewArgs) -> Result<()> {
     match a.command {
         NewCommands::Change(c) => cmd_new_change(c),
@@ -76,85 +23,17 @@ pub(crate) fn cmd_new(a: NewArgs) -> Result<()> {
 }
 fn cmd_new_change(a: NewChangeArgs) -> Result<()> {
     let (ws, store) = open_project()?;
-    let o: core::command::NewChangeOutcome = run(
-        &store,
-        Some(&ws),
-        core::command::Command::NewChange {
-            name: a.name.clone(),
-            description: a.description.clone(),
-            schema: a.schema.clone(),
-            agent: a.agent.clone(),
-            from_discussion: a.from_discussion.clone(),
-            last: a.last,
-        },
-    )?;
-    render_new_change(
-        &o.name,
-        NewChangeLines {
-            path: Some(&o.dir.to_string_lossy()),
-            schema: Some(&o.schema),
-            from_discussion: a.from_discussion.as_deref(),
-        },
-    );
+    let cmd = plain_command(&a)?;
+    let o: core::command::NewChangeOutcome = run(&store, Some(&ws), cmd)?;
+    emit(render::change_created(&o, a.from_discussion.as_deref(), render_options(false)));
     Ok(())
-}
-/// `new change` 成功輸出的選印行，具名綁定——三個相鄰同型參數寫反不會被
-/// 編譯器擋，具名欄位會。`path` 缺席是 remote 的明文分歧（design D5）：
-/// server 端目錄對本機使用者無意義；`schema` 同樣只在來源給得出時印。
-struct NewChangeLines<'a> {
-    path: Option<&'a str>,
-    schema: Option<&'a str>,
-    from_discussion: Option<&'a str>,
-}
-fn render_new_change(name: &str, lines: NewChangeLines<'_>) {
-    println!("{} Created change: {name}", color::green("✓"));
-    if let Some(path) = lines.path {
-        println!("  Path: {path}");
-    }
-    if let Some(schema) = lines.schema {
-        println!("  Schema: {schema}");
-    }
-    if let Some(slug) = lines.from_discussion {
-        println!("  From discussion: {slug}");
-    }
 }
 fn cmd_new_artifact(a: NewArtifactArgs) -> Result<()> {
     let (ws, store) = open_project()?;
-    let content = if a.stdin {
-        Some(read_stdin())
-    } else {
-        None
-    };
-    let o: core::command::NewArtifactOutcome = run(
-        &store,
-        Some(&ws),
-        core::command::Command::NewArtifact {
-            kind: a.artifact_type.clone(),
-            capability: a.capability.clone(),
-            change: a.change.clone(),
-            content,
-            force: a.force,
-            new_capability: a.new,
-        },
-    )?;
-    if a.json {
-        // Compact single-line JSON, frozen shape ("artifact" echoes the
-        // input token, not the schema artifact id).
-        let v = serde_json::json!({
-            "artifact": a.artifact_type,
-            "change": o.change,
-            "path": o.path.to_string_lossy(),
-            "status": "created",
-            "validated": o.had_content,
-            "warnings": [],
-        });
-        println!("{}", serde_json::to_string(&v)?);
-        return Ok(());
-    }
-    println!("{} Created {}: {}", color::green("✓"), a.artifact_type, o.path.to_string_lossy());
-    if o.had_content {
-        println!("  Content validated ✓");
-    }
+    let stdin = stdin_for(a.stdin_policy());
+    let cmd = engine_command(a.to_command(VerbInputs { stdin, ..Default::default() }))?;
+    let o: core::command::NewArtifactOutcome = run(&store, Some(&ws), cmd)?;
+    emit(render::artifact_created(&o, &a.artifact_type, render_options(a.json)));
     Ok(())
 }
 /// new 的 remote 家族臂：子指令 enum 窮盡 match、無 catch-all。
@@ -165,6 +44,7 @@ pub(crate) fn remote_new(ctx: &RemoteCtx, a: NewArgs) -> Result<()> {
     }
 }
 fn remote_new_change(ctx: &RemoteCtx, a: &NewChangeArgs) -> Result<()> {
+    let fields = speclink_verbs::families::fields::parse_pairs(&a.field)?;
     let resp = ctx.client.create_change(CreateChangeRequest {
         name: a.name.clone(),
         schema: a.schema.clone(),
@@ -172,16 +52,19 @@ fn remote_new_change(ctx: &RemoteCtx, a: &NewChangeArgs) -> Result<()> {
         agent: a.agent.clone(),
         from_discussion: a.from_discussion.clone(),
         last: a.last,
+        fields: fields.clone(),
     })?;
+    ctx.warn_if_fields_were_not_kept(&fields);
     // Path 行是明文分歧（design D5）：server 端目錄對本機使用者無意義。
-    render_new_change(
+    emit(render::new_change(
         &a.name,
         NewChangeLines {
             path: None,
             schema: resp.schema.as_deref().filter(|s| !s.is_empty()),
             from_discussion: a.from_discussion.as_deref(),
         },
-    );
+        render_options(false),
+    ));
     Ok(())
 }
 /// Map the fs artifact TYPE argument onto the contract's artifact path.
@@ -232,21 +115,14 @@ fn remote_new_artifact(ctx: &RemoteCtx, a: &NewArtifactArgs) -> Result<()> {
         0
     };
     ctx.client.put_artifact(&change, &artifact_path, &content, version)?;
-    if a.json {
-        let v = serde_json::json!({
-            "artifact": a.artifact_type,
-            "change": change,
-            "path": artifact_path,
-            "status": "created",
-            "validated": a.stdin,
-            "warnings": [],
-        });
-        println!("{}", serde_json::to_string(&v)?);
-        return Ok(());
-    }
-    println!("{} Created {}: {}", color::green("✓"), a.artifact_type, artifact_path);
-    if a.stdin {
-        println!("  Content validated ✓");
-    }
+    emit(render::new_artifact(
+        &NewArtifact {
+            artifact_type: &a.artifact_type,
+            change: &change,
+            path: &artifact_path,
+            validated: a.stdin,
+        },
+        render_options(a.json),
+    ));
     Ok(())
 }

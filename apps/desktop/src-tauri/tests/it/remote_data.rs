@@ -79,6 +79,7 @@ fn change_stage_matrix_follows_the_lifecycle_markers() {
     // spec「欄位判定矩陣」Example：0=提案中、1=進行中、2=已就緒。
     fn summary(started_at: Option<&str>, completed: usize, total: usize) -> ChangeSummary {
         ChangeSummary {
+            fields: Default::default(),
             name: "demo".into(),
             summary: String::new(),
             status: "in-progress".into(),

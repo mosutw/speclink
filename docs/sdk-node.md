@@ -99,6 +99,16 @@ On failure, the Promise rejects with an `Error`. The `message` is the same text 
 | `store_error` | Your Store method throws an error without a `code` |
 | `panic` | An internal engine error |
 
+## <a id="host"></a>Embed a multi-user host
+
+Use `createHost({ store, hooks, scopes })` when each call has its own authenticated identity and repository. Your store implements `list`, `read`, and `commit`. Run `runStoreConformance` against your implementation to check scope isolation, version conflicts, and atomic writes and events.
+
+`host.dispatch({ identity, scope, argv })` gets the identity and scope from your application session. The `beforeCommand` hook can refuse a request and read from the same scope with `tools.read`. The `afterCommit` hook observes successful commits. `reservedFieldPrefixes` keeps selected free fields writable only through the trusted `fields` parameter of your application.
+
+`host.handleRequest(request, identity)` resolves the repository through `scopes`. Project requests use `X-Speclink-Api-Version: 1` and can select a repository with `X-Speclink-Repo`. The HTTP entry point includes binding, listing, polling, spec documents, workspace search, context snapshots, board-order reads, record creation, free-field edits, and scope transfer.
+
+`host.exportScope` and the filesystem engine's `exportScope` return bundles whose documents have `key`, `content`, and `digest`. `host.importScope` creates an empty scope by default. With `mode: 'replace'`, use `dryRun: true` to preview the `added`, `changed`, and `removed` lists. The replace operation checks the versions of documents it writes or removes. Serialize other writes during an import if your application needs the result to match the bundle exactly. HTTP import uses create mode.
+
 ## <a id="store"></a>Implement your own Store
 
 A Store is an object that the engine uses to read and write changes, artifacts, specs, and discussions. You decide how to keep the data: tables, files, or object storage. [`index.d.ts`](../crates/adapters/speclink-node/index.d.ts) has the full method signatures. Each method can return a value or a Promise.
@@ -220,6 +230,8 @@ const skillMd = skills.render('propose', { target: 'neutral', invocation: 'tool-
 The `codex` and `antigravity` targets return identical shared skills, matching CLI output in `.agents/skills/`. The preamble explains each harness's invocation syntax; replace `<current-agent>` with the actual harness name before executing CLI examples. Options for `neutral`, `claude`, and `copilot` keep their existing meaning.
 
 Write each `SKILL.md` into a directory, and let your agent load it. The `description` of each skill says when to use it. The Next steps section at the end says what to suggest after it. You do not need a separate system prompt. Your agent must read the skill descriptions for this to work.
+
+`skills.render` accepts `skills`, `checkout`, and `gitHistory` to describe the host's available skills and code access. Use `agentToolDescription({ exclude })` to omit commands that your integration does not expose.
 
 ## <a id="example"></a>Full example: Copilot SDK
 

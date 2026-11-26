@@ -36,6 +36,12 @@ pub(crate) struct AuthArgs {
 enum AuthCommands {
     /// Log in to the connected server (device authorization by default)
     Login {
+        /// Sign in through the server's login service in a browser
+        #[arg(long, conflicts_with_all = ["device", "pat", "token_stdin"])]
+        browser: bool,
+        /// Authorize this device on the server's login page
+        #[arg(long, conflicts_with_all = ["browser", "pat", "token_stdin"])]
+        device: bool,
         /// Read a personal access token from stdin (CI/scripted use)
         #[arg(long = "token-stdin", conflicts_with = "pat")]
         token_stdin: bool,
@@ -61,6 +67,10 @@ pub(crate) fn cmd_link(a: LinkArgs) -> Result<()> {
         Some(resolved) => {
             let token = resolved.token;
             let whoami = RemoteClient::new(&a.url, &token, None).whoami()?;
+            if a.repo.is_none() && whoami.repos.len() > 1 {
+                let choices: Vec<&str> = whoami.repos.iter().map(|repo| repo.name.as_str()).collect();
+                bail!("This project has multiple repositories. Specify --repo (available: {})", choices.join(", "));
+            }
             if let Some(repo) = a.repo.as_deref() {
                 ensure_repo_registered(&whoami, repo)?;
                 println!("{} Repo '{repo}' is registered in this project", color::green("✓"));
@@ -104,22 +114,29 @@ pub(crate) fn cmd_auth(a: AuthArgs) -> Result<()> {
     };
     let origin = remote_auth::origin_of(&conn.url);
     match a.command {
-        AuthCommands::Login { token_stdin, pat } => {
+        AuthCommands::Login { browser, device, token_stdin, pat } => {
+            use speclink_remote::discovery::{self, Method, Plan};
             if speclink_host::portable::data_dir().is_some() {
                 bail!("Portable mode does not save logins. Set SPECLINK_TOKEN for this CLI session, or sign in within the desktop app.");
             }
             if token_stdin || pat {
                 return login_with_pat(&conn, &origin, token_stdin);
             }
-            // Device authorization needs a terminal to show the code in and a
-            // keyring to put the credential in. Missing either is a hard stop
-            // with the flag that works instead — never a silent downgrade.
             if !std::io::stdin().is_terminal() {
-                bail!(
-                    "`speclink auth login` needs a terminal to authorize this device — use `--token-stdin` to pipe a personal access token instead"
-                );
+                bail!("`speclink auth login` needs a terminal — use `--token-stdin` to pipe a personal access token instead");
             }
-            login_with_device(&conn, &origin)
+            let preferred = if browser {
+                Some(Method::Browser)
+            } else if device {
+                Some(Method::Device)
+            } else {
+                None
+            };
+            let plan = discovery::choose(&discovery::discover(&origin)?, preferred)?;
+            match plan {
+                Plan::Token => login_with_pat(&conn, &origin, false),
+                _ => login_with_browser_or_device(&conn, &origin, &plan),
+            }
         }
         AuthCommands::Status { json } => {
             let resolved = remote_auth::resolve_credential(&origin)
@@ -151,10 +168,8 @@ pub(crate) fn cmd_auth(a: AuthArgs) -> Result<()> {
         AuthCommands::Logout => cmd_auth_logout(&origin),
     }
 }
-/// The PAT tracks, unchanged from before device authorization existed: paste
-/// interactively, or pipe from stdin for CI. Both land in the credentials
-/// file, and both validate before storing so a rejected token is never
-/// written.
+/// Validate an access key before storing it. Interactive login uses the OS
+/// keyring when available. Piped input keeps the existing CI file path.
 fn login_with_pat(
     conn: &core::workspace::RemoteConnection,
     origin: &str,
@@ -168,25 +183,42 @@ fn login_with_pat(
         bail!("empty token — nothing stored");
     }
     let whoami = RemoteClient::new(&conn.url, &token, None).whoami()?;
-    remote_auth::save_token_at(&remote_auth::speclink_config_dir(), origin, &token)?;
+    let dir = remote_auth::speclink_config_dir();
+    let store = remote_credentials::client_store();
+    if !token_stdin && store.set(origin, remote_credentials::CredentialKind::Pat, &token).is_ok() {
+        remote_auth::clear_keychain_login(origin, store);
+        remote_auth::remove_token_at(&dir, origin)?;
+    } else {
+        remote_auth::save_token_at(&dir, origin, &token)?;
+    }
     print_identity(&whoami);
     Ok(())
 }
-/// Terminal, browser and clock for a device login.
-struct CliDeviceIo;
-impl remote_login::DeviceLoginIo for CliDeviceIo {
-    fn announce(&self, verification_uri: &str, user_code: &str) {
-        println!("Open {verification_uri} and enter code: {user_code}");
-        println!("Waiting for approval…");
+/// Terminal and clock for the shared login flow.
+struct CliLoginIo;
+impl remote_login::LoginIo for CliLoginIo {
+    fn phase(&self, phase: remote_login::LoginPhase) {
+        match phase {
+            remote_login::LoginPhase::AwaitingDevice { verification_uri, user_code, .. } => {
+                println!("Open {verification_uri} and enter code: {user_code}");
+                println!("Waiting for approval…");
+            }
+            remote_login::LoginPhase::AwaitingBrowser { url, .. } => {
+                println!("Open {url} to sign in");
+                println!("Waiting for sign-in…");
+            }
+        }
     }
+
+    fn cancelled(&self) -> bool { false }
 
     fn open_browser(&self, url: &str) -> bool {
         #[cfg(target_os = "macos")]
         let mut cmd = std::process::Command::new("open");
         #[cfg(target_os = "windows")]
         let mut cmd = {
-            let mut c = std::process::Command::new("cmd");
-            c.args(["/C", "start", ""]);
+            let mut c = std::process::Command::new("rundll32");
+            c.arg("url.dll,FileProtocolHandler");
             c
         };
         #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
@@ -204,41 +236,36 @@ impl remote_login::DeviceLoginIo for CliDeviceIo {
         std::thread::sleep(std::time::Duration::from_secs(secs));
     }
 }
-fn login_with_device(conn: &core::workspace::RemoteConnection, origin: &str) -> Result<()> {
-    let store = remote_credentials::client_store();
-    // Probe before starting: approving in a browser only to discover there is
-    // nowhere to keep the credential wastes the user's time.
-    if store.get(origin, remote_credentials::CredentialKind::Refresh).is_err() {
-        bail!(
-            "no system keychain available on this machine — a device login's refresh credential is never written to a plain file; use `speclink auth login --pat` or set SPECLINK_TOKEN"
-        );
-    }
-
-    let outcome = remote_login::device_login(
+fn login_with_browser_or_device(
+    conn: &core::workspace::RemoteConnection,
+    origin: &str,
+    plan: &remote_login::Plan,
+) -> Result<()> {
+    use remote_login::LoginOutcome;
+    let target = remote_login::LoginTarget {
         origin,
-        store,
-        &remote_auth::speclink_config_dir(),
-        &CliDeviceIo,
-    )
-    .map_err(|e| anyhow::anyhow!(e))?;
-
-    match outcome {
-        remote_login::DeviceLoginOutcome::Approved { display } => {
+        credentials: remote_credentials::client_store(),
+        lock_dir: &remote_auth::speclink_config_dir(),
+    };
+    match remote_login::login(&target, plan, &CliLoginIo) {
+        LoginOutcome::LoggedIn { display, .. } => {
             println!("{} Logged in as {display}", color::green("✓"));
             if let Some(repo) = conn.repo.as_deref() {
                 println!("Connected to repo '{repo}'");
             }
             Ok(())
         }
-        remote_login::DeviceLoginOutcome::Denied => {
-            bail!("authorization denied — nothing was stored")
+        LoginOutcome::LoggedInWithoutIdentity { message } => {
+            println!("{} Login saved", color::green("✓"));
+            eprintln!("speclink: warning: could not read the account identity ({message})");
+            Ok(())
         }
-        remote_login::DeviceLoginOutcome::Expired => {
-            bail!("authorization expired before it was approved — run `speclink auth login` again")
-        }
-        remote_login::DeviceLoginOutcome::Unsupported => {
-            bail!("this server does not offer device authorization — use `speclink auth login --pat`")
-        }
+        LoginOutcome::Denied => bail!("authorization denied — nothing was stored"),
+        LoginOutcome::Expired => bail!("authorization expired before it was approved — run `speclink auth login` again"),
+        LoginOutcome::Cancelled => bail!("login cancelled"),
+        LoginOutcome::Unsupported | LoginOutcome::TokenRequired => bail!("this server does not offer device authorization — use `speclink auth login --pat`"),
+        LoginOutcome::KeychainUnavailable => bail!("no system keychain available on this machine — use `speclink auth login --pat` or set SPECLINK_TOKEN"),
+        LoginOutcome::Failed(message) => bail!("{message}"),
     }
 }
 /// Logout revokes the credential family on the server, then clears every local
@@ -247,33 +274,15 @@ fn login_with_device(conn: &core::workspace::RemoteConnection, origin: &str) -> 
 /// both. The server-side PAT is left alone: it is a separate credential the
 /// user manages, possibly in use from another machine.
 fn cmd_auth_logout(origin: &str) -> Result<()> {
-    let store = remote_credentials::client_store();
     let dir = remote_auth::speclink_config_dir();
-    let refresh = store
-        .get(origin, remote_credentials::CredentialKind::Refresh)
-        .ok()
-        .flatten();
-    let keyring_pat = store
-        .get(origin, remote_credentials::CredentialKind::Pat)
-        .ok()
-        .flatten();
-    let had_file_token = remote_auth::load_token_at(&dir, origin).is_some();
-
-    if refresh.is_none() && keyring_pat.is_none() && !had_file_token {
+    let result = remote_login::logout(origin, remote_credentials::client_store(), Some(&dir))
+        .map_err(anyhow::Error::msg)?;
+    if !result.was_logged_in {
         bail!("Not logged in to {origin}");
     }
-
-    // A revoke that cannot reach the server still leaves nothing usable here;
-    // the family outliving us is worth a warning, not a failed logout.
-    if let Some(refresh) = refresh.as_deref() {
-        if let Err(e) = speclink_remote::device::revoke(origin, refresh) {
-            eprintln!(
-                "speclink: warning: could not revoke the credential family on the server ({e}) — it stays live until it expires"
-            );
-        }
+    if let Some(message) = result.revoke_warning {
+        eprintln!("speclink: warning: {message}");
     }
-    remote_login::clear_all_local_credentials(origin, store);
-    remote_auth::remove_token_at(&dir, origin)?;
     println!("{} Logged out of {origin}", color::green("✓"));
     Ok(())
 }

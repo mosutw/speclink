@@ -7,11 +7,12 @@
 //! speclink-protocol DTOs end to end — no verb assembles or picks apart raw JSON,
 //! and no verb re-implements transport or error handling.
 
-use crate::{translate_protocol_error, translate_transport, RemoteError};
+use crate::{translate_protocol_error, RemoteError};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use speclink_protocol::binding::BindingResponse;
 use speclink_protocol::command::{
+    FreeFields, SetFieldsRequest, SetFieldsResponse,
     AddDiscussionRoundRequest, AddDiscussionRoundResponse, AddReviewRoundRequest,
     AddReviewRoundResponse, ArchiveDiscussionResponse, ArchiveResponse, BindDiscussionRequest,
     BindDiscussionResponse, ClaimResponse, ConcludeDiscussionRequest, ConcludeDiscussionResponse,
@@ -80,7 +81,7 @@ impl Client {
             api_root,
             token: token.to_string(),
             repo: repo.map(str::to_string),
-            agent: ureq::AgentBuilder::new()
+            agent: crate::http::agent_builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build(),
         }
@@ -150,7 +151,7 @@ impl Client {
                 let body = resp.into_string().unwrap_or_default();
                 Err(translate_protocol_error(status, &body))
             }
-            Err(ureq::Error::Transport(_)) => Err(translate_transport()),
+            Err(ureq::Error::Transport(error)) => Err(crate::http::translate_transport_error(&error)),
         }
     }
 
@@ -375,7 +376,7 @@ impl Client {
                 let body = resp.into_string().unwrap_or_default();
                 Err(translate_protocol_error(status, &body))
             }
-            Err(ureq::Error::Transport(_)) => Err(translate_transport()),
+            Err(ureq::Error::Transport(error)) => Err(crate::http::translate_transport_error(&error)),
         }
     }
 
@@ -402,7 +403,7 @@ impl Client {
             Err(ureq::Error::Status(status, _)) => {
                 return Err(translate_protocol_error(status, ""))
             }
-            Err(_) => return Err(translate_transport()),
+            Err(ureq::Error::Transport(error)) => return Err(crate::http::translate_transport_error(&error)),
         };
         const LIMIT: usize = 256 * 1024 * 1024;
         let invalid = || RemoteError {
@@ -426,7 +427,7 @@ impl Client {
                 return Err(stopped());
             }
             let count =
-                std::io::Read::read(&mut reader, &mut chunk).map_err(|_| translate_transport())?;
+                std::io::Read::read(&mut reader, &mut chunk).map_err(|_| crate::http::stream_failure())?;
             if cancelled() {
                 return Err(stopped());
             }
@@ -651,14 +652,56 @@ impl Client {
         slug: Option<&str>,
         kind: Option<&str>,
     ) -> Result<CreateDiscussionResponse, RemoteError> {
+        self.new_discussion_with_fields(topic, slug, kind, &FreeFields::new())
+    }
+
+    /// [`Client::new_discussion`] with free fields the record starts with
+    /// (`discuss new --field`). The call without fields keeps its signature:
+    /// the desktop app and the server's tests call it. No field keeps the
+    /// body what it was. A server from before free fields
+    /// creates the record and drops them: the handshake's
+    /// `capabilities.fields` says whether it keeps them.
+    pub fn new_discussion_with_fields(
+        &self,
+        topic: &str,
+        slug: Option<&str>,
+        kind: Option<&str>,
+        fields: &FreeFields,
+    ) -> Result<CreateDiscussionResponse, RemoteError> {
         self.post(
             "/discussions",
             &CreateDiscussionRequest {
                 topic: topic.to_string(),
                 slug: slug.map(str::to_string),
                 kind: kind.map(str::to_string),
+                fields: fields.clone(),
             },
         )
+    }
+
+    /// `PUT /changes/{name}/fields` — set and remove free fields of a change
+    /// in one write. A server from before this route answers 404.
+    pub fn set_change_fields(
+        &self,
+        name: &str,
+        set: &FreeFields,
+        unset: &[String],
+    ) -> Result<SetFieldsResponse, RemoteError> {
+        self.put_fields(&format!("/changes/{name}/fields"), set, unset)
+    }
+
+    /// `PUT /discussions/{slug}/fields` — the same write for a live discussion.
+    pub fn set_discussion_fields(
+        &self,
+        slug: &str,
+        set: &FreeFields,
+        unset: &[String],
+    ) -> Result<SetFieldsResponse, RemoteError> {
+        self.put_fields(&format!("/discussions/{slug}/fields"), set, unset)
+    }
+
+    fn put_fields(&self, path: &str, set: &FreeFields, unset: &[String]) -> Result<SetFieldsResponse, RemoteError> {
+        self.send("PUT", path, Some(&SetFieldsRequest { set: set.clone(), unset: unset.to_vec() }), &[])
     }
 
     /// `DELETE /discussions/{slug}?force=` — Command::DiscussDiscard 直通；
@@ -894,6 +937,7 @@ impl Client {
             &PromoteDiscussionRequest {
                 name: name.map(str::to_string),
                 last,
+                fields: FreeFields::new(),
             },
         )
     }

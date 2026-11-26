@@ -52,6 +52,8 @@ pub enum ExecutionMode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpeclinkExecutionContext {
     pub actor: Actor,
+    /// Stable account ID when the embedding host has one; local mode omits it.
+    pub actor_id: Option<String>,
     pub project: ProjectId,
     pub repo: RepoId,
     pub mode: ExecutionMode,
@@ -293,6 +295,7 @@ mod tests {
     fn execution_context_carries_actor_binding_mode_and_policy() {
         let binding = local_default_binding();
         let ctx = SpeclinkExecutionContext {
+            actor_id: None,
             actor: Actor::Identified {
                 display: "Alice <alice@example.com>".to_string(),
                 source: ActorSource::GitConfig,

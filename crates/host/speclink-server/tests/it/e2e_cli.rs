@@ -297,6 +297,7 @@ fn seed(project_url: &str, pat: &str) {
     let client = Client::new(project_url, pat, Some("backend"));
     client
         .create_change(CreateChangeRequest {
+            fields: Default::default(),
             name: "demo".to_string(),
             schema: Some("spec-driven".to_string()),
             description: None,
@@ -578,9 +579,9 @@ fn setup_flow_onboards_a_team_and_a_restart_closes_it() {
     // Same window, store truth: the stamp landed the five reviewed_* fields with
     // the checkout-computed fingerprint, atomically with the ticket delete.
     {
-        use speclink_store::{DocumentId, ProjectId, RepoId, Scope, TeamStore};
+        use speclink_store::{DocumentId, ProjectId, RepoId, Scope};
         let store =
-            speclink_store_sqlite::SqliteTeamStore::open(&db).expect("open store for meta check");
+            speclink_server::native_storage::open_for_server(&speclink_server::config::StoreConfig::Sqlite { path: db.clone() }).expect("open store for meta check");
         let scope = Scope::new(ProjectId::new("demo"), RepoId::new("backend"));
         let meta = store
             .snapshot(&scope)
@@ -636,8 +637,8 @@ fn setup_flow_onboards_a_team_and_a_restart_closes_it() {
 /// the LANGUAGE document (the store's new shared-vocabulary kind). Dropping the
 /// store closes the connection before the server starts.
 fn preseed_scope(db: &Path) {
-    use speclink_store::{CommandContext, DocumentId, ProjectId, RepoId, Scope, TeamStore};
-    let store = speclink_store_sqlite::SqliteTeamStore::open(db).expect("open store for preseed");
+    use speclink_store::{CommandContext, DocumentId, ProjectId, RepoId, Scope};
+    let store = speclink_server::native_storage::open_for_server(&speclink_server::config::StoreConfig::Sqlite { path: db.to_path_buf() }).expect("open store for preseed");
     let scope = Scope::new(ProjectId::new("demo"), RepoId::new("backend"));
     let mut uow = store
         .begin_unit_of_work(

@@ -38,6 +38,7 @@ fn fs_engine_ctx() -> ExecutionContext {
 fn host_ctx() -> SpeclinkExecutionContext {
     let binding = local_default_binding();
     SpeclinkExecutionContext {
+        actor_id: None,
         actor: Actor::Identified {
             display: ACTOR.to_string(),
             source: ActorSource::Explicit,

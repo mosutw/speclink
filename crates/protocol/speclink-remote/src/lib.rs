@@ -25,8 +25,12 @@ pub mod client;
 pub mod convert;
 pub mod credentials;
 pub mod device;
+pub mod discovery;
 pub mod events;
+mod http;
 pub mod login;
+mod loopback;
+mod oauth;
 pub mod refresh;
 
 /// A translated remote failure: one semantic line for the user/agent, plus

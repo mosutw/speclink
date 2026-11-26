@@ -9,3 +9,5 @@ mod read_api;
 mod reauth_retry;
 mod refresh_lock;
 mod typed_client;
+
+mod browser_login;

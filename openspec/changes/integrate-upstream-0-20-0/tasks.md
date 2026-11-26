@@ -1,19 +1,19 @@
 ## 1. 基準與分批整合
 
-- [ ] 1.1 建立整合清冊。比較 fork 0.12.2 與上游 26de3b9f 到 7f1105a5 的變動，逐一將更新日誌、規格與使用者可見差異對到納入、既有、相容處理或上游自用；為跨切面的項目列後續任務及來源。範圍 docs/development/、openspec/。驗證：來源提交確實對應兩個 tag，清冊有每個版本的來源與驗收證據欄，隔離工作樹以含 b57c99d0 的 fork main 為基準。 <!-- speclink-task:tsk_01M8C31J3133KG6DZ5FMJTTX13 -->
-- [ ] 1.2 建立 fork 回歸對照。用 fork 現有 fixture 記下安全審查與驗收、品質紀錄、工作流語言與自訂路徑、四種工具、Windows 免安裝版、DMG 簽章及更新來源。範圍 openspec/specs/、crates/adapters/speclink-cli/tests/、scripts/、.github/workflows/。驗證：記錄哪些原有測試已通過，以及整合後須保持的輸出與配置值。 <!-- speclink-task:tsk_01M8C31J31YAH5FCGHBNHRMKEG -->
+- [x] 1.1 建立整合清冊。比較 fork 0.12.2 與上游 26de3b9f 到 7f1105a5 的變動，逐一將更新日誌、規格與使用者可見差異對到納入、既有、相容處理或上游自用；為跨切面的項目列後續任務及來源。範圍 docs/development/、openspec/。驗證：來源提交確實對應兩個 tag，清冊有每個版本的來源與驗收證據欄，隔離工作樹以含 b57c99d0 的 fork main 為基準。 <!-- speclink-task:tsk_01M8C31J3133KG6DZ5FMJTTX13 -->
+- [x] 1.2 建立 fork 回歸對照。用 fork 現有 fixture 記下安全審查與驗收、品質紀錄、工作流語言與自訂路徑、四種工具、Windows 免安裝版、DMG 簽章及更新來源。範圍 openspec/specs/、crates/adapters/speclink-cli/tests/、scripts/、.github/workflows/。驗證：記錄哪些原有測試已通過，以及整合後須保持的輸出與配置值。 <!-- speclink-task:tsk_01M8C31J31YAH5FCGHBNHRMKEG -->
 
 ## 2. 宿主、共用動詞與儲存分層
 
-- [ ] 2.1 建立宿主與儲存回歸測試。先重現新 SDK 入口、三個操作與單次提交、範圍匯入模式、宿主保留自由欄位、內嵌宿主的授權與事件、匯出與宿主工具尚未可用；加舊 createEngine 與原回傳形狀對照。範圍 crates/host/speclink-host/、crates/store/、crates/adapters/speclink-node/。驗證：相關 cargo test 與 Node binding 測試可區分新契約未實作與舊契約已存在。 <!-- speclink-task:tsk_01M8C31J31ANZE7YDKZWB40KQF -->
-- [ ] 2.2 接上共用動詞與儲存。引入 speclink-verbs 與 Store Port，讓 CLI、SDK 與 Host 用同一套動詞解析與輸出，組裝 JS／SQLite／PostgreSQL／FS，保留舊 SDK 相容入口。範圍 crates/adapters/、crates/engine/、crates/store/、crates/host/speclink-host/。驗證：cargo test -p speclink-verbs、cargo test -p speclink-host 及三個 Store Port package 的合格測試，確認版本衝突零寫入及事件共提交。 <!-- speclink-task:tsk_01M8C31J31YHTHCETF2FJ0RANP -->
-- [ ] 2.3 接上公開 SDK。提供 createHost、host.dispatch、HTTP、匯入匯出、掛鉤、命令及事件資訊、技能裁剪，型別和 runtime 同步。範圍 crates/adapters/speclink-node/、crates/host/speclink-host/。驗證：npm --prefix crates/adapters/speclink-node run build 後跑 npm --prefix crates/adapters/speclink-node test，確認缺失與錯誤參數、舊 SDK 形狀、匯入差異列表及雙資源事件。 <!-- speclink-task:tsk_01M8C31J316EQAW14STZ9ZTH8R -->
+- [x] 2.1 建立宿主與儲存回歸測試。先重現新 SDK 入口、三個操作與單次提交、範圍匯入模式、宿主保留自由欄位、內嵌宿主的授權與事件、匯出與宿主工具尚未可用；加舊 createEngine 與原回傳形狀對照。範圍 crates/host/speclink-host/、crates/store/、crates/adapters/speclink-node/。驗證：相關 cargo test 與 Node binding 測試可區分新契約未實作與舊契約已存在。 <!-- speclink-task:tsk_01M8C31J31ANZE7YDKZWB40KQF -->
+- [x] 2.2 接上共用動詞與儲存。引入 speclink-verbs 與 Store Port，讓 CLI、SDK 與 Host 用同一套動詞解析與輸出，組裝 JS／SQLite／PostgreSQL／FS，保留舊 SDK 相容入口。範圍 crates/adapters/、crates/engine/、crates/store/、crates/host/speclink-host/。驗證：cargo test -p speclink-verbs、cargo test -p speclink-host 及三個 Store Port package 的合格測試，確認版本衝突零寫入及事件共提交。 <!-- speclink-task:tsk_01M8C31J31YHTHCETF2FJ0RANP -->
+- [x] 2.3 接上公開 SDK。提供 createHost、host.dispatch、HTTP、匯入匯出、掛鉤、命令及事件資訊、技能裁剪，型別和 runtime 同步。範圍 crates/adapters/speclink-node/、crates/host/speclink-host/。驗證：npm --prefix crates/adapters/speclink-node run build 後跑 npm --prefix crates/adapters/speclink-node test，確認缺失與錯誤參數、舊 SDK 形狀、匯入差異列表及雙資源事件。 <!-- speclink-task:tsk_01M8C31J316EQAW14STZ9ZTH8R -->
 
 ## 3. Server 資料升級與復原、遠端契約
 
-- [ ] 3.1 建立遠端與升級回歸測試。先用三個舊後端建立備份 fixture，包含角色、範圍、品質和安全歷史；補上參考 Server 儲存升級、登入發現與連線狀態、詳細查詢與舊版容錯測試。範圍 crates/protocol/、crates/host/speclink-server/、crates/adapters/speclink-cli/tests/。驗證：cargo test -p speclink-server 與 cargo test -p speclink-cli，確認可重現舊資料與缺失新欄位的情況。 <!-- speclink-task:tsk_01M8C31J31Q822DW20FMM6C5HW -->
-- [ ] 3.2 接入新版 Server 儲存。固化舊版備份、新版空庫還原、損毀或非空時拒絕及舊庫復原；接通新 Host 路由及 revision 邊界。範圍 crates/host/speclink-server/、crates/store/、apps/server-web/、docs/。驗證：cargo test -p speclink-server 與 npm test -w @speclink/server-web，三後端升級後都保留原授權、規格和品質／安全資料。 <!-- speclink-task:tsk_01M8C31J31TGKV8FPKFVF858NJ -->
-- [ ] 3.3 接上用戶端。完成登入順序、系統信任、金鑰圈登出、多 repo 綁定、同 origin SSE、失敗原因與遠端排程／查詢；保留既有服務端相容。範圍 crates/protocol/、crates/adapters/speclink-cli/、crates/host/speclink-server/、apps/desktop/core/。驗證：cargo test -p speclink-cli 與 cargo test -p speclink-desktop-core，確認舊服務端缺欄位仍能讀、5xx 和 4xx 有可辨狀態、認證失效和 revision 不符不被當成寫入成功。 <!-- speclink-task:tsk_01M8C31J31RWHATH7KFT4S8EEW -->
+- [x] 3.1 建立遠端與升級回歸測試。先用三個舊後端建立備份 fixture，包含角色、範圍、品質和安全歷史；補上參考 Server 儲存升級、登入發現與連線狀態、詳細查詢與舊版容錯測試。範圍 crates/protocol/、crates/host/speclink-server/、crates/adapters/speclink-cli/tests/。驗證：cargo test -p speclink-server 與 cargo test -p speclink-cli，確認可重現舊資料與缺失新欄位的情況。 <!-- speclink-task:tsk_01M8C31J31Q822DW20FMM6C5HW -->
+- [x] 3.2 接入新版 Server 儲存。固化舊版備份、新版空庫還原、損毀或非空時拒絕及舊庫復原；接通新 Host 路由及 revision 邊界。範圍 crates/host/speclink-server/、crates/store/、apps/server-web/、docs/。驗證：cargo test -p speclink-server 與 npm test -w @speclink/server-web，三後端升級後都保留原授權、規格和品質／安全資料。 <!-- speclink-task:tsk_01M8C31J31TGKV8FPKFVF858NJ -->
+- [x] 3.3 接上用戶端。完成登入順序、系統信任、金鑰圈登出、多 repo 綁定、同 origin SSE、失敗原因與遠端排程／查詢；保留既有服務端相容。範圍 crates/protocol/、crates/adapters/speclink-cli/、crates/host/speclink-server/、apps/desktop/core/。驗證：cargo test -p speclink-cli 與 cargo test -p speclink-desktop-core，確認舊服務端缺欄位仍能讀、5xx 和 4xx 有可辨狀態、認證失效和 revision 不符不被當成寫入成功。 <!-- speclink-task:tsk_01M8C31J31RWHATH7KFT4S8EEW -->
 
 ## 4. 生命週期、工作流與語言
 

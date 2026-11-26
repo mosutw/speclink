@@ -14,14 +14,20 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 anyhow.workspace = true
 ureq = { version = "2", features = ["json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
 # credential 唯一落點 OS Keychain（cli-desktop-credential-sharing）：僅啟用
 # macOS/Windows 原生後端——其他平台退 keyring 內建 mock，桌面支援面即 macOS
 # Keychain／Windows Credential Manager。CLI 在無 keyring 的平台靜默下探至 PAT。
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 # 換發的跨行程序列化鎖：跨平台語意一致，勝過手寫 flock。
 fs2 = "0.4"
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.3"
 
 [dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
 tiny_http = "0.12"
 speclink-server = { path = "../../host/speclink-server" }
 speclink-store = { path = "../../store/speclink-store" }

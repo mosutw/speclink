@@ -211,7 +211,14 @@ pub fn create_bridge(env: Env, invoker: JsFunction) -> Result<JsStoreBridge> {
 
 impl JsStoreBridge {
     /// Call a store method and wait (on the worker thread) for it to settle.
-    fn call(
+    pub(crate) fn notify(&self, method: &'static str, args: serde_json::Value) {
+        // The receiver is dropped at once, so the settle callback's send fails
+        // quietly when the call completes.
+        let (tx, _) = mpsc::channel();
+        let _ = self.tsfn.call(CallRequest { method, args, tx }, ThreadsafeFunctionCallMode::NonBlocking);
+    }
+
+    pub(crate) fn call(
         &self,
         method: &'static str,
         args: serde_json::Value,

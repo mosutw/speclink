@@ -11,6 +11,7 @@
 //! tests and orchestration inject [`MemoryCredentialStore`]. Error strings
 //! never carry secret material.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -37,6 +38,88 @@ impl CredentialKind {
             CredentialKind::Refresh => "refresh",
             CredentialKind::Pat => "pat",
             CredentialKind::Bearer => "bearer",
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum RefreshEntry {
+    Device(String),
+    OAuth(OAuthRefresh),
+}
+
+/// Printed without the token, so a `{:?}` in a log line cannot leak it.
+impl std::fmt::Debug for RefreshEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RefreshEntry::Device(_) => f.write_str("Device(<redacted>)"),
+            RefreshEntry::OAuth(oauth) => f.debug_tuple("OAuth").field(oauth).finish(),
+        }
+    }
+}
+
+/// What a browser login needs to refresh and revoke: the login service's
+/// endpoints are kept beside the token, so a refresh never re-reads the
+/// service's metadata.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthRefresh {
+    /// `None` when the login service issued no refresh token: the login lasts
+    /// as long as its access token.
+    pub refresh_token: Option<String>,
+    pub token_endpoint: String,
+    pub client_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revocation_endpoint: Option<String>,
+}
+
+/// Printed without the token, so a `{:?}` in a log line cannot leak it.
+impl std::fmt::Debug for OAuthRefresh {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OAuthRefresh")
+            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "<redacted>"))
+            .field("token_endpoint", &self.token_endpoint)
+            .field("client_id", &self.client_id)
+            .field("revocation_endpoint", &self.revocation_endpoint)
+            .finish()
+    }
+}
+
+/// The tagged JSON shape of a browser login's entry: `{"kind":"oauth", …}`.
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum StoredRefresh {
+    Oauth(OAuthRefresh),
+}
+
+impl RefreshEntry {
+    /// Read an entry. Anything that is not a `kind: oauth` object is a device
+    /// login's refresh token — which is every entry written before browser
+    /// login existed, so none of them needs migrating.
+    pub fn parse(raw: &str) -> RefreshEntry {
+        match serde_json::from_str::<StoredRefresh>(raw) {
+            Ok(StoredRefresh::Oauth(oauth)) => RefreshEntry::OAuth(oauth),
+            Err(_) => RefreshEntry::Device(raw.to_string()),
+        }
+    }
+
+    /// The entry for a device login's refresh token. The entry's kind is told
+    /// from its content, so a token that reads as a browser-login entry is
+    /// refused: stored as it is, it would later send refresh and revocation
+    /// requests to whatever endpoints the server wrote into it.
+    pub fn device(token: String) -> Result<RefreshEntry, String> {
+        match RefreshEntry::parse(&token) {
+            RefreshEntry::Device(token) => Ok(RefreshEntry::Device(token)),
+            RefreshEntry::OAuth(_) => Err("server 回傳的 refresh credential 格式不合法".to_string()),
+        }
+    }
+
+    /// The entry's stored value.
+    pub fn encode(&self) -> String {
+        match self {
+            RefreshEntry::Device(token) => token.clone(),
+            RefreshEntry::OAuth(oauth) => serde_json::to_string(&StoredRefresh::Oauth(oauth.clone()))
+                .expect("a struct of strings always serializes"),
         }
     }
 }
@@ -108,7 +191,18 @@ fn store_for_mode(portable: bool) -> &'static dyn CredentialStore {
     }
 }
 
+fn keyring_persists() -> bool {
+    use keyring::credential::CredentialPersistence;
+    matches!(
+        keyring::default::default_credential_builder().persistence(),
+        CredentialPersistence::UntilDelete | CredentialPersistence::UntilReboot
+    )
+}
+
 fn entry(origin: &str, kind: CredentialKind) -> Result<keyring::Entry, String> {
+    if !keyring_persists() {
+        return Err("此平台沒有系統 Keychain".to_string());
+    }
     keyring::Entry::new(SERVICE, &format!("{}:{origin}", kind.slug()))
         .map_err(|e| format!("無法存取系統 Keychain：{e}"))
 }

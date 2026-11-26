@@ -56,6 +56,7 @@ pub struct BridgeExecution {
 fn engine_context(ctx: &SpeclinkExecutionContext, system_locale: Option<String>) -> ExecutionContext {
     ExecutionContext {
         actor: ctx.actor.display().map(str::to_string),
+        actor_id: ctx.actor_id.clone(),
         repo: Some(ctx.repo.as_str().to_string()),
         env: speclink_core::config::EnvOverrides {
             system_locale,
@@ -142,6 +143,8 @@ fn command_label(outcome: &CommandOutcome) -> String {
         CommandOutcome::InProgressRemove(_) => "in-progress-remove",
         CommandOutcome::ChangeDepends(_) => "change-depends",
         CommandOutcome::ChangeSchema(_) => "change-schema",
+        CommandOutcome::ChangeFieldsEdit(_) => "change-fields-edit",
+        CommandOutcome::DiscussFieldsEdit(_) => "discuss-fields-edit",
         CommandOutcome::Archive(_) => "archive",
         CommandOutcome::Discard(_) => "discard",
         CommandOutcome::DiscussNew(_) => "discuss-new",
@@ -887,6 +890,7 @@ mod tests {
                 system_locale: Some("zh-TW".into()), ..Default::default()
             };
             let ctx = SpeclinkExecutionContext {
+                actor_id: None,
                 actor: Actor::Identified { display: "test".into(), source: ActorSource::Explicit },
                 project: binding.project, repo: binding.repo, mode: ExecutionMode::SharedStore,
                 policy: EffectiveWorkflowPolicy::new(resolve_policy(&client, &WorkflowConfig::default()), ""),

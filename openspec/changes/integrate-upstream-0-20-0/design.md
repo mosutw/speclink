@@ -17,6 +17,8 @@
 
 speclink-core 保留領域判定，speclink-fs 處理工作區 IO，speclink-host 負責身分、範圍、權限、提交與事件。引入上游 speclink-verbs，讓 CLI 與 Node 共用解析及輸出，遠端經 Rust protocol typed DTO，桌面與 Server 沿用同一套 Host 邏輯。以 Store Port 承接範圍內文件提交，SQLite、PostgreSQL、FS 跑同一組合格測試。新版 Host Kit 採上游公開入口。既有 createEngine 自訂 store 與原回傳保留在舊入口，沿用 fork 的查詢轉接，不複製動詞實作。
 
+驗收所讀取的政策、索引和證據使用 Rust 內建後端的唯讀版本條件。資料庫交易或檔案鎖內先核對條件，再寫入章、封存資料和事件。落後的版本讓整筆提交失敗，來源文件的內容、版本與修改時間維持原樣。第三方 JS store 繼續使用 list、read、commit，未實作此能力的後端收到帶條件的提交時回報拒絕。
+
 ### 資料升級與復原
 
 舊 TeamStore 維持舊 SDK 和舊版匯出的相容邊界。新版 Server 遇到舊儲存先拒絕啟動，由舊 CLI 做備份，驗證後還原至空的新後端；驗證資料與身分後才切換流量。失敗保持舊庫可重新掛回，空目標的還原交易失敗時不得留下半份範圍。新入口也支援非空範圍的 replace，dryRun 唯讀，revision 競爭時回報衝突且保留原狀。備份及匯入流程保留 fork 的規格、工作流政策、品質與安全歷史。

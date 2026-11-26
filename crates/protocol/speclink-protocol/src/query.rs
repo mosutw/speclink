@@ -8,6 +8,7 @@
 //! them at the CLI boundary.
 
 use schemars::JsonSchema;
+use crate::command::FreeFields;
 use serde::{Deserialize, Serialize};
 
 use crate::binding::ScopeRef;
@@ -159,6 +160,29 @@ pub enum ImportDocumentOutcome {
     Created,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ScopeBundle {
+    /// Always 2.
+    pub format_version: u32,
+    /// The scope version the export was taken at. An export always carries
+    /// it; an import ignores it, so an export's answer imports as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_version: Option<u64>,
+    /// In byte order of the keys when the bundle is an export.
+    pub documents: Vec<BundleDocument>,
+}
+
+/// One document of a [`ScopeBundle`]. `digest` is `sha256:` and the hex
+/// SHA-256 of `content`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BundleDocument {
+    pub key: String,
+    pub content: String,
+    pub digest: String,
+}
+
 /// `GET /board-order` response: the scope's opaque board-order document and
 /// the scope revision (the CAS token a later PUT sends back as `If-Match`).
 /// An absent document is a normal state — `content` is null.
@@ -289,6 +313,16 @@ pub struct ArchivedItem {
     pub created_by: Option<String>,
     #[serde(default)]
     pub from_discussions: Vec<String>,
+    #[serde(default, skip_serializing_if = "FreeFields::is_empty")]
+    pub fields: FreeFields,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why_excerpt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ready_at: Option<String>,
 }
 
 /// `GET /search` response.
@@ -348,6 +382,16 @@ pub struct ChangeSummary {
     pub from_discussions: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub delta_capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "FreeFields::is_empty")]
+    pub fields: FreeFields,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why_excerpt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ready_at: Option<String>,
 }
 
 /// `GET /changes/{name}` response — the fs `StatusReport` shape plus the
@@ -387,6 +431,16 @@ pub struct ChangeStatus {
     pub started_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_by: Option<String>,
+    #[serde(default, skip_serializing_if = "FreeFields::is_empty")]
+    pub fields: FreeFields,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ready_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why_excerpt: Option<String>,
 }
 
 /// One artifact's status inside [`ChangeStatus`].
@@ -701,6 +755,8 @@ pub struct DiscussionInfo {
     pub hold: Option<bool>,
     pub path: String,
     pub archived: bool,
+    #[serde(default, skip_serializing_if = "FreeFields::is_empty")]
+    pub fields: FreeFields,
 }
 
 /// `GET /discussions/{slug}` response. `cuts` reads an absent key as empty

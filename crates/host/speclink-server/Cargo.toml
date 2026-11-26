@@ -18,6 +18,10 @@ speclink-store = { path = "../../store/speclink-store" }
 speclink-store-sqlite = { path = "../../store/speclink-store-sqlite" }
 speclink-store-fs = { path = "../../store/speclink-store-fs" }
 speclink-store-postgres = { path = "../../store/speclink-store-postgres" }
+speclink-store-port = { path = "../../store/speclink-store-port" }
+speclink-store-port-fs = { path = "../../store/speclink-store-port-fs" }
+speclink-store-port-postgres = { path = "../../store/speclink-store-port-postgres" }
+speclink-store-port-sqlite = { path = "../../store/speclink-store-port-sqlite" }
 axum = "0.8"
 async-stream = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "signal", "sync"] }

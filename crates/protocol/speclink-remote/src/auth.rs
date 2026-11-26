@@ -47,6 +47,24 @@ pub fn origin_of(url: &str) -> String {
     }
 }
 
+/// Validate and normalize a server address for the shared login flow.
+pub fn normalize_origin(address: &str) -> Result<String, String> {
+    let url = url::Url::parse(address.trim()).map_err(|_| "伺服器位址需以 http:// 或 https:// 開頭".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") || url.host().is_none()
+        || !url.username().is_empty() || url.password().is_some() {
+        return Err("伺服器位址需為不含帳號密碼的 HTTP 或 HTTPS 網址".into());
+    }
+    Ok(url.origin().ascii_serialization())
+}
+
+/// Split `scheme://authority[rest]` at its two seams: the authority ends at the
+/// first `/`, `?` or `#`, and may be empty. `None` without a `://`.
+pub(crate) fn split_url(url: &str) -> Option<(&str, &str, &str)> {
+    let (scheme, after) = url.split_once("://")?;
+    let (authority, rest) = after.split_at(after.find(['/', '?', '#']).unwrap_or(after.len()));
+    Some((scheme, authority, rest))
+}
+
 fn read_map(path: &Path) -> BTreeMap<String, String> {
     std::fs::read_to_string(path)
         .ok()
@@ -145,10 +163,19 @@ impl CredentialSource {
 }
 
 /// A resolved credential: the bearer to send, and which layer produced it.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ResolvedCredential {
     pub token: String,
     pub source: CredentialSource,
+}
+
+impl std::fmt::Debug for ResolvedCredential {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("ResolvedCredential")
+            .field("token", &"<redacted>")
+            .field("source", &self.source)
+            .finish()
+    }
 }
 
 /// Walk the ladder against an explicit config dir, credential store and

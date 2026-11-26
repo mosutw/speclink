@@ -242,6 +242,7 @@ fn seed(project_url: &str, pat: &str) {
     let client = Client::new(project_url, pat, Some("backend"));
     client
         .create_change(CreateChangeRequest {
+            fields: Default::default(),
             name: "demo".to_string(),
             schema: Some("spec-driven".to_string()),
             description: None,

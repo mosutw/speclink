@@ -12,11 +12,18 @@ use crate::common;
 use crate::common::subscriber::Recorder;
 use speclink_protocol::context::ContextSnapshotRequest;
 use speclink_remote::client::{Client, ContextSnapshotOutcome};
+
+use speclink_store::TeamStore;
 use std::io::{BufRead, BufReader, Write};
+
 use std::net::TcpListener;
+
 use std::path::{Path, PathBuf};
+
 use std::process::{Child, Command, Output, Stdio};
+
 use std::sync::{Arc, Mutex, Once};
+
 use std::time::{Duration, Instant};
 
 const CHANGE: &str = "chain-demo";
@@ -354,15 +361,16 @@ fn scope() -> speclink_store::Scope {
     )
 }
 
-fn open_store(db: &Path) -> speclink_store_sqlite::SqliteTeamStore {
-    speclink_store_sqlite::SqliteTeamStore::open(db).expect("open store on a second connection")
+fn open_store(db: &Path) -> speclink_server::state::SharedStore {
+    speclink_server::native_storage::open_for_server(&speclink_server::config::StoreConfig::Sqlite { path: db.to_path_buf() })
+        .expect("open store on a second connection")
 }
 
 /// Write the workflow config document directly on a second store connection —
 /// remote mode has no CLI/wire config write surface today (design 決策 2); the
 /// seam under test (store → policy → instructions rendering) is unchanged.
 fn write_workflow_config(db: &Path, content: &str) {
-    use speclink_store::{CommandContext, DocumentId, TeamStore};
+    use speclink_store::{CommandContext, DocumentId};
     let store = open_store(db);
     let current = store
         .snapshot(&scope())
@@ -384,7 +392,7 @@ fn write_workflow_config(db: &Path, content: &str) {
 
 /// The retained outbox tail as (seq, event name, payload).
 fn outbox_records(db: &Path) -> Vec<(u64, String, serde_json::Value)> {
-    use speclink_store::{OutboxCursor, TeamStore};
+    use speclink_store::OutboxCursor;
     open_store(db)
         .read_outbox(&scope(), OutboxCursor(0))
         .expect("read outbox")
@@ -394,7 +402,6 @@ fn outbox_records(db: &Path) -> Vec<(u64, String, serde_json::Value)> {
 }
 
 fn outbox_acked(db: &Path) -> u64 {
-    use speclink_store::TeamStore;
     open_store(db).outbox_acked(&scope()).expect("read acked floor").0
 }
 
@@ -841,7 +848,7 @@ fn phase2_chain_walks_all_stages_with_reset_recovery() {
 #[test]
 fn task_done_with_touched_files_leaves_queryable_evidence_on_the_server() {
     let _gate = crate::common::acquire_process_gate();
-    use speclink_store::{CommandContext, DocumentId, OutboxCursor, TeamStore};
+    use speclink_store::{CommandContext, DocumentId, OutboxCursor};
     let store = std::sync::Arc::new(speclink_store::memory::MemoryStore::new());
     let mut uow = store
         .begin_unit_of_work(
@@ -932,7 +939,7 @@ fn task_done_with_touched_files_leaves_queryable_evidence_on_the_server() {
 #[test]
 fn a_change_without_evidence_reads_back_an_empty_set() {
     let _gate = crate::common::acquire_process_gate();
-    use speclink_store::{CommandContext, DocumentId, TeamStore};
+    use speclink_store::{CommandContext, DocumentId};
     let store = std::sync::Arc::new(speclink_store::memory::MemoryStore::new());
     let mut uow = store
         .begin_unit_of_work(

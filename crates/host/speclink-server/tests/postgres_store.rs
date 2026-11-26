@@ -15,11 +15,13 @@
 // 維持獨立 binary，以 #[path] 續用同一份。
 #[path = "it/common/mod.rs"]
 mod common;
+#[path = "fixtures/legacy_backup.rs"]
+mod legacy_backup;
 mod pg;
 
 use speclink_protocol::command::CreateChangeRequest;
 use speclink_remote::client::Client;
-use speclink_server::build_store;
+use speclink_server::native_storage::open_for_server as build_store;
 use speclink_server::config::StoreConfig;
 use speclink_server::state::SharedStore;
 use speclink_store::{OutboxCursor, ProjectId, RepoId, Scope};
@@ -91,6 +93,7 @@ fn drive(store: SharedStore) -> Outcome {
     client.handshake().expect("handshake");
     let created = client
         .create_change(CreateChangeRequest {
+            fields: Default::default(),
             name: "demo".into(),
             schema: None,
             description: None,
@@ -291,6 +294,17 @@ fn the_password_source_is_a_warning_not_a_gate() {
     );
 }
 
+fn legacy_backup_preserves_policy_history_and_reader_access_on_postgres() {
+    let old = pg::TestDb::new();
+    let restored = pg::TestDb::new();
+    let fixture = tempfile::tempdir().unwrap();
+    legacy_backup::assert_legacy_backup(
+        StoreConfig::Postgres { url: old.url().into() },
+        StoreConfig::Postgres { url: restored.url().into() },
+        fixture.path(),
+    );
+}
+
 fn main() {
     // The first server of the restart test: drive the verb flow, report what it
     // wrote, and exit — releasing the database the way a real shutdown does.
@@ -316,6 +330,10 @@ fn main() {
     }
 
     pg::run(&[
+        (
+            "legacy_backup_preserves_policy_history_and_reader_access_on_postgres",
+            legacy_backup_preserves_policy_history_and_reader_access_on_postgres,
+        ),
         (
             "a_postgres_config_serves_the_verb_flow_exactly_as_sqlite_does",
             a_postgres_config_serves_the_verb_flow_exactly_as_sqlite_does,

@@ -23,6 +23,16 @@ The backup file does not depend on the storage backend. You can back up from `sq
 
 If the target is not empty, `restore` refuses. It lists the existing content in the target and writes nothing. There is no option to force an overwrite. The simplest way is to prepare a new data folder or an empty database, and not to complete `/setup` before the restore. Also keep the target server stopped during the restore.
 
+## Upgrade from an older server
+
+The new server uses a new storage layout. It cannot open storage data written by an older server in `sqlite`, `serverfs`, or `postgres`. The old data is left in place and is not rewritten. Back it up with the old version, then restore that backup into new, empty storage:
+
+1. Stop the old server and run the `backup` command in this document with the old version. Keep the backup file.
+2. Configure the new version to use a new, empty store and an empty SQLite identity database. Do not point it at the old store.
+3. Run `restore` with the new version. Start the new server only after restore and its checks succeed.
+
+If the new server reports that a store uses the old layout, stop it and create the backup with the old version as described above. Do not delete or rename the old data by hand. Data written in the new layout cannot be opened directly by the old version. For rollback, preserve the original old data or restore a backup made with the old version.
+
 ## <a id="contents"></a>What a backup file contains
 
 A backup is one uncompressed tar file. It contains:

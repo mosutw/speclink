@@ -137,6 +137,7 @@ fn paired_remote_publication_is_atomic_scoped_fresh_and_cas_guarded() {
     let server = MemoryStore::new();
     let scope = Scope::new(ProjectId::new("demo"), RepoId::new("backend"));
     let ctx = SpeclinkExecutionContext {
+        actor_id: None,
         actor: Actor::Identified {
             display: "Reviewer".into(),
             source: ActorSource::Explicit,
