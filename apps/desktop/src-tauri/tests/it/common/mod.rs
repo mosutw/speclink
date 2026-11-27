@@ -15,7 +15,7 @@ use speclink_store::{CommandContext, DocumentId, ProjectId, RepoId, Scope, TeamS
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::{Arc, Mutex, MutexGuard, Once};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 /// harness 使用者的顯示名。server 依 `Actor` 契約把它與 email 組成引擎面的
 /// 身分字串，蓋章比對看的是 [`ACTOR_IDENTITY`] 而不是這一個。
@@ -608,26 +608,36 @@ fn seed_phase3_user(
         .expect("accept phase3 invitation")
 }
 
-static BUILD_PHASE3_CLI: Once = Once::new();
-
-fn phase3_cli_bin() -> PathBuf {
-    BUILD_PHASE3_CLI.call_once(|| {
+fn phase3_cli_bin() -> &'static Path {
+    static CLI_BIN: OnceLock<PathBuf> = OnceLock::new();
+    CLI_BIN.get_or_init(|| {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-        let status = Command::new(cargo)
-            .args(["build", "-p", "speclink-cli", "--bin", "speclink"])
-            .status()
+        let output = Command::new(cargo)
+            .args([
+                "build",
+                "--locked",
+                "-p",
+                "speclink-cli",
+                "--bin",
+                "speclink",
+                "--message-format=json-render-diagnostics",
+            ])
+            .output()
             .expect("spawn cargo build for phase3 CLI");
-        assert!(status.success(), "building the phase3 CLI failed");
-    });
-    let test_bin = std::env::current_exe().expect("phase3 test executable");
-    let profile_dir = test_bin
-        .parent()
-        .and_then(Path::parent)
-        .expect("target profile directory");
-    profile_dir.join(if cfg!(windows) {
-        "speclink.exe"
-    } else {
-        "speclink"
+        assert!(
+            output.status.success(),
+            "building the phase3 CLI failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout),
+        );
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .filter(|message| {
+                message["reason"] == "compiler-artifact" && message["target"]["name"] == "speclink"
+            })
+            .find_map(|message| message["executable"].as_str().map(PathBuf::from))
+            .expect("cargo did not report the phase3 CLI executable")
     })
 }
 
