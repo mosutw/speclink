@@ -158,6 +158,7 @@ mod tests {
                     index: 1,
                     phase: Some(RoundPhase::Discovery),
                     patch_hash: Some("sha256:abc".to_string()),
+                    model: None,
                     rules: None,
                     scope: vec!["src/auth.rs".to_string(), "src/billing.rs".to_string()],
                     findings: vec![
@@ -165,7 +166,15 @@ mod tests {
                         finding(Severity::Suggestion, "rename helper"),
                     ],
                 },
-                Round { index: 2, phase: None, patch_hash: None, rules: None, scope: Vec::new(), findings: Vec::new() },
+                Round {
+                    index: 2,
+                    phase: None,
+                    patch_hash: None,
+                    model: None,
+                    rules: None,
+                    scope: Vec::new(),
+                    findings: Vec::new(),
+                },
             ],
         }
     }

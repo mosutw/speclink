@@ -416,6 +416,7 @@ mod tests {
                     index: 1,
                     phase: None,
                     patch_hash: None,
+                    model: None,
                     rules: None,
                     scope: vec![s("src/a.rs")],
                     findings: Vec::new(),
