@@ -57,14 +57,14 @@
 
 ## 目前驗證結果
 
-- CLI 的查詢、文件、指示、建立、排程、任務與自由欄位使用共用動詞。整合自由欄位後 Rust 工作區連同測試可編譯，共用動詞 146 項單元測試及 4 項檢查通過。
+- CLI 的查詢、文件、指示、建立、排程、任務與自由欄位使用共用動詞。整合自由欄位後 Rust 各套件連同測試可編譯，共用動詞 146 項單元測試及 4 項檢查通過。
 - Store Port 的記憶體 42 項、FS 36 項、SQLite 34 項、OrbStack 上的 PostgreSQL 38 項通過。FS 和 SQLite 各跳過專用程序測試 3 項及 1 項。四套 Rust 後端驗證只讀版本條件衝突時，文件、事件及 scope 版本都不變。
 - Host 240 項單元測試通過，含舊安全政策、只讀版本條件、原子提交與匯入匯出。SDK 測試涵蓋舊入口、JS 合格測試、掛鉤、保留欄位、匯入預覽、跨資源事件和技能裁剪。HTTP 涵蓋綁定、輪詢、列清單、規格、搜尋、快照、看板讀取、建立紀錄、欄位編輯和範圍移轉。匯入取代沿用上游逐文件版本條件。
 - 桌面遷移共 12 項測試通過。進行中與封存的審查資料可隨範圍搬移，並保留舊中繼資料檔名的錯誤訊息。
 - Server 換用 Store Port 後，舊 SQLite、ServerFS 和 PostgreSQL 備份均可還原到新版空庫，帳號、角色、repo、品質／安全紀錄和驗收證據都可讀回；損毀備份、非空目標及舊版資料目錄會被拒絕且不覆寫來源。備份升級方式已補入中英文手冊。
 - Server 測試通過 35 項單元及 369 項整合測試（另 1 項既有忽略），網頁 244 項通過；CLI 623 項與 Desktop Core 376 項通過。非互動登入會先提示 `--token-stdin`，不依賴連線才能顯示正確用法。
 - Desktop 依 `/binding` 握手宣告的 SSE 網址連線，只向同來源送憑證；未提供有效 SSE 宣告時退回輪詢。SSE 4 項和 Desktop 握手網址分頁隔離測試通過。
-- 生命週期、工作流與語言（4.1–4.3）：`worktree` 主工作區 `show --json` 讀取活動副本；`change landed`、`evidence show`（含封存後讀取）、`discuss restore`（同名拒絕）、`claim --release` 均已接通並通過 CLI 回歸與 `speclink-verbs`（146 項單元測試 + 4 項檢查）；`Pi`（`.pi/skills`）與 `Cursor`（`.cursor/skills`）納入內建工具、`instructions specs` 回報有效 `spec_locale`、不明 artifact ID 列出可用值、遠端 `update` 離線不覆寫既有技能、`workflow-config subagent-model` 支援無變更寫入不改寫內容與 mtime。`speclink-core` 工作區測試 303 項、`command::` 113 項與 `upstream_020_workflow_gap` 2 項、`speclink-protocol` 88 項全數通過。
+- 生命週期、工作流與語言（4.1–4.3）：在主 checkout 執行 `show --json` 可讀取活動 worktree；`change landed`、`evidence show`（含封存後讀取）、`discuss restore`（同名拒絕）、`claim --release` 均已接通並通過 CLI 回歸與 `speclink-verbs`（146 項單元測試 + 4 項檢查）；`Pi`（`.pi/skills`）與 `Cursor`（`.cursor/skills`）納入內建工具、`instructions specs` 回報有效 `spec_locale`、不明 artifact ID 列出可用值、遠端 `update` 離線不覆寫既有技能、`workflow-config subagent-model` 支援無變更寫入不改寫內容與 mtime。`speclink-core` 專案測試 303 項、`command::` 113 項與 `upstream_020_workflow_gap` 2 項、`speclink-protocol` 88 項全數通過。
 - 桌面、Herdr 與發行收尾（5.1–6.1）：修正 `packages/ui/src/time.ts` 為本地日曆日計算以通過午夜跨日測試，`apps/desktop/src/builtinTools.ts` 加入 `pi` 與 `cursor`；`@speclink/ui` 全套 Vitest 與 `@speclink/desktop` 56 檔 1,474 項測試、`speclink-desktop-core` 371 項通過。CLI 加入 Herdr 終端活動最佳努力回報與 `SPECLINK_TERMINAL_REPORT=false` opt-out，stdout 與退出碼不受回報影響。`scripts/desktop` 與 `scripts/release` 181 項腳本測試通過（確認 macOS 本機安裝 Developer ID 優先／ad-hoc 回退／驗不過不安裝及正式發行簽章保留）。
 - Audit 檢查：新參數（`change landed --commit`、`workflow-config subagent-model`、`claim --release`、`discuss restore`、`evidence show`）與環境變數（`SPECLINK_TERMINAL_REPORT`）皆已驗證空值／無效值 fail-closed、無變更不重寫設定、且終端機回報失敗不影響主指令退出碼。
 

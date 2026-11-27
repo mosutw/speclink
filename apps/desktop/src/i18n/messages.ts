@@ -240,7 +240,7 @@ export const APP_MESSAGES: Record<UiLocale, Record<string, string>> = {
     "settings.shortcutsGotoProject": "跳到第 1–9 個專案",
     "settings.policyCard": "產出政策",
     "settings.subagentModelCard": "品質模型（subagent_model）",
-    "settings.subagentModelHelp": "依品質站與 AI 工具指定模型；未指定時沿用工具預設。",
+    "settings.subagentModelHelp": "可為審查與驗證分別指定各 AI 工具使用的模型。未指定時沿用工具預設。",
     "settings.subagentModelStation": "站別",
     "settings.subagentModelTool": "工具",
     "settings.subagentModelValue": "模型",
