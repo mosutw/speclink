@@ -2,7 +2,7 @@
 
 ## 調查狀態
 
-Dock 問題的唯一根因仍未證實。使用者要求不得在本開發電腦做測試實驗，因此不執行本機 DMG 掛載、App 重簽或啟動。已確認的 Release 缺口改由 GitHub Actions 的 CI 與正式 Release 產物檢查處理；如要驗收 GUI 啟動，改在另一台 Mac 執行。
+Dock 問題的唯一根因仍未證實。使用者要求代理不得在本開發電腦做測試實驗，因此代理不執行本機 DMG 掛載、App 重簽或啟動。已確認的 Release 缺口由 GitHub Actions 的 CI 與正式 Release 產物檢查處理；使用者其後自行在同一台 Mac 執行 GUI 啟動驗收，並決定接受該結果。
 
 ## 環境與產物
 
@@ -20,7 +20,10 @@ Dock 問題的唯一根因仍未證實。使用者要求不得在本開發電腦
 - `.github/workflows/release.yml` 的一般 `v*` workflow 原本沒有等待同一 SHA 主 CI；目前分支已新增前置 gate，並讓 build、desktop、docker、engine-version 依賴它。正式 Release、npm、Docker 與其他發布步驟沿既有依賴鏈等待建置完成。
 - 目前分支已讓正式 Release 與 Desktop Build 共用打包設定：沒有 Apple 憑證時明確傳 `signingIdentity: '-'`，完成 ad-hoc 簽章；有憑證時不覆寫 Tauri 設定。macOS runner 在上傳前會檢查 App、DMG 內容及正式 Release updater archive 內的 App。
 - Tauri 官方說明指出 notarization/stapler 處理的是 App bundle，不能推定 `.dmg` 也附有公證票證；因此驗證器檢查 App 的 Gatekeeper 與 stapler 結果，並用 `hdiutil verify` 檢查 DMG 映像完整性。[Tauri macOS 簽章說明](https://v2.tauri.app/distribute/sign/macos/)。
-- 目前尚未有 GitHub PR CI 或正式 Release runner 的結果；程式測試、DMG 建置及 native 產物驗證只由 GitHub Actions 執行。本開發電腦不執行測試、掛載 DMG、重簽或啟動實驗。
+- PR #18 的 CI run [42247712018](https://github.com/mosutw/speclink/actions/runs/42247712018) 在提交 `8aae41662165878422e285b21af8f5c3c20ea70d` 上通過；macOS 工作於第二次嘗試通過，Windows、Linux 與其他工作亦通過。這次 PR CI 執行的是腳本測試與一般建置測試，並未執行正式 Release 的 DMG 與 updater 原生產物驗證。
+- 補充的容器異常與清理測試，以及 Linux 的 Speclink 分析和嚴格驗證，由 PR #19 的 [CI run 42338204607](https://github.com/mosutw/speclink/actions/runs/42338204607) 執行。原規劃的實作前失敗紀錄未留存，後補測試不能視為該歷史紀錄。
+- 正式 [v0.12.2 Release](https://github.com/mosutw/speclink/releases/tag/v0.12.2) 的 [GitHub Actions run 42331853628](https://github.com/mosutw/speclink/actions/runs/42331853628) 通過；macOS runner 的驗證紀錄為 `channel=release mode=none version=0.12.2 artifacts=app,dmg,updater`。它使用正式建置的 App、DMG 與 updater 產物，並完成原生簽章、架構及容器內容檢查。
+- 使用者回報從正式 v0.12.2 Release 下載 `Speclink_0.12.2_universal.dmg`，在同一台開發電腦（Apple M1 Pro、macOS 26.6.2、arm64）關閉 `npm run dev` 後安裝；首次於系統設定按「強制打開」，之後可看到可操作主畫面且 Dock 不再持續跳動。使用者自行執行並勾選驗收，且明確接受同機結果。真實 Developer ID／公證模式及 Intel 原生啟動尚無驗證紀錄；代理仍不得在本機執行測試、掛載 DMG、重簽或啟動實驗。
 
 ## 同類位置盤點與處理範圍
 
@@ -34,4 +37,4 @@ Dock 問題的唯一根因仍未證實。使用者要求不得在本開發電腦
 | `README.md`、`README.zh-TW.md` | 本次盤點未發現 macOS 下載簽章或公證承諾；既有 Windows 未簽章說明不在本次範圍。 |
 | `docs/development.md`、`docs/development.zh-TW.md` | 已依 ad-hoc 與 Developer ID／公證模式區分說明首次個別允許，沒有宣稱所有 macOS 下載檔都已公證。 |
 
-不擴大 updater、更新端點、公鑰、發佈資產或跨平台交付範圍。CI 產物驗證可確認打包與簽章契約；GUI 啟動根因仍須由另一台 Mac 的實際驗收判定，沒有該結果時明列未驗證。
+不擴大 updater、更新端點、公鑰、發佈資產或跨平台交付範圍。CI 產物驗證確認打包與簽章契約；使用者的同機啟動驗收成功，但簽章缺口是否為原問題唯一根因仍未證實。

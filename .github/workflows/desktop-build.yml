@@ -110,6 +110,7 @@ jobs:
         run: node scripts/desktop/desktop-sidecar.mjs --target ${{ matrix.target }}
 
       - name: Prepare self-use bundle config and build information
+        shell: bash
         run: |
           node scripts/release/desktop-bundle-config.mjs desktop-build > "$RUNNER_TEMP/desktop-build-config.json"
           node <<'NODE'
@@ -124,6 +125,7 @@ jobs:
           NODE
 
       - name: Build desktop installer
+        shell: bash
         run: >-
           npm run -w apps/desktop tauri -- build
           --target ${{ matrix.target }}

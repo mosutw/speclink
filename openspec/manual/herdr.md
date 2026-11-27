@@ -1,10 +1,10 @@
 ---
 title: Herdr 終端工作區面板
-section: Herdr 整合
-order: 395
+section: Claude Code
+order: 385
 keywords: [Herdr, 面板, 右欄, 浮動面板, 技能推薦, Agent, speclink.focus, worktree, 語言]
-sources: [herdr-integration]
-generated: 2026-11-27T15:40:30+08:00
+sources: [herdr-integration, "claude-code-session-focus#Herdr 內即時回報已確認的變更"]
+generated: 2026-11-27T19:52:25+08:00
 ---
 
 # Herdr 終端工作區面板
@@ -49,4 +49,6 @@ generated: 2026-11-27T15:40:30+08:00
 
 面板、技能選單與整合內建畫面跟隨系統語言（偵測為 `zh`／`Chinese`／`中文` 時顯示繁體中文，其餘包含日文與未設定時顯示英文），不隨工作流設定的 `locale` 改變。翻譯不會改動檔名、差異內容或未知字串。
 
-**出處**：`herdr-integration`
+Claude Code 確認變更焦點後會回報給 Herdr，供面板與 Agent 清單顯示。沒有 Herdr 時，技能列與對話標題照常運作。
+
+**出處**：`herdr-integration`、`claude-code-session-focus`

@@ -8,6 +8,25 @@
       "files": [
         "docs/development/macos-dmg-launch-investigation.md"
       ]
+    },
+    {
+      "task_id": "git-diff-reconstruction",
+      "task_desc": "事後依使用者指定的開發起始提交 fccf5c2d 至 d571dd94 的 Git 差異補登品質審查候選檔案；此紀錄不表示當時逐項任務完成時已有檔案紀錄。",
+      "files": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/desktop-build.yml",
+        ".github/workflows/release.yml",
+        "docs/development.md",
+        "docs/development.zh-TW.md",
+        "docs/development/macos-dmg-launch-investigation.md",
+        "scripts/desktop/desktop-release.test.mjs",
+        "scripts/release/desktop-bundle-config.mjs",
+        "scripts/release/desktop-bundle-config.test.mjs",
+        "scripts/release/macos-artifact-verify.mjs",
+        "scripts/release/macos-artifact-verify.test.mjs",
+        "scripts/release/signing-gate.mjs",
+        "scripts/release/signing-gate.test.mjs"
+      ]
     }
   ],
   "entries": [

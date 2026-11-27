@@ -3,8 +3,8 @@ title: 建立工作區與指令檔
 section: 開始使用
 order: 30
 keywords: [init, update, 工作區, 技能檔, 指令檔, 過期, 降級, skills_dir, init --force, Copilot, Antigravity]
-sources: [workspace-tools, skill-routing]
-generated: 2026-11-27T15:40:30+08:00
+sources: ["workspace-tools#tools 自訂描述子的接受與驗證", "workspace-tools#描述子的同步與清理生命週期", "workspace-tools#中性渲染目標", "workspace-tools#init 內建 Agent 工具選擇", "workspace-tools#built-in tools 權威收斂", "workspace-tools#工作區補齊入口", "workspace-tools#工具檔生成不寫入 AI 工具的使用者設定檔", "workspace-tools#產物層版本戳同源", "workspace-tools#worktree 技能的政策條件式生成", "workspace-tools#受管檔再生的降級守門", "workspace-tools#引擎版號查詢面", "workspace-tools#技能檔過期探測", "workspace-tools#update 清除孤兒技能目錄", "workspace-tools#Copilot 渲染目標", "workspace-tools#Antigravity 技能生成與獨立清理", "workspace-tools#本機專案明寫預設規格資料夾", "workspace-tools#Codex 與 Antigravity 共用技能內容", "workspace-tools#Antigravity 舊目錄升級", skill-routing, "spec-dir-migration#init 匯入 OpenSpec 專案", "spec-dir-migration#update 自動遷移舊佈局", "spec-dir-migration#規格資料夾的預設位置與舊佈局相容"]
+generated: 2026-11-27T19:52:25+08:00
 ---
 
 # 建立工作區與指令檔
@@ -56,14 +56,14 @@ init 不會產生 `CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 或 `.github/copilot-i
 
 ### 四個內建工具的技能檔差在哪
 
-| 工具 | 技能資料夾 | 技能裡互相引用的寫法 | 有沒有 analyze 技能 |
+| 工具 | 技能資料夾 | 呼叫技能的寫法 | 有沒有 analyze 技能 |
 | --- | --- | --- | --- |
 | Claude | `.claude/skills/` | `/speclink-apply` | 有 |
 | Codex | `.agents/skills/` | `$speclink-apply` | 沒有 |
 | Copilot | `.github/skills/` | `/speclink-apply` | 沒有 |
 | Antigravity | `.agents/skills/` | `/speclink-apply` | 沒有 |
 
-Copilot 與 Codex、Antigravity 拿到的技能組合相同：Claude 有的技能，除了 analyze 以外都有（兩個 worktree 技能一樣只在政策開啟時產生）。Codex 與 Antigravity 共用 `.agents/skills/` 下的同一份技能內容（同時含兩工具的呼叫寫法與身分說明）；只取消其中一個而另一個仍選取時會保留共用技能，兩者都取消才會清理。Copilot 的技能在建立變更與蓋章時，記下的工具名是 copilot。
+Copilot 與 Codex、Antigravity 拿到的技能組合相同：Claude 有的技能，除了 analyze 以外都有（兩個 worktree 技能一樣只在政策開啟時產生）。Codex 與 Antigravity 共用 `.agents/skills/` 下的同一份技能內容（同時含兩工具的呼叫寫法與身分說明）；只取消其中一個而另一個仍選取時會保留共用技能，兩者都取消才會清理。建立變更或蓋章時，各工具使用自己的身分。Copilot 的技能在建立變更與蓋章時，記下的工具名是 copilot。
 
 若專案原本有舊版 Antigravity 目錄 `.agent/skills/`，執行 `speclink update` 或桌面工具同步時會先驗證設定並將共用技能完整生成到 `.agents/skills/` 後，才清理 `.agent/skills/` 內的舊受管 `speclink-*` 資料夾，同時保留你自己的技能與規則。
 
@@ -89,6 +89,7 @@ update 會：
 - 剝除指令檔裡遺留的 SPECLINK 標記區塊，並在 stdout 列出被剝除的檔案。
 - 清掉已經從清單移除的工具所產生的技能檔。拿掉 Copilot 時，只移除 `.github/skills/` 底下名稱以 `speclink-` 開頭的資料夾；`.github/skills/` 因此變空才一併移除，原本就是空的會保留；`.github/` 的其他內容不動。被拿掉的工具，如果它的技能資料夾本身是 symlink，Speclink 不會穿過 symlink 刪任何東西，symlink 本身也保留。
 - 清掉技能資料夾下名稱以 `speclink-` 開頭、但這次不該產生的資料夾。例如舊版的 speclink-onboard 會被清掉，換成 speclink-baseline。你自己建的技能資料夾（名稱不以 `speclink-` 開頭）不會被動到。
+- 將舊版 Antigravity 的受管技能由 `.agent/skills/` 遷至共用的 `.agents/skills/`：新技能全部生成成功後才清理舊受管技能，自有技能與 `.agent/` 的其他內容保留。新位置寫入失敗時舊內容保留；清理失敗時會指出路徑，排除障礙後可重跑。
 - 補齊缺少的技能檔。
 - 專案使用 `openspec/` 且設定沒有 spec_dir 時，先補寫 `spec_dir: openspec`，再原地同步技能；既有自訂目錄與 speclink 佈局不變。見[規格資料夾與舊佈局遷移](spec-folder.md)。
 
@@ -147,12 +148,12 @@ speclink update --allow-downgrade
 
 除了四個內建工具，你可以在 `.speclink.yaml` 的 tools 清單裡加自訂描述子，讓其他 AI 工具也拿到技能檔。描述子的欄位：
 
-- name（必填）：kebab-case，2 到 50 字，不能與內建工具同名：claude、codex、copilot，以及 codex 的別名 agents 都不行。
+- name（必填）：kebab-case，2 到 50 字，不能與內建工具同名：claude、codex、copilot、antigravity，以及 codex 的別名 agents 都不行。
 - skills_dir（必填）：專案根相對路徑，不能逸出專案根。結尾的 `/` 會被削掉，之後所有地方（技能生成、足跡記錄、過期探測回報的路徑）都用削掉後的形式。
 - invocation（選填）：cli 或 tool-call，預設 cli。決定技能檔裡怎麼稱呼 speclink 動詞。
 - instructions_file（選填）：已棄用，不再產生任何東西。仍留著這個欄位時，update 印一行棄用提示，不影響結果。
 
-skills_dir 還有兩條拒絕規則，比對的是把 `.` 段丟掉、`..` 回退一段之後的路徑，所以等價拼法一樣被拒：不能等同專案根本身，也不能等同內建工具的 skills 目錄（`.claude/skills`、`.agents/skills`、`.github/skills`）。和內建目錄的比對不分大小寫，因為在 macOS 與 Windows 的檔案系統上，`.GitHub/skills` 就是 `.github/skills`。
+skills_dir 還有兩條拒絕規則，比對的是把 `.` 段丟掉、`..` 回退一段之後的路徑，所以等價拼法一樣被拒：不能等同專案根、內建工具的 skills 目錄（`.claude/skills`、`.agents/skills`、`.github/skills`）或保留遷移用的舊 `.agent/skills`。和內建目錄的比對不分大小寫，因為在 macOS 與 Windows 的檔案系統上，`.GitHub/skills` 就是 `.github/skills`。
 
 | skills_dir | 結果 |
 | --- | --- |
