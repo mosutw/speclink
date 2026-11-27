@@ -9,7 +9,10 @@ const initial:api.RuntimeSnapshot={formatVersion:1,debugEnabled:false,proxy:{mod
 const mount=()=>render(<I18nProvider locale="zh-TW" messages={APP_MESSAGES}><NetworkDiagnosticsPage/></I18nProvider>);
 beforeEach(()=>{vi.resetAllMocks();vi.mocked(api.readRuntimePreferences).mockResolvedValue(initial);vi.mocked(api.writeRuntimePreferences).mockImplementation(async p=>({...p,readError:null,diagnosticsStatus:p.debugEnabled?"recording":"off"}));});
 it("零專案啟用診斷，儲存後才顯示測試按鈕並可匯出",async()=>{
- mount();fireEvent.click(await screen.findByRole("switch",{name:"Debug mode"}));
+ mount();
+ const debugSwitch=screen.getByRole<HTMLButtonElement>("switch",{name:"Debug mode"});
+ await waitFor(()=>expect(debugSwitch.disabled).toBe(false));
+ fireEvent.click(debugSwitch);
  fireEvent.click(screen.getByRole("button",{name:"儲存"}));
  await waitFor(()=>expect(api.writeRuntimePreferences).toHaveBeenCalledWith({formatVersion:1,proxy:initial.proxy,debugEnabled:true}));
  expect(await screen.findByRole("button",{name:"測試更新連線"})).toBeTruthy();
