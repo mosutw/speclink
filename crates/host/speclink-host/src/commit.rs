@@ -14,7 +14,7 @@ use speclink_store::{
 /// The actor string recorded in store history and event records. The store
 /// contract requires a non-empty actor, so anonymity maps to the stable
 /// "anonymous" placeholder instead of an unattributable empty string.
-fn actor_name(actor: &Actor) -> String {
+pub(crate) fn actor_name(actor: &Actor) -> String {
     actor.display().unwrap_or("anonymous").to_string()
 }
 
@@ -53,8 +53,22 @@ pub fn commit_with_events(
 /// string, the camelCase subject payload, the acting identity, and the
 /// event's own timestamp. Nothing maps back.
 pub fn event_record_of(event: &DomainEvent, actor: &Actor) -> EventRecord {
+    let (payload, at) = event_details(event);
+    EventRecord {
+        name: event.kind().to_string(),
+        payload,
+        actor: actor_name(actor),
+        at,
+    }
+}
+
+pub(crate) fn event_payload(event: &DomainEvent) -> serde_json::Value {
+    event_details(event).0
+}
+
+fn event_details(event: &DomainEvent) -> (serde_json::Value, chrono::DateTime<chrono::Utc>) {
     use serde_json::json;
-    let (payload, at) = match event {
+    match event {
         DomainEvent::ChangeCreated { change, occurred_at } => {
             (json!({ "change": change }), *occurred_at)
         }
@@ -77,6 +91,9 @@ pub fn event_record_of(event: &DomainEvent, actor: &Actor) -> EventRecord {
         DomainEvent::ChangeClaimed { change, occurred_at } => {
             (json!({ "change": change }), *occurred_at)
         }
+        DomainEvent::ChangeClaimReleased { change, occurred_at } => {
+            (json!({ "change": change }), *occurred_at)
+        }
         DomainEvent::ChangeMarkedInProgress { change, occurred_at } => {
             (json!({ "change": change }), *occurred_at)
         }
@@ -88,6 +105,12 @@ pub fn event_record_of(event: &DomainEvent, actor: &Actor) -> EventRecord {
         }
         DomainEvent::ChangeSchemaChanged { change, schema, occurred_at } => {
             (json!({ "change": change, "schema": schema }), *occurred_at)
+        }
+        DomainEvent::ChangeLanded { change, commit, occurred_at } => {
+            (json!({ "change": change, "commit": commit }), *occurred_at)
+        }
+        DomainEvent::ChangeFieldsChanged { change, keys, occurred_at } => {
+            (json!({ "change": change, "keys": keys }), *occurred_at)
         }
         DomainEvent::ChangeArchived { change, dated_name, occurred_at } => {
             (json!({ "change": change, "datedName": dated_name }), *occurred_at)
@@ -116,9 +139,16 @@ pub fn event_record_of(event: &DomainEvent, actor: &Actor) -> EventRecord {
         DomainEvent::DiscussionSealed { slug, change, occurred_at } => {
             (json!({ "slug": slug, "change": change }), *occurred_at)
         }
+        DomainEvent::DiscussionFieldsChanged { slug, keys, occurred_at } => {
+            (json!({ "slug": slug, "keys": keys }), *occurred_at)
+        }
         DomainEvent::DiscussionArchived { slug, occurred_at } => {
             (json!({ "slug": slug }), *occurred_at)
         }
+        DomainEvent::DiscussionRestored { slug, occurred_at } => {
+            (json!({ "slug": slug }), *occurred_at)
+        }
+        DomainEvent::LanguageReplaced { occurred_at } => (json!({}), *occurred_at),
         DomainEvent::DiscussionDiscarded { slug, occurred_at } => {
             (json!({ "slug": slug }), *occurred_at)
         }
@@ -140,12 +170,6 @@ pub fn event_record_of(event: &DomainEvent, actor: &Actor) -> EventRecord {
         DomainEvent::VerifyDiscarded { change, occurred_at } => {
             (json!({ "change": change }), *occurred_at)
         }
-    };
-    EventRecord {
-        name: event.kind().to_string(),
-        payload,
-        actor: actor_name(actor),
-        at,
     }
 }
 
@@ -163,6 +187,7 @@ mod tests {
     fn test_context() -> SpeclinkExecutionContext {
         let binding = local_default_binding();
         SpeclinkExecutionContext {
+            actor_id: None,
             actor: Actor::Identified {
                 display: "Alice <alice@example.com>".to_string(),
                 source: ActorSource::GitConfig,

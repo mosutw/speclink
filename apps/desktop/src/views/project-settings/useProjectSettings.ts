@@ -143,6 +143,7 @@ export function useProjectSettings(
   const afterSpecDirConverted = useRef(onSpecDirConverted);
   afterSpecDirConverted.current = onSpecDirConverted;
   const [wfMsg, setWfMsg] = useState<string | null>(null);
+  const [subagentModelMsg, setSubagentModelMsg] = useState<string | null>(null);
   const [conflict, setConflictState] = useState<PolicyConflict | null>(null);
   /** 衝突狀態的同步鏡像：409 設下衝突到下一次 render 之間，寫入守門也要看得到它。 */
   const conflictOpen = useRef(false);
@@ -508,6 +509,19 @@ export function useProjectSettings(
     }
   };
 
+  const saveSubagentModel = async (station: string, tool: string, model: string | null) => {
+    if (!settings.writeSubagentModel) return;
+    setSubagentModelMsg(null);
+    try {
+      await settings.writeSubagentModel(station, tool, model);
+      const fresh = await settings.readSettings();
+      setSnap(fresh);
+      setSubagentModelMsg(t("settings.saved"));
+    } catch (e) {
+      setSubagentModelMsg(errorMessage(e));
+    }
+  };
+
   const beginCtxEdit = () => {
     setDraftContext(contextText);
     setCtxMsg(null);
@@ -795,7 +809,7 @@ export function useProjectSettings(
     tools, toolsDirty, toggleTool, saveApp, appMsg,
     specDirConfirmOpen, setSpecDirConfirmOpen, specDirBusy, specDirMsg, convertSpecDir,
     locale, setLocale, specLocale, setSpecLocale, tdd, setTdd, audit, setAudit, worktree, setWorktree,
-    saveWorkflow, wfMsg, security, setSecurity,checkRecords,setCheckRecords,policyDirty,
+    saveWorkflow, wfMsg, saveSubagentModel, subagentModelMsg, security, setSecurity,checkRecords,setCheckRecords,policyDirty,
     cancelWorkflow:()=>{setLocale(snap.workflow.locale??"");setSpecLocale(snap.workflow.specLocale??"");setTdd(snap.workflow.tdd);setAudit(snap.workflow.audit);setWorktree(snap.workflow.worktree);setSecurity(snap.workflow.securityVerification??DEFAULT_SECURITY_POLICY);setCheckRecords(snap.workflow.checkRecords??DEFAULT_CHECK_RECORDS);setWfMsg(null);},
     contextText, ctxEditing, setCtxEditing, draftContext, setDraftContext, ctxMsg, beginCtxEdit, saveContext, ctxSaving,
     rules, rulesEditing, setRulesEditing, draftRules, setDraftRules, editingRuleKeys, rulesMsg,

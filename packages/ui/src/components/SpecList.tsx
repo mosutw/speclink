@@ -4,7 +4,7 @@ import { FileText, History } from "lucide-react";
 import type { SpecItem } from "../adapter";
 import { useI18n } from "../i18n";
 import { matchesQuery } from "../search";
-import { relativeDays } from "../time";
+import { relativeDays, useLocalToday } from "../time";
 import { SEMANTIC_TONE } from "../tone";
 import { PageHeader } from "./ui/page-header";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -28,6 +28,7 @@ export function sortSpecs(specs: SpecItem[]): SpecItem[] {
  * 變更數（>0 才顯示）與相對修改時間。點整列開唯讀規格檢視，無行內展開。 */
 function SpecRow({ item, onOpen }: { item: SpecItem; onOpen: (capability: string) => void }) {
   const { t, tn } = useI18n();
+  useLocalToday();
   const rel = relativeDays(item.modifiedAt, { t, tn });
   const reqCount = item.requirementCount ?? 0;
   const traceCount = item.traceCount ?? 0;

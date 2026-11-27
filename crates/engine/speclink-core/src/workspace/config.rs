@@ -364,6 +364,8 @@ pub struct WorkflowConfig {
     pub security_verification: Option<crate::security::policy::SecurityPolicy>,
     #[serde(default)]
     pub check_records: Option<CheckRecordsConfig>,
+    #[serde(default)]
+    pub subagent_model: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -866,6 +868,114 @@ pub fn set_workflow_schema_text(original: Option<&str>, name: &str) -> anyhow::R
 
     verify_rewritten_config(&out, &target)?;
     Ok(out)
+}
+
+/// Surgically update `subagent_model.<station>.<tool>` in `openspec/config.yaml`,
+/// preserving unrelated comments and formatting. Returns `Ok(None)` when the
+/// target value is already equal (and of string type) so no-op writes stay untouched.
+pub fn update_subagent_model_text(
+    original: &str,
+    station: &str,
+    tool: &str,
+    model: Option<&str>,
+) -> anyhow::Result<Option<String>> {
+    let station = station.trim();
+    if station != "review" && station != "verify" {
+        anyhow::bail!("Unknown station '{station}'. Use 'review' or 'verify'.");
+    }
+    let tool = tool.trim();
+    if tool.is_empty() || crate::skills::Tool::parse(tool).is_none() {
+        anyhow::bail!(
+            "Unknown tool '{tool}'. Supported: {}",
+            crate::skills::Tool::supported_names()
+        );
+    }
+    let next_val = model.map(str::trim).filter(|m| !m.is_empty());
+
+    let base = match original.trim() {
+        "{}" | "null" | "~" => "",
+        _ => original,
+    };
+    let mut target = parse_yaml_mapping(base, &default_config_label())?;
+    let root_key = serde_yaml::Value::String("subagent_model".into());
+    let station_key = serde_yaml::Value::String(station.into());
+    let tool_key = serde_yaml::Value::String(tool.into());
+
+    let existing_val = target
+        .get(&root_key)
+        .and_then(|v| v.as_mapping())
+        .and_then(|m| m.get(&station_key))
+        .and_then(|v| v.as_mapping())
+        .and_then(|m| m.get(&tool_key));
+    let unchanged = match (existing_val, next_val) {
+        (None, None) => true,
+        (Some(serde_yaml::Value::String(cur)), Some(want)) => cur == want,
+        _ => false,
+    };
+    if unchanged {
+        return Ok(None);
+    }
+
+    let mut subagent_map = match target.get(&root_key) {
+        Some(serde_yaml::Value::Mapping(m)) => m.clone(),
+        None | Some(serde_yaml::Value::Null) => serde_yaml::Mapping::new(),
+        Some(_) => anyhow::bail!("subagent_model must be a mapping"),
+    };
+    if let Some(m) = next_val {
+        let mut station_map = match subagent_map.get(&station_key) {
+            Some(serde_yaml::Value::Mapping(sm)) => sm.clone(),
+            None | Some(serde_yaml::Value::Null) => serde_yaml::Mapping::new(),
+            Some(_) => anyhow::bail!("subagent_model.{station} must be a mapping"),
+        };
+        station_map.insert(tool_key, serde_yaml::Value::String(m.into()));
+        subagent_map.insert(station_key, serde_yaml::Value::Mapping(station_map));
+    } else if let Some(serde_yaml::Value::Mapping(mut station_map)) = subagent_map.remove(&station_key) {
+        station_map.remove(&tool_key);
+        if !station_map.is_empty() {
+            subagent_map.insert(station_key, serde_yaml::Value::Mapping(station_map));
+        }
+    }
+    set_or_remove(
+        &mut target,
+        "subagent_model",
+        (!subagent_map.is_empty()).then(|| serde_yaml::Value::Mapping(subagent_map.clone())),
+    );
+
+    let eol = if base.contains("\r\n") { "\r\n" } else { "\n" };
+    let lines: Vec<&str> = base.split_inclusive('\n').collect();
+    let blocks = scan_top_level_blocks(&lines);
+    let mut ops: Vec<LineOp> = vec![LineOp::Keep; lines.len()];
+    let mut appends: Vec<String> = Vec::new();
+    let block = mapping_block("subagent_model", &subagent_map)?
+        .map(|s| if eol == "\r\n" { s.replace('\n', "\r\n") } else { s });
+    swap_block(
+        &mut ops,
+        &mut appends,
+        blocks.iter().find(|b| b.key == "subagent_model"),
+        block,
+    );
+
+    let mut out = String::with_capacity(base.len() + 64);
+    for (i, line) in lines.iter().enumerate() {
+        match &ops[i] {
+            LineOp::Keep => out.push_str(line),
+            LineOp::Delete => {}
+            LineOp::Replace(text) => out.push_str(text),
+        }
+    }
+    for app in appends {
+        if !out.is_empty() {
+            if !out.ends_with('\n') {
+                out.push_str(eol);
+            }
+            if !(out.ends_with("\n\n") || out.ends_with("\n\r\n")) {
+                out.push_str(eol);
+            }
+        }
+        out.push_str(&app);
+    }
+    verify_rewritten_config(&out, &target)?;
+    Ok(Some(out))
 }
 
 /// Fail-closed guard on the surgical output: re-parse through the same path and

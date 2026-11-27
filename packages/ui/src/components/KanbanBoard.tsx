@@ -25,12 +25,14 @@ import {
 import { useI18n } from "../i18n";
 import { SEMANTIC_SURFACE, SEMANTIC_TONE } from "../tone";
 import {
+  creatorFilterKey,
   EMPTY_FILTERS,
   matchesFilters,
   matchesFuzzy,
   matchesQuery,
   type BoardFilters,
 } from "../search";
+import { useLocalToday } from "../time";
 import { changeStage, STAGE_BADGE, STAGE_BAR, STAGE_ICON, STAGES, type Stage } from "../stage";
 import { BoardColumn, type ColumnTone } from "./BoardColumn";
 import { BoardSearchBar } from "./BoardSearchBar";
@@ -255,7 +257,7 @@ export function KanbanBoard({
   const activeFilterCount = [filters.createdBy, filters.createdWithin, filters.fromDiscussion].filter(
     (v) => v !== null,
   ).length;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useLocalToday();
   // 三層比對任一命中即顯示（spec）：欄位子字串、名稱層 fuzzy（僅名稱／slug，
   // design D7）、全文命中集合（design D6）——再與篩選 chips 取 AND。
   const q = query ?? "";
@@ -274,14 +276,18 @@ export function KanbanBoard({
         hitByCard.has(`discussion:${d.slug}`)) &&
       matchesFilters(filters, d, today),
   );
-  // chip 選項自現有清單派生：建立者去重、來源討論取 promoted_to 非空者。
-  const creators = Array.from(
-    new Set(
-      [...changes.map((c) => c.createdBy), ...(discussions?.active ?? []).map((d) => d.createdBy)].filter(
-        (x): x is string => !!x,
-      ),
-    ),
-  );
+  // chip 選項自現有清單派生：優先依 createdById 分組（同人改名不裂分、同名不同人分列），無 ID 回退名稱。
+  const creatorMap = new Map<string, { key: string; label: string }>();
+  for (const item of [...changes, ...(discussions?.active ?? [])]) {
+    const key = creatorFilterKey(item);
+    if (!key) continue;
+    const label = item.createdBy ?? item.createdById ?? key;
+    const existing = creatorMap.get(key);
+    if (!existing || (item.createdBy && existing.label !== item.createdBy)) {
+      creatorMap.set(key, { key, label });
+    }
+  }
+  const creators = Array.from(creatorMap.values());
   const sourceDiscussions = (discussions?.active ?? []).filter((d) => d.promotedTo.length > 0);
   const byStage: Record<Stage, ChangeItem[]> = { proposed: [], "in-progress": [], ready: [] };
   for (const c of visibleChanges) byStage[changeStage(c)].push(c);
@@ -400,8 +406,8 @@ export function KanbanBoard({
           <SelectContent>
             <SelectItem value={SELECT_ALL}>{t("filter.all")}</SelectItem>
             {creators.map((c) => (
-              <SelectItem key={c} value={c}>
-                {c}
+              <SelectItem key={c.key} value={c.key}>
+                {c.label}
               </SelectItem>
             ))}
           </SelectContent>

@@ -3,6 +3,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  creatorFilterKey,
   matchesQuery,
   matchesFuzzy,
   matchesCreatedRange,
@@ -79,6 +80,28 @@ describe("matchesFilters（chips AND 交集，design D5）", () => {
     expect(matchesFilters(f, chg, TODAY)).toBe(true);
     expect(matchesFilters(f, { ...chg, created: "2026-05-01" }, TODAY)).toBe(false);
     expect(matchesFilters(f, { ...chg, createdBy: "Ann <a@x>" }, TODAY)).toBe(false);
+  });
+
+  it("createdById 分組優先於名稱，無 ID 時回退名稱（同名不同人分開、改名同一人合併）", () => {
+    const a1 = { createdById: "usr_1", createdBy: "Alex" };
+    const a1Renamed = { createdById: "usr_1", createdBy: "Alex Chen" };
+    const a2 = { createdById: "usr_2", createdBy: "Alex" };
+    const legacy = { createdBy: "Legacy User" };
+
+    expect(creatorFilterKey(a1)).toBe("id:usr_1");
+    expect(creatorFilterKey(a1Renamed)).toBe("id:usr_1");
+    expect(creatorFilterKey(a2)).toBe("id:usr_2");
+    expect(creatorFilterKey(legacy)).toBe("name:Legacy User");
+
+    const fById: BoardFilters = { ...EMPTY_FILTERS, createdBy: "id:usr_1" };
+    expect(matchesFilters(fById, a1, TODAY)).toBe(true);
+    expect(matchesFilters(fById, a1Renamed, TODAY)).toBe(true);
+    expect(matchesFilters(fById, a2, TODAY)).toBe(false);
+    expect(matchesFilters(fById, legacy, TODAY)).toBe(false);
+
+    const fByName: BoardFilters = { ...EMPTY_FILTERS, createdBy: "name:Legacy User" };
+    expect(matchesFilters(fByName, legacy, TODAY)).toBe(true);
+    expect(matchesFilters(fByName, a1, TODAY)).toBe(false);
   });
 });
 

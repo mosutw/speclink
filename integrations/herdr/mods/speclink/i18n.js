@@ -320,6 +320,10 @@ export const TO_EN = {
   "{0} 的 apply 還沒做完": "The apply of {0} is not finished",
   勾選要開工的變更: "Check the changes to start",
   "主資料夾一次只能跑一個 apply。可以改選 apply-with-worktree": "The main folder runs one apply at a time. You can use apply-with-worktree",
+  "Speclink: 開啟面板": "Speclink: Open Panel",
+  "Speclink: 技能跳窗": "Speclink: Skill Picker",
+  "{0}（{1}）": "{0} ({1})",
+  "{0} · {1}": "{0} · {1}",
 };
 
 // Herdr 內建畫面裡帶變數的句子。要整句符合，名稱是使用者取的。{n} 是第 n 個括號。

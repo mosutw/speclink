@@ -15,7 +15,7 @@
 //! interval-respecting loop (and its cancellation) belongs to the caller's
 //! orchestration (design 決策 5).
 
-use crate::{translate_protocol_error, translate_transport, RemoteError};
+use crate::{translate_protocol_error, RemoteError};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use speclink_protocol::device::{
@@ -36,14 +36,16 @@ pub enum InitiateOutcome {
 /// One root-level `/auth/*` POST: the body is the request DTO's serialization,
 /// the response parses into the response DTO, non-2xx goes through the shared
 /// registry mapping.
+pub(crate) const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 fn post<T: DeserializeOwned, B: Serialize>(
     base_url: &str,
     path: &str,
     body: Option<&B>,
 ) -> Result<T, (Option<u16>, RemoteError)> {
     let url = format!("{}{path}", base_url.trim_end_matches('/'));
-    let req = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(30))
+    let req = crate::http::agent_builder()
+        .timeout(REQUEST_TIMEOUT)
         .build()
         .post(&url);
     let result = match body {
@@ -67,7 +69,7 @@ fn post<T: DeserializeOwned, B: Serialize>(
             let body = resp.into_string().unwrap_or_default();
             Err((Some(status), translate_protocol_error(status, &body)))
         }
-        Err(ureq::Error::Transport(_)) => Err((None, translate_transport())),
+        Err(ureq::Error::Transport(error)) => Err((None, crate::http::translate_transport_error(&error))),
     }
 }
 
@@ -111,14 +113,34 @@ pub fn refresh(base_url: &str, refresh_token: &str) -> Result<RefreshResponse, R
 /// writes back to its registry right after logging in, and the validation
 /// call of a pasted PAT.
 pub fn whoami(base_url: &str, bearer: &str) -> Result<AuthWhoamiResponse, RemoteError> {
-    let url = format!("{}/auth/whoami", base_url.trim_end_matches('/'));
-    let result = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .get(&url)
-        .set("Authorization", &format!("Bearer {bearer}"))
-        .call();
-    match result {
+    get_identity(&format!("{}/auth/whoami", base_url.trim_end_matches('/')), bearer)
+}
+
+/// The identity behind a bearer, asked the way every login asks it
+/// (client-browser-login D6): the API root's `whoami` first, the root-level
+/// `/auth/whoami` when the server has no such route (404/405). Both answer the
+/// same shape.
+pub fn identity(base_url: &str, bearer: &str) -> Result<AuthWhoamiResponse, RemoteError> {
+    let base = base_url.trim_end_matches('/');
+    match get_identity(&format!("{base}/api/speclink/v1/whoami"), bearer) {
+        Err(e) if matches!(e.status, Some(404 | 405)) => whoami(base, bearer),
+        other => other,
+    }
+}
+
+fn get_identity(url: &str, bearer: &str) -> Result<AuthWhoamiResponse, RemoteError> {
+    get_json(url, Some(bearer))
+}
+
+/// One GET answered in JSON, with a bearer when there is one. A non-2xx answer
+/// goes through the shared registry mapping and keeps its HTTP status, so a
+/// caller can tell "no such route" from a refusal.
+pub(crate) fn get_json<T: DeserializeOwned>(url: &str, bearer: Option<&str>) -> Result<T, RemoteError> {
+    let mut request = crate::http::agent_builder().redirects(0).timeout(REQUEST_TIMEOUT).build().get(url);
+    if let Some(bearer) = bearer {
+        request = request.set("Authorization", &format!("Bearer {bearer}"));
+    }
+    match request.call() {
         Ok(resp) => resp.into_json().map_err(|_| RemoteError {
             message: "unexpected server response — the server did not return valid JSON".into(),
             reason: None,
@@ -129,7 +151,7 @@ pub fn whoami(base_url: &str, bearer: &str) -> Result<AuthWhoamiResponse, Remote
             let body = resp.into_string().unwrap_or_default();
             Err(translate_protocol_error(status, &body))
         }
-        Err(ureq::Error::Transport(_)) => Err(translate_transport()),
+        Err(ureq::Error::Transport(error)) => Err(crate::http::translate_transport_error(&error)),
     }
 }
 

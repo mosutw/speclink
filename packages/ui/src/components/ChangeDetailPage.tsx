@@ -40,7 +40,7 @@ import {
 } from "../stage";
 import { newCapabilities } from "../docModel";
 import { useI18n } from "../i18n";
-import { relativeDays } from "../time";
+import { relativeDays, useLocalToday } from "../time";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -424,7 +424,10 @@ export function ChangeDetailPage({
   const pct = change.totalTasks > 0 ? Math.round((change.completedTasks / change.totalTasks) * 100) : 0;
   const taskBadge = `${change.completedTasks}/${change.totalTasks}`;
   const delta = sumDeltaCounts(Object.values(specDocs ?? {}).map(specDeltaCounts));
+  useLocalToday();
   const rel = relativeDays(meta?.created, { t, tn });
+  const readyDate = change.totalTasks > 0 && change.completedTasks >= change.totalTasks ? (change.readyAt ?? meta?.readyAt) : null;
+  const readyRel = relativeDays(readyDate, { t, tn });
 
   // 勾選走樂觀更新（design D3）：本地先翻轉 tasksMd 立即反映，再發寫回；失敗
   // 還原快照並顯示單行錯誤。不鎖清單——僅以 pendingWrites 讓世代重載讓路，
@@ -679,6 +682,7 @@ export function ChangeDetailPage({
           meta?.createdBy && <IdentityName identity={meta.createdBy} />,
           meta?.createdWith && <span className="shrink-0">✳ {meta.createdWith}</span>,
           rel && <span className="shrink-0">{rel}</span>,
+          readyRel && <span data-ready-at={readyDate ?? undefined} title={readyDate ?? undefined} className="shrink-0">{readyRel}</span>,
           startedLabel &&
             (meta?.startedBy ? (
               <Tooltip>

@@ -230,7 +230,7 @@ fn run_server(args: RunArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let store = match speclink_server::build_store(&config.store) {
+    let store = match speclink_server::native_storage::open_for_server(&config.store) {
         Ok(store) => store,
         Err(e) => {
             eprintln!("{e}");
@@ -434,7 +434,7 @@ fn run_backup(args: BackupArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let store = match speclink_server::build_store(&config.store) {
+    let store = match speclink_server::native_storage::open_for_server(&config.store) {
         Ok(store) => store,
         Err(e) => {
             eprintln!("{e}");
@@ -545,7 +545,7 @@ fn run_restore(args: RestoreArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match speclink_server::backup::restore(&config, &args.input) {
+    match speclink_server::backup::restore_to_port(&config, &args.input) {
         Ok(report) if report.ok => {
             println!("還原完成且驗證通過：{} 個 scope 全數比對一致", report.scopes_checked);
             ExitCode::SUCCESS

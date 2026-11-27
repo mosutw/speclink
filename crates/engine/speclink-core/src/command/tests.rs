@@ -699,6 +699,7 @@ fn new_change_from_discussion_fails_before_the_change_lands_when_the_record_cann
             agent: None,
             from_discussion: Some("x".to_string()),
             last: false,
+            fields: Default::default(),
         },
     )
     .unwrap_err();
@@ -720,6 +721,7 @@ fn new_change_reports_exactly_one_change_created_event() {
             agent: None,
             from_discussion: None,
             last: false,
+            fields: Default::default(),
         },
     );
     assert_eq!(events.len(), 1, "exactly one event");
@@ -749,6 +751,7 @@ fn failed_new_change_produces_no_events_and_frozen_message() {
             agent: None,
             from_discussion: None,
             last: false,
+            fields: Default::default(),
         },
     )
     .expect_err("duplicate name must fail");
@@ -1750,6 +1753,7 @@ fn discuss_verbs_report_their_events() {
             topic: "API auth".to_string(),
             slug: Some("api-auth".to_string()),
             kind: None,
+            fields: Default::default(),
         },
     );
     assert_eq!(kinds(&ev), ["discussion-created"]);
@@ -1797,6 +1801,7 @@ fn discuss_verbs_report_their_events() {
             agent: None,
             from_discussion: None,
             last: false,
+            fields: Default::default(),
         },
     );
     let (_, ev) = ok(
@@ -1861,6 +1866,7 @@ fn promote_reports_promoted_and_change_created() {
             topic: "API auth".to_string(),
             slug: Some("api-auth".to_string()),
             kind: None,
+            fields: Default::default(),
         },
     );
     ok(
@@ -1873,7 +1879,7 @@ fn promote_reports_promoted_and_change_created() {
     );
     let (_, events) = ok(
         &store,
-        Command::DiscussPromote { slug: "api-auth".to_string(), name: None, last: false },
+        Command::DiscussPromote { slug: "api-auth".to_string(), name: None, last: false, fields: Default::default() },
     );
     assert_eq!(kinds(&events), ["discussion-promoted", "change-created"]);
     match (&events[0], &events[1]) {
@@ -1997,6 +2003,14 @@ fn event_kind_table_matches_the_spec_coverage_table() {
             "change-schema-changed",
         ),
         (
+            DomainEvent::ChangeFieldsChanged { change: s("c"), keys: vec![s("ticket")], occurred_at: at },
+            "change-fields-changed",
+        ),
+        (
+            DomainEvent::DiscussionFieldsChanged { slug: s("d"), keys: vec![s("owner")], occurred_at: at },
+            "discussion-fields-changed",
+        ),
+        (
             DomainEvent::ChangeArchived { change: s("c"), dated_name: s("2026-07-12-c"), occurred_at: at },
             "change-archived",
         ),
@@ -2044,7 +2058,7 @@ fn event_kind_table_matches_the_spec_coverage_table() {
         (DomainEvent::VerifyStamped { change: s("c"), occurred_at: at }, "verify-stamped"),
         (DomainEvent::VerifyDiscarded { change: s("c"), occurred_at: at }, "verify-discarded"),
     ];
-    assert_eq!(table.len(), 26, "the coverage table has 26 mutating verbs");
+    assert_eq!(table.len(), 28, "the coverage table has 28 mutating verbs");
     for (event, kind) in &table {
         assert_eq!(event.kind(), *kind, "for {event:?}");
     }
@@ -2066,10 +2080,12 @@ fn command_inputs_carry_no_actor_or_policy_fields() {
         Command::Validate { item: _, all: _, changes: _, specs: _, strict: _ } => {}
         Command::Analyze { change: _ } => {}
         Command::Trace { capability: _ } => {}
+        Command::EvidenceShow { change: _ } => {}
         Command::Plan { ranks: _ } => {}
         Command::PlanStrict => {}
         Command::ArtifactCat { artifact: _, change: _ } => {}
         Command::LanguageShow => {}
+        Command::LanguageReplace { content: _ } => {}
         Command::DiscussList { archived: _ } => {}
         Command::DiscussShow { slug: _ } => {}
         Command::DiscussSearch { terms: _ } => {}
@@ -2080,26 +2096,32 @@ fn command_inputs_carry_no_actor_or_policy_fields() {
             agent: _,
             from_discussion: _,
             last: _,
+            fields: _,
         } => {}
         Command::NewArtifact { kind: _, capability: _, change: _, content: _, force: _, new_capability: _ } => {}
         Command::TaskDone { task_id: _, change: _, touched_files: _, head_commit: _ } => {}
         Command::TaskUndone { task_id: _, change: _ } => {}
         Command::TaskMove { change: _, from: _, to: _, before: _ } => {}
         Command::Claim { name: _ } => {}
+        Command::ClaimRelease { name: _ } => {}
         Command::InProgressAdd { name: _ } => {}
         Command::InProgressRemove { name: _ } => {}
         Command::ChangeDepends { name: _, on: _, remove: _ } => {}
         Command::ChangeSchema { name: _, schema: _ } => {}
+        Command::ChangeLanded { name: _, commit: _ } => {}
+        Command::ChangeFieldsEdit { name: _, set: _, unset: _ } => {}
+        Command::DiscussFieldsEdit { slug: _, set: _, unset: _ } => {}
         Command::Archive { change: _, skip_specs: _, no_validate: _, mark_tasks_complete: _, carry_review: _, carry_verify: _ } => {}
         Command::Discard { change: _, force: _ } => {}
-        Command::DiscussNew { topic: _, slug: _, kind: _ } => {}
+        Command::DiscussNew { topic: _, slug: _, kind: _, fields: _ } => {}
         Command::DiscussContext { slug: _, content: _ } => {}
         Command::DiscussAddRound { slug: _, mode: _, content: _ } => {}
         Command::DiscussConclude { slug: _, content: _, hold: _ } => {}
-        Command::DiscussPromote { slug: _, name: _, last: _ } => {}
+        Command::DiscussPromote { slug: _, name: _, last: _, fields: _ } => {}
         Command::DiscussLink { slug: _, change: _ } => {}
         Command::DiscussSeal { slug: _, change: _, last: _ } => {}
         Command::DiscussArchive { slug: _ } => {}
+        Command::DiscussRestore { slug: _ } => {}
         Command::DiscussDiscard { slug: _, force: _ } => {}
         Command::ReviewAddRound { change: _, content: _ } => {}
         Command::ReviewShow { change: _ } => {}
@@ -2136,6 +2158,7 @@ fn new_change_cmd(name: &str) -> Command {
         agent: None,
         from_discussion: None,
         last: false,
+        fields: Default::default(),
     }
 }
 
@@ -2165,6 +2188,29 @@ fn created_by_stamp_follows_context_actor_only() {
 }
 
 #[test]
+fn stable_created_by_id_comes_only_from_host_context() {
+    let store = TestStore::default();
+    let mut ctx = actor_ctx(Some("Ctx Actor <ctx@example.com>"));
+    ctx.actor_id = Some("usr_123".into());
+    execute(&store, &ctx, new_change_cmd("identified")).expect("new change succeeds");
+    assert!(store.meta("identified").contains("created_by_id: usr_123\n"));
+}
+
+#[test]
+fn discussion_promotion_preserves_the_host_actor_id_on_the_new_change() {
+    let store = TestStore::default();
+    execute(&store, &ExecutionContext::default(), Command::DiscussNew {
+        topic: "Identity promotion".into(), slug: Some("identity-promotion".into()), kind: None, fields: Default::default(),
+    }).expect("discussion created");
+    let mut ctx = actor_ctx(Some("Ctx Actor <ctx@example.com>"));
+    ctx.actor_id = Some("usr_123".into());
+    execute(&store, &ctx, Command::DiscussPromote {
+        slug: "identity-promotion".into(), name: None, last: false, fields: Default::default(),
+    }).expect("promote succeeds");
+    assert!(store.meta("identity-promotion").contains("created_by_id: usr_123\n"));
+}
+
+#[test]
 fn started_by_stamp_follows_context_actor_only() {
     let store = TestStore::with_meta("demo", META);
     execute(
@@ -2186,7 +2232,7 @@ fn discussion_created_by_follows_context_actor_only() {
     let (outcome, _) = execute(
         &store,
         &actor_ctx(Some("Ctx Actor <ctx@example.com>")),
-        Command::DiscussNew { topic: "Identity probe".to_string(), slug: None, kind: None },
+        Command::DiscussNew { topic: "Identity probe".to_string(), slug: None, kind: None, fields: Default::default() },
     )
     .expect("discuss new succeeds");
     match outcome {
@@ -2197,4 +2243,29 @@ fn discussion_created_by_follows_context_actor_only() {
         ),
         other => panic!("expected a discuss-new outcome, got {other:?}"),
     }
+}
+
+#[test]
+fn language_replace_writes_document_and_reports_event() {
+    let store = TestStore::default();
+    let content = "# 專案語言規範\n\n統一使用繁體中文。\n";
+    let (outcome, events) = execute(
+        &store,
+        &ExecutionContext::default(),
+        Command::LanguageReplace { content: content.to_string() },
+    )
+    .expect("language replace succeeds");
+    assert!(matches!(outcome, CommandOutcome::LanguageReplaced { .. }));
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].kind(), "language-replaced");
+    assert_eq!(store.read_language().unwrap(), content);
+
+    // 空內容應被拒絕
+    let err = execute(
+        &store,
+        &ExecutionContext::default(),
+        Command::LanguageReplace { content: "   \n".to_string() },
+    )
+    .expect_err("blank language content is refused");
+    assert!(!err.to_string().is_empty());
 }

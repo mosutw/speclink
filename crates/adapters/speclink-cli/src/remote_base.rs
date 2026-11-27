@@ -18,6 +18,16 @@ pub(crate) struct RemoteCtx {
     /// exists (discovery failure resolves to fs mode), so arms read it here
     /// instead of re-discovering.
     pub(crate) ws: core::workspace::Workspace,
+    keeps_fields: bool,
+}
+
+impl RemoteCtx {
+    pub(crate) fn warn_if_fields_were_not_kept(&self, sent: &speclink_protocol::command::FreeFields) {
+        if !sent.is_empty() && !self.keeps_fields {
+            let keys: Vec<&str> = sent.keys().map(String::as_str).collect();
+            eprintln!("speclink: warning: this server did not keep the fields ({}) — it does not support free fields", keys.join(", "));
+        }
+    }
 }
 
 /// Resolve remote mode for the current workspace. `Ok(None)` = fs mode
@@ -28,6 +38,10 @@ pub(crate) fn remote_ctx() -> Result<Option<RemoteCtx>> {
     let Some(ws) = core::workspace::Workspace::discover_cwd()? else {
         return Ok(None);
     };
+    remote_ctx_for(ws)
+}
+
+pub(crate) fn remote_ctx_for(ws: core::workspace::Workspace) -> Result<Option<RemoteCtx>> {
     let resolution = speclink_host::context::resolve_store_mode(&ws)?;
     let conn = match resolution.mode {
         core::workspace::StoreMode::Fs => return Ok(None),
@@ -60,7 +74,11 @@ pub(crate) fn remote_ctx() -> Result<Option<RemoteCtx>> {
     } else {
         conn.repo.as_deref()
     };
-    Ok(Some(RemoteCtx { client: RemoteClient::new(&conn.url, &token, repo), ws }))
+    Ok(Some(RemoteCtx {
+        client: RemoteClient::new(&conn.url, &token, repo),
+        ws,
+        keeps_fields: binding.capabilities.fields,
+    }))
 }
 
 /// Explicit name passes through; otherwise a single active change

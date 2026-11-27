@@ -4,7 +4,7 @@ section: 開始使用
 order: 50
 keywords: [工作流, 技能, 交棒, 下一步, SDD, 站別, baseline, 手冊, 蓋章, CI, rebase]
 sources: [skill-routing, "user-documentation#完整工作流指南說明用途與使用時機", "user-documentation#工作流正典逐站列出技能與完成判準", "user-documentation#品質站蓋章效果與非成員錯誤碼的文件揭露", "user-documentation#workflow 文件載明蓋章前的預防規矩", "review-station#審查完成紀錄查詢", "verify-station#驗證完成紀錄查詢", "change-plan#apply 技能以 plan 挑選與守門", "workspace-tools#Copilot 渲染目標", "workspace-tools#Codex 與 Antigravity 共用技能內容"]
-generated: 2026-11-07T21:34:37+08:00
+generated: 2026-11-27T19:52:25+08:00
 ---
 
 # 工作流總覽：站別與交棒

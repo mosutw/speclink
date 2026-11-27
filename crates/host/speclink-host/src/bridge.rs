@@ -56,6 +56,7 @@ pub struct BridgeExecution {
 fn engine_context(ctx: &SpeclinkExecutionContext, system_locale: Option<String>) -> ExecutionContext {
     ExecutionContext {
         actor: ctx.actor.display().map(str::to_string),
+        actor_id: ctx.actor_id.clone(),
         repo: Some(ctx.repo.as_str().to_string()),
         env: speclink_core::config::EnvOverrides {
             system_locale,
@@ -142,6 +143,8 @@ fn command_label(outcome: &CommandOutcome) -> String {
         CommandOutcome::InProgressRemove(_) => "in-progress-remove",
         CommandOutcome::ChangeDepends(_) => "change-depends",
         CommandOutcome::ChangeSchema(_) => "change-schema",
+        CommandOutcome::ChangeFieldsEdit(_) => "change-fields-edit",
+        CommandOutcome::DiscussFieldsEdit(_) => "discuss-fields-edit",
         CommandOutcome::Archive(_) => "archive",
         CommandOutcome::Discard(_) => "discard",
         CommandOutcome::DiscussNew(_) => "discuss-new",
@@ -725,6 +728,17 @@ impl Store for BridgeStore {
         self.del(DocumentId::Discussion { slug: slug.to_string(), archived: false });
         Ok(Some(format!("{created}-{slug}.md")))
     }
+    fn restore_discussion(&self, slug: &str) -> anyhow::Result<Option<String>> {
+        let Some(doc) = self.read_discussion(slug) else {
+            return Ok(None);
+        };
+        if !doc.archived {
+            anyhow::bail!("discussion '{slug}' already exists");
+        }
+        self.put(DocumentId::Discussion { slug: slug.to_string(), archived: false }, doc.text);
+        self.del(DocumentId::Discussion { slug: slug.to_string(), archived: true });
+        Ok(Some(format!("{slug}.md")))
+    }
 
     // --- workflow config / shared vocabulary ---
 
@@ -736,6 +750,10 @@ impl Store for BridgeStore {
         // The scope's shared-vocabulary document; a missing LANGUAGE document is
         // a normal state, not an error.
         self.read_doc(&DocumentId::Language)
+    }
+    fn write_language(&self, content: &str) -> anyhow::Result<()> {
+        self.put(DocumentId::Language, content.to_string());
+        Ok(())
     }
 }
 
@@ -887,6 +905,7 @@ mod tests {
                 system_locale: Some("zh-TW".into()), ..Default::default()
             };
             let ctx = SpeclinkExecutionContext {
+                actor_id: None,
                 actor: Actor::Identified { display: "test".into(), source: ActorSource::Explicit },
                 project: binding.project, repo: binding.repo, mode: ExecutionMode::SharedStore,
                 policy: EffectiveWorkflowPolicy::new(resolve_policy(&client, &WorkflowConfig::default()), ""),

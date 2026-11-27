@@ -141,6 +141,23 @@ fn complete_with_absent_identity_and_agent_stamps_only_started_at() {
 }
 
 #[test]
+fn completing_the_last_task_records_ready_at_and_unchecking_hides_it() {
+    let t = TempWs::new("ready-date");
+    let store = store_with(META_UNSTARTED, "- [ ] 1.1 final task\n");
+    complete(&store, "demo", &TaskAddr::Ordinal(1), &CompleteAttribution::default(), TouchedCandidates::ProbeWorkspace(&t.ws)).unwrap();
+    let meta = crate::model::ChangeMeta::from_text(Some(&store.meta("demo"))).unwrap();
+    assert!(meta.ready_at.is_some(), "final completion records the date");
+
+    uncomplete(&store, "demo", &TaskAddr::Ordinal(1)).unwrap();
+    let counts = counts_for(&store, "demo");
+    assert_eq!(
+        crate::model::shown_ready_at(meta.ready_at.as_deref(), counts.complete, counts.total),
+        None,
+        "an unchecked task hides the recorded date"
+    );
+}
+
+#[test]
 fn complete_out_of_range_task_id_errors_without_writes() {
     let t = TempWs::new("range");
     let store = store_with(META_UNSTARTED, TASKS_TWO_OPEN);

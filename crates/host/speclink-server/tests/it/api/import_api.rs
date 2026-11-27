@@ -395,3 +395,20 @@ fn a_large_bundle_with_a_late_validation_failure_leaves_no_partial_state() {
         "validation rejects the whole request before any prefix is visible"
     );
 }
+
+#[test]
+fn a_keyed_import_can_be_exported_by_an_editor_of_the_bound_repo() {
+    let fixture = fixture();
+    let content = "# Auth\n";
+    let docs = json!([{ "key": "specs/auth/spec.md", "content": content, "digest": content_digest(content) }]);
+    let payload = json!({ "formatVersion": 2, "documents": docs });
+    let imported: Value = post_import(&fixture, &fixture.editor_pat, payload.clone()).unwrap().into_json().unwrap();
+    assert_eq!(imported, json!({ "scopeVersion": 1, "documents": 1 }));
+    let exported = get_json(&fixture, &fixture.editor_pat, "export");
+    assert_eq!(exported["formatVersion"], 2);
+    assert_eq!(exported["scopeVersion"], 1);
+    assert_eq!(exported["documents"], docs);
+    assert_eq!(error_of(request("GET", &fixture, &fixture.reader_pat, "export").call()).0, 403);
+    assert_eq!(error_of(post_import(&fixture, &fixture.editor_pat, payload)).0, 409);
+    assert_eq!(fixture.store.snapshot(&scope()).unwrap().revision().0, 1);
+}

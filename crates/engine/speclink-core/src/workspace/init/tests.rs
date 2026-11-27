@@ -356,7 +356,7 @@ const CUSTOM_DESCRIPTOR: &str = "  - name: wad-harness\n    skills_dir: .wad/ski
 /// 第二份描述子夾具：規格「技能檔過期探測」Example 的字面值（name cursor、
 /// skills_dir .cursor/skills），且不帶已棄用的 instructions_file——探測測試要的是
 /// 乾淨的描述子，不是剝除路徑。
-const CURSOR_DESCRIPTOR: &str = "  - name: cursor\n    skills_dir: .cursor/skills\n";
+const CURSOR_DESCRIPTOR: &str = "  - name: zed\n    skills_dir: .zed/skills\n";
 const REMOTE_URL: &str = "https://team.example.test/api/speclink/v1/projects/acme";
 const CLAUDE_USER_TEXT: &str = "使用者寫在 CLAUDE.md 的段落";
 const CODEX_USER_TEXT: &str = "使用者寫在 AGENTS.md 的段落";
@@ -369,7 +369,9 @@ fn user_text(tool: Tool) -> &'static str {
     match tool {
         Tool::Claude => CLAUDE_USER_TEXT,
         Tool::Codex => CODEX_USER_TEXT,
-        Tool::Copilot | Tool::Antigravity => unreachable!("此工具沒有指令檔"),
+        Tool::Copilot | Tool::Antigravity | Tool::Pi | Tool::Cursor => {
+            unreachable!("此工具沒有指令檔")
+        }
     }
 }
 
@@ -1419,14 +1421,14 @@ fn probe_reports_missing_for_a_descriptor_without_skills() {
     // Scenario「描述子技能檔缺失判缺失」：描述子的技能檔與內建技能檔同為受管檔，
     // 整組不在即缺失，差異清單以描述子的 skills_dir 起頭。
     let root = workspace_with_descriptor("probe-descriptor-missing");
-    std::fs::remove_dir_all(root.at(".cursor/skills")).unwrap();
+    std::fs::remove_dir_all(root.at(".zed/skills")).unwrap();
 
     let probe = probe_assets(&root.dir);
     assert_eq!(probe.status, AssetStatus::Missing, "{probe:?}");
     let cursor = probe
         .tools
         .iter()
-        .find(|t| t.tool == "cursor")
+        .find(|t| t.tool == "zed")
         .expect("逐工具資訊須含描述子的 name");
     assert!(cursor.missing, "{cursor:?}");
     assert_eq!(cursor.workspace_version, None, "{cursor:?}");
@@ -1438,7 +1440,7 @@ fn probe_reports_missing_for_a_descriptor_without_skills() {
     );
     for path in &probe.differing_files {
         assert!(
-            path.starts_with(".cursor/skills/speclink-") && path.ends_with("/SKILL.md"),
+            path.starts_with(".zed/skills/speclink-") && path.ends_with("/SKILL.md"),
             "差異清單只該含描述子技能檔：{path}"
         );
     }
@@ -1459,18 +1461,18 @@ fn probe_lists_descriptor_paths_in_differing_files() {
     let root = workspace_with_descriptor("probe-descriptor-both");
     for skill in [
         ".claude/skills/speclink-propose/SKILL.md",
-        ".cursor/skills/speclink-propose/SKILL.md",
+        ".zed/skills/speclink-propose/SKILL.md",
     ] {
         root.write(skill, &root.read(skill).replace(ASSET_VERSION, "v0.9.0"));
     }
 
     let probe = probe_assets(&root.dir);
     assert_eq!(probe.status, AssetStatus::Stale, "{probe:?}");
-    let cursor = probe.tools.iter().find(|t| t.tool == "cursor").unwrap();
+    let cursor = probe.tools.iter().find(|t| t.tool == "zed").unwrap();
     assert!(cursor.stale && !cursor.newer && !cursor.missing, "{cursor:?}");
     for expected in [
         ".claude/skills/speclink-propose/SKILL.md",
-        ".cursor/skills/speclink-propose/SKILL.md",
+        ".zed/skills/speclink-propose/SKILL.md",
     ] {
         assert!(
             probe.differing_files.iter().any(|p| p == expected),
@@ -1506,11 +1508,11 @@ fn probe_still_covers_a_valid_descriptor_after_an_invalid_one() {
         ".speclink.yaml",
         &format!("tools:\n  - claude\n  - name: broken-harness\n{CURSOR_DESCRIPTOR}"),
     );
-    std::fs::remove_dir_all(root.at(".cursor/skills")).unwrap();
+    std::fs::remove_dir_all(root.at(".zed/skills")).unwrap();
 
     let probe = probe_assets(&root.dir);
     assert_eq!(probe.status, AssetStatus::Missing, "{probe:?}");
-    let cursor = probe.tools.iter().find(|t| t.tool == "cursor").expect("cursor 仍在判定面");
+    let cursor = probe.tools.iter().find(|t| t.tool == "zed").expect("zed 仍在判定面");
     assert!(cursor.missing, "{cursor:?}");
 }
 
@@ -1521,17 +1523,17 @@ fn probe_normalizes_a_descriptor_skills_dir_with_a_trailing_slash() {
     init(&root.dir, &[Tool::Claude], false, "openspec").unwrap();
     root.write(
         ".speclink.yaml",
-        "tools:\n  - claude\n  - name: cursor\n    skills_dir: .cursor/skills/\n",
+        "tools:\n  - claude\n  - name: zed\n    skills_dir: .zed/skills/\n",
     );
     update(&root.dir, false).expect("結尾斜線的 skills_dir 合法，先生成到現版");
-    std::fs::remove_dir_all(root.at(".cursor/skills")).unwrap();
+    std::fs::remove_dir_all(root.at(".zed/skills")).unwrap();
 
     let probe = probe_assets(&root.dir);
     assert_eq!(probe.status, AssetStatus::Missing, "{probe:?}");
     assert!(!probe.differing_files.is_empty());
     for path in &probe.differing_files {
         assert!(
-            path.starts_with(".cursor/skills/speclink-") && !path.contains("//"),
+            path.starts_with(".zed/skills/speclink-") && !path.contains("//"),
             "路徑須正規化：{path}"
         );
     }
@@ -1914,12 +1916,12 @@ fn tool_selection_falls_back_to_the_claude_footprint_for_an_empty_list() {
 #[test]
 fn tool_selection_notes_an_unknown_builtin_name() {
     let root = TempRoot::new("tool-selection-unknown");
-    let sel = ToolSelection::resolve(&root.dir, &app_config("tools: [claude, cursor]\n"));
+    let sel = ToolSelection::resolve(&root.dir, &app_config("tools: [claude, zed]\n"));
     assert_eq!(sel.builtins, vec![Tool::Claude]);
     assert_eq!(
         sel.notes,
         vec![
-            "unknown tool 'cursor' in .speclink.yaml tools list (supported: claude, codex, copilot, antigravity)"
+            "unknown tool 'zed' in .speclink.yaml tools list (supported: claude, codex, copilot, antigravity, pi, cursor)"
                 .to_string()
         ]
     );
@@ -2022,7 +2024,10 @@ fn sync_plan_builds_one_target_per_selected_tool() {
     assert_eq!(plan.targets.len(), 1, "只選 codex 就只有一個 target");
     assert_eq!(plan.targets[0].labels, ["codex"]);
     assert_eq!(plan.targets[0].skills_root, root.at(".agents/skills"));
-    assert_eq!(plan.deselected_builtins, vec![Tool::Claude, Tool::Copilot, Tool::Antigravity]);
+    assert_eq!(
+        plan.deselected_builtins,
+        vec![Tool::Claude, Tool::Copilot, Tool::Antigravity, Tool::Pi, Tool::Cursor]
+    );
 }
 
 /// legacy 回退（沒有 tools 清單）不下架任何內建工具。
@@ -2050,7 +2055,10 @@ fn sync_plan_adds_a_target_for_each_descriptor() {
     assert_eq!(plan.targets[0].labels, ["claude"]);
     assert_eq!(plan.targets[1].labels, ["wad-harness"]);
     assert_eq!(plan.targets[1].skills_root, root.at(".wad/skills"));
-    assert_eq!(plan.deselected_builtins, vec![Tool::Codex, Tool::Copilot, Tool::Antigravity]);
+    assert_eq!(
+        plan.deselected_builtins,
+        vec![Tool::Codex, Tool::Copilot, Tool::Antigravity, Tool::Pi, Tool::Cursor]
+    );
 }
 
 /// 守門的檢查面就是 targets 的 skills_root 集合：只有描述子目錄領先版本時
@@ -2606,7 +2614,10 @@ fn shared_agents_keep_logical_report_order_and_do_not_report_selected_tool_as_de
     init(&root.dir, &Tool::ALL, false, "openspec").unwrap();
     root.write(".agent/skills/speclink-propose/SKILL.md", "legacy\n");
     let outcome = update(&root.dir, false).unwrap();
-    assert_eq!(outcome.updated, ["claude", "codex", "copilot", "antigravity"]);
+    assert_eq!(
+        outcome.updated,
+        ["claude", "codex", "copilot", "antigravity", "pi", "cursor"]
+    );
     assert!(!outcome.pruned.iter().any(|name| name == "antigravity"));
 }
 

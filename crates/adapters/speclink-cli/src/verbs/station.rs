@@ -913,6 +913,7 @@ fn to_station_round(
         index: r.index as usize,
         phase,
         patch_hash: r.patch_hash,
+        model: r.model,
         rules,
         scope: r.scope,
         findings,
@@ -929,6 +930,7 @@ mod station_round_tests {
             index: 1,
             phase: Some("discovery".into()),
             patch_hash: Some(format!("sha256:{}", "a".repeat(64))),
+            model: None,
             rules: Some(ReviewRulesDto {
                 baseline: baseline.into(),
                 critical: vec![],

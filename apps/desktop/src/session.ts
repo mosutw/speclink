@@ -59,6 +59,8 @@ export interface WorkspaceSettingsProvider {
   writeAppTools(tools: string[]): Promise<void>;
   /** remote 成功回新 revision；local 維持 void。 */
   writeWorkflowConfig(fields: WorkflowFields): Promise<number | void>;
+  /** 品質站模型覆寫（local 手術改寫 subagent_model；remote 不提供）。 */
+  writeSubagentModel?(station: string, tool: string, model: string | null): Promise<void>;
   writeWorkflowContext(context: string): Promise<number | void>;
   writeWorkflowRules(rules: Array<[string, string[]]>): Promise<number | void>;
   /** 審查規則整塊代換（只寫 review 鍵）；remote 成功回新 revision、local 維持 void。 */

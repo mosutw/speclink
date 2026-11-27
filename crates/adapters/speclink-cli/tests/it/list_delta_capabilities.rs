@@ -79,7 +79,7 @@ fn list_json_names_delta_capabilities_and_omits_the_key_without_deltas() {
     let keys: Vec<&str> = without.as_object().unwrap().keys().map(String::as_str).collect();
     assert_eq!(
         keys,
-        vec!["completedTasks", "name", "status", "summary", "totalTasks"],
+        vec!["completedTasks", "name", "stage", "status", "summary", "totalTasks", "whyExcerpt"],
         "no delta specs → field shape unchanged (no deltaCapabilities key)"
     );
 }

@@ -2,6 +2,7 @@ import { AlertTriangle, Archive, FileText, GitBranch, Hand, MessageSquareText, R
 
 import type { ChangeItem, SearchHit } from "../adapter";
 import { useI18n } from "../i18n";
+import { relativeDays, useLocalToday } from "../time";
 import {
   awaitingManualCount,
   changeStage,
@@ -45,10 +46,15 @@ export function ChangeCard({
   highlight,
   hit,
 }: ChangeCardProps) {
-  const { t } = useI18n();
+  const { t, tn } = useI18n();
+  useLocalToday();
   const pct =
     change.totalTasks > 0 ? Math.round((change.completedTasks / change.totalTasks) * 100) : 0;
   const stage = changeStage(change);
+  const readyRel =
+    change.totalTasks > 0 && change.completedTasks >= change.totalTasks && change.readyAt
+      ? relativeDays(change.readyAt, { t, tn })
+      : null;
   // 波次與被擋（spec「看板卡片的波次與阻擋標示」；add-change-plan-desktop design D4）：
   // 判定歸 stage.ts 的 planWave／planBlockedBy 單一入口，缺 wave（remote、成環）
   // 無章也不變淡。被擋＝整卡變淡，與系統匣面板被擋列同一種語言：淡＝現在不能做。
@@ -234,6 +240,11 @@ export function ChangeCard({
           <span className="text-xs text-muted-foreground tabular-nums">
             {change.completedTasks}/{change.totalTasks}
           </span>
+          {readyRel && (
+            <span data-ready-at={change.readyAt ?? undefined} title={change.readyAt ?? undefined} className="text-[11px] text-muted-foreground tabular-nums">
+              {readyRel}
+            </span>
+          )}
         </div>
         {/* stopPropagation 掛在按鈕自身而非整列：鈕旁空白仍冒泡開卡片詳情。 */}
         {stage === "ready" && (

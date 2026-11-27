@@ -494,13 +494,20 @@ function AppInner({
     const focusUnlisten = updater?.onFocusChanged
       ? updater
           .onFocusChanged((focused) => {
-            if (focused) void useStore.getState().recheckOnFocus();
+            if (focused) {
+              void useStore.getState().recheckOnFocus();
+              void useStore.getState().checkRemoteTabs();
+            }
           })
           .catch(() => null)
       : null;
+    const remoteTimer = setInterval(() => {
+      void useStore.getState().checkRemoteTabs();
+    }, 60_000);
     // CLI 佈署狀態探測（含 AppImage 版本不符的啟動自我修復）。
     if (cliInstall) void useStore.getState().refreshCliInstall();
     return () => {
+      clearInterval(remoteTimer);
       uninstallDeepLinks?.();
       void focusUnlisten?.then((unlisten) => unlisten?.());
       // 卸載時取消漏出的搜尋去抖，杜絕在途 timer 於 store 卸載後才開火。

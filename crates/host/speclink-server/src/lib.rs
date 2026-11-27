@@ -11,6 +11,7 @@ pub mod app;
 pub mod config;
 pub mod identity;
 pub mod state;
+pub mod native_storage;
 pub mod web;
 
 // 四個面的子模組在根層掛回原本的名字：crate 內外既有的 `speclink_server::<模組>`

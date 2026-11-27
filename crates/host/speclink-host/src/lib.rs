@@ -17,12 +17,17 @@ pub mod context;
 pub mod drift;
 pub mod gate;
 pub mod history;
+pub mod kit;
 pub mod policy;
 pub mod portable;
+mod port_documents;
+pub mod port_exec;
+mod port_view;
 pub mod projection;
 pub mod security;
 pub mod security_data;
 pub mod security_paths;
+pub mod transfer;
 pub mod worktree;
 
 pub mod network;

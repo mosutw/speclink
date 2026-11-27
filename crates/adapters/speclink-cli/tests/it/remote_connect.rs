@@ -270,6 +270,19 @@ fn link_with_credentials_validates_the_repo() {
 }
 
 #[test]
+fn link_requires_a_repo_for_a_project_with_multiple_repositories() {
+    let mock = whoami_server(200, WHOAMI_TWO_REPOS);
+    let env = TempEnv::new("link-ambiguous").with_connection("https://existing.example.test/projects/old", Some("old"));
+    let path = env.dir.join(".speclink.yaml");
+    let original = std::fs::read(&path).unwrap();
+    let result = env.run(&["link", &mock.base], Some("tok"));
+    assert!(!result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("--repo") && stderr.contains("backend") && stderr.contains("frontend"), "{stderr}");
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}
+
+#[test]
 fn link_rejects_a_repo_missing_from_the_registry() {
     let mock = whoami_server(200, WHOAMI_TWO_REPOS);
     let env = TempEnv::new("link-typo");
@@ -412,8 +425,16 @@ fn auth_login_pat_flag_stores_a_pasted_token() {
     let out = env.run_stdin(&["auth", "login", "--pat"], None, "pat-pasted\n");
     assert!(out.status.success(), "stderr: {}", stderr_of(&out));
 
-    let creds = env.credentials_file().expect("credentials file created");
-    assert!(std::fs::read_to_string(&creds).unwrap().contains("pat-pasted"));
+    if let Some(creds) = env.credentials_file() {
+        assert!(std::fs::read_to_string(&creds).unwrap().contains("pat-pasted"));
+    } else {
+        // 本機若有系統 Keychain（如 Windows Credential Manager），`--pat` 會優先存入 Keychain。
+        let status = env.run(&["auth", "status", "--json"], None);
+        assert!(status.status.success(), "stderr: {}", stderr_of(&status));
+        let payload: serde_json::Value = serde_json::from_str(&stdout_of(&status)).expect("JSON");
+        assert_eq!(payload["credentialSource"], "keychain_pat");
+        let _ = env.run(&["auth", "logout"], None);
+    }
 }
 
 #[test]

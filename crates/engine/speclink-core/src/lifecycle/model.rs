@@ -4,7 +4,7 @@ use crate::keylines::KeyLines;
 use crate::schema::{Artifact, Schema};
 use crate::station::{StampAnchors, Station, StationId};
 use crate::store::Store;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// The per-change data file inside every change directory, active or archived.
@@ -29,6 +29,9 @@ pub struct ChangeMeta {
     /// （lifecycle/cost.rs）逐鍵讀原文取得。
     pub created: Option<String>,
     pub created_by: Option<String>,
+    /// Stable identity of the creator, when supplied by the host.
+    #[serde(default)]
+    pub created_by_id: Option<String>,
     #[serde(default)]
     pub created_with: Option<String>,
     /// Slug of the discussion this change was promoted from (speclink extension).
@@ -49,6 +52,10 @@ pub struct ChangeMeta {
     pub started_by: Option<String>,
     #[serde(default)]
     pub started_with: Option<String>,
+    /// Recorded when all tasks are checked. Display is conditional on the
+    /// current task list still being complete.
+    #[serde(default)]
+    pub ready_at: Option<String>,
     /// 認領標記（`claim` 於團隊模式 store 蓋章；remote-claim-ownership D1）。
     /// 與 started_* 同居 change meta：缺席即未認領，舊版讀者忽略。
     #[serde(default)]
@@ -100,13 +107,21 @@ pub struct ChangeMeta {
     /// 歷次蓋章累加的驗證回合數；與 `reviewed_rounds` 同規則。
     #[serde(default)]
     pub verified_rounds: Option<u64>,
+    /// 落地 commit（`change landed` 寫入；upstream 0.20.0 station-status-and-landing）。
+    #[serde(default)]
+    pub landed_commit: Option<String>,
+    /// 自由欄位（host-free-fields D2）：`fields` 區塊的內容，寬鬆讀取。不經 serde——
+    /// 區塊裡不是純量的項目要略過而不是讓整份文件解析失敗，數字要照字面讀。引擎只存，
+    /// 不依它做任何判斷。
+    #[serde(skip)]
+    pub fields: crate::fields::Fields,
     // `archived_at`（封存時戳）刻意不是欄位：只有流程成本讀它、逐鍵讀原文，舊版在
     // 殘留值之後再追加一行時也不會讓整份 meta 因重複鍵解析失敗。
 }
 
 /// `reviewed_scope` 清單項：path 為 repo-root 相對、`/` 分隔（Windows 路徑
 /// 正規化後寫入）；hash 為內容 CRLF→LF 正規化後的 SHA-256（design D3）。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ReviewedScopeEntry {
     pub path: String,
     pub hash: String,
@@ -122,6 +137,7 @@ impl ChangeMeta {
             return Ok(ChangeMeta::default());
         };
         let mut meta: ChangeMeta = crate::config::parse_lenient_or_reason(s)?;
+        meta.fields = crate::fields::read(&KeyLines::whole(s));
         meta.collapse_time_fields();
         Ok(meta)
     }
@@ -144,6 +160,7 @@ impl ChangeMeta {
         let time_fields = [
             &mut self.created,
             &mut self.started_at,
+            &mut self.ready_at,
             &mut self.claimed_at,
             &mut self.reviewed_at,
             &mut self.verified_at,
@@ -156,8 +173,10 @@ impl ChangeMeta {
     }
     pub fn schema_name(&self) -> String {
         self.schema
-            .clone()
-            .unwrap_or_else(|| "spec-driven".to_string())
+            .as_deref()
+            .filter(|schema| !schema.trim().is_empty())
+            .unwrap_or("spec-driven")
+            .to_owned()
     }
 
     /// 一個品質站的章在這份 meta 裡的三個錨（lifecycle-station-anchors D1）：
@@ -357,13 +376,26 @@ impl serde::Serialize for Stage {
 /// same rule the desktop board's column derivation uses.
 pub fn stage(store: &dyn Store, change: &Change) -> Stage {
     let (complete, total) = crate::listing::task_counts(store, change);
+    stage_of(complete, total, change.meta.started_at.is_some())
+}
+
+/// The lifecycle stage from task counts and the recorded started marker.
+pub fn stage_of(complete: usize, total: usize, started: bool) -> Stage {
     if total > 0 && complete >= total {
         Stage::Ready
-    } else if change.meta.started_at.is_some() || complete > 0 {
+    } else if started || complete > 0 {
         Stage::InProgress
     } else {
         Stage::Proposed
     }
+}
+
+/// Show the recorded ready date only while at least one task exists and all
+/// tasks remain checked.
+pub fn shown_ready_at(ready_at: Option<&str>, complete: usize, total: usize) -> Option<String> {
+    ready_at
+        .filter(|_| total > 0 && complete >= total)
+        .map(str::to_string)
 }
 
 /// 編輯一個 change 的 meta 文件：讀原文 → fail-closed 解析 → 套 `edit` 閉包做

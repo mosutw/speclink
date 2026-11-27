@@ -57,6 +57,7 @@ impl Binding {
     /// config, not from this field.
     pub fn execution_context(&self) -> SpeclinkExecutionContext {
         SpeclinkExecutionContext {
+            actor_id: Some(self.actor.id.clone()),
             actor: Actor::Identified {
                 // The Actor contract is git-config's identity shape,
                 // "Name <email>". A bare display name is not unique — the
@@ -98,6 +99,7 @@ impl Binding {
             api_version: API_VERSION.to_string(),
             engine_version: ENGINE_VERSION.to_string(),
             capabilities: Capabilities {
+                fields: true,
                 security_review_v2:true,
                 check_history:true,
                 context_snapshots: true,

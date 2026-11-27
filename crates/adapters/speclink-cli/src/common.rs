@@ -83,6 +83,7 @@ where
     let ctx = core::command::ExecutionContext {
         security_acceptance,
         actor: ws.and_then(|w| speclink_host::context::git_identity(&w.root)),
+        actor_id: None,
         repo: Some(speclink_host::binding::local_default_binding().repo.as_str().to_string()),
         env: speclink_host::policy::process_env_overrides(),
         workspace: ws.cloned(),
@@ -110,11 +111,31 @@ pub(crate) fn security_proof(store:&dyn Store,ws:&Workspace,change:&str) -> Resu
     speclink_host::security::acceptance_proof_for_target(&target,&reader,&data,store,&budget)
 }
 
+/// The engine command a shared verb converts to. The CLI routes every
+/// LocalOnly verb (drift, `instructions --skill`, …) before it reaches an fs
+/// arm; one that slips through is an error, not a panic.
+pub(crate) fn engine_command(
+    target: Result<speclink_verbs::CommandTarget, core::command::CommandError>,
+) -> Result<core::command::Command> {
+    match target? {
+        speclink_verbs::CommandTarget::Command(cmd) => Ok(cmd),
+        speclink_verbs::CommandTarget::LocalOnly { verb, .. } => {
+            anyhow::bail!("'{verb}' has no engine command — the CLI runs it before this point")
+        }
+    }
+}
+
+/// The engine command of a verb that needs no caller data (no stdin, no
+/// worktree facts, no git facts).
+pub(crate) fn plain_command(verb: &impl speclink_verbs::ToCommand) -> Result<core::command::Command> {
+    engine_command(verb.to_command(speclink_verbs::VerbInputs::default()))
+}
+
 /// For read/analysis commands: when no change name is given and no changes exist, print the
 /// informational message and signal exit-0 (returns true = handled).
 pub(crate) fn info_if_no_changes(store: &dyn Store, name: Option<&str>) -> bool {
     if name.is_none() && core::model::list_changes(store).is_empty() {
-        println!("No active changes. Create one with: speclink new change <name>");
+        emit(speclink_verbs::render::no_active_changes());
         true
     } else {
         false
@@ -127,22 +148,36 @@ pub(crate) fn read_stdin() -> String {
     buf
 }
 
-/// Read stdin for a content-taking discuss verb. Reads when the caller passed `--stdin`
+/// Read stdin when a shared verb's policy says so; "piped" here means stdin is
+/// not an interactive terminal.
+pub(crate) fn stdin_for(policy: speclink_verbs::StdinPolicy) -> Option<String> {
+    policy.reads(!std::io::stdin().is_terminal()).then(read_stdin)
+}
+
+/// Read stdin for a content-taking verb. Reads when the caller passed `--stdin`
 /// OR stdin is piped/redirected (not an interactive terminal) — so a forgotten `--stdin`
 /// with piped content still lands instead of silently becoming empty. An interactive
 /// terminal with no pipe yields an empty string, which the core content guard rejects
 /// with a helpful message. `--stdin` is kept for back-compat but is no longer required.
 pub(crate) fn read_stdin_content(flag: bool) -> String {
-    if flag || !std::io::stdin().is_terminal() {
-        read_stdin()
-    } else {
-        String::new()
-    }
+    stdin_for(speclink_verbs::StdinPolicy::FlagOrPiped { flagged: flag }).unwrap_or_default()
 }
 
 pub(crate) fn print_json<T: serde::Serialize>(v: &T) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(v)?);
     Ok(())
+}
+
+/// The options the shared output functions take: `--json` as the verb parsed
+/// it, and the process's color switch.
+pub(crate) fn render_options(json: bool) -> speclink_verbs::render::RenderOptions {
+    speclink_verbs::render::RenderOptions { json, color: crate::color::paint().enabled }
+}
+
+/// Print a shared verb's output: its stdout text, then its stderr text.
+pub(crate) fn emit(rendered: speclink_verbs::render::Rendered) {
+    print!("{}", rendered.stdout);
+    eprint!("{}", rendered.stderr);
 }
 
 /// Discover the host workspace, or fail with the standard not-initialized error.
@@ -194,4 +229,17 @@ pub(crate) fn worktree_overlay<'a>(
             .collect(),
     );
     (facts, overlaid)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_local_only_verb_is_an_error_not_a_panic() {
+        let target = Ok(speclink_verbs::CommandTarget::LocalOnly {
+            verb: "drift",
+            reason: speclink_verbs::LocalOnlyReason::NeedsCheckout,
+        });
+        let err = super::engine_command(target).expect_err("LocalOnly has no engine command");
+        assert!(err.to_string().contains("drift"), "{err}");
+    }
 }

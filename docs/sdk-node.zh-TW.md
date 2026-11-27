@@ -99,6 +99,16 @@ await engine.dispatch(
 | `store_error` | Store 方法拋出沒有 `code` 的錯誤 |
 | `panic` | 引擎內部錯誤 |
 
+## <a id="host"></a>內嵌多使用者宿主
+
+每次呼叫都要指定登入身分和儲存範圍時，可用 `createHost({ store, hooks, scopes })`。宿主提供 `list`、`read`、`commit` 三個儲存方法。可用 `runStoreConformance` 驗證範圍隔離、版本衝突，以及文件和事件是否在同一筆交易提交。
+
+`host.dispatch({ identity, scope, argv })` 的身分與範圍由應用程式的登入工作階段提供。`beforeCommand` 掛鉤可拒絕請求，也可透過 `tools.read` 讀取同一範圍。`afterCommit` 觀察成功的提交。宿主可用 `reservedFieldPrefixes` 保留自由欄位，並透過應用程式提供的 `fields` 寫入。
+
+`host.handleRequest(request, identity)` 透過 `scopes` 解析 repo。專案請求帶 `X-Speclink-Api-Version: 1`，可用 `X-Speclink-Repo` 選擇 repo。HTTP 入口涵蓋綁定、列清單、輪詢、規格文件、專案搜尋、文件快照、看板順序讀取、新建紀錄、編輯自由欄位和範圍移轉。
+
+`host.exportScope` 與檔案引擎的 `exportScope` 回傳文件包，每筆含 `key`、`content`、`digest`。`host.importScope` 預設匯入空範圍。以 `mode: 'replace'` 取代時，可用 `dryRun: true` 預覽 `added`、`changed`、`removed`。取代會核對本次寫入或移除的文件版本。若應用程式要求結果和文件包完全一致，請在匯入期間暫停同一範圍的其他寫入。HTTP 匯入使用建立模式。
+
 ## <a id="store"></a>自己實作 Store
 
 Store 是一個物件，引擎透過它讀寫 change、artifact、規格與討論。資料要怎麼存（資料表、檔案、物件儲存）由你決定。完整的方法簽名見 [`index.d.ts`](../crates/adapters/speclink-node/index.d.ts)。每個方法可以直接回傳值，也可以回傳 Promise。
@@ -220,6 +230,8 @@ const skillMd = skills.render('propose', { target: 'neutral', invocation: 'tool-
 `codex` 與 `antigravity` target 回傳同一份共用技能內容，與 CLI 的 `.agents/skills/` 產物一致。前言說明各工具的呼叫方式，執行 CLI 範例前須將 `<current-agent>` 替換為實際宿主名稱；`neutral`、`claude` 與 `copilot` 的選項語意不變。
 
 把產生的 `SKILL.md` 寫進一個目錄，交給你的 agent 載入。每個技能的 `description` 說明什麼時候用它，結尾的 Next steps 說明之後建議做什麼，不需要另外的系統提示。前提是你的 agent 會讀技能的 description。
+
+`skills.render` 可用 `skills`、`checkout`、`gitHistory` 描述宿主可用的技能、程式碼與 Git 歷史。用 `agentToolDescription({ exclude })` 從工具說明排除應用程式未提供的動詞。
 
 ## <a id="example"></a>完整範例：接上 Copilot SDK
 

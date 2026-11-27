@@ -35,6 +35,19 @@ pub struct ListChangeJson {
     /// change has none, so a delta-less change's payload stays byte-identical.
     #[serde(rename = "deltaCapabilities", skip_serializing_if = "Vec::is_empty")]
     pub delta_capabilities: Vec<String>,
+    /// The change's free fields (host-free-fields D5). Omitted when the change
+    /// has none, so a project that uses no free field keeps its output byte
+    /// for byte.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: crate::fields::Fields,
+    #[serde(rename = "whyExcerpt", skip_serializing_if = "Option::is_none")]
+    pub why_excerpt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<crate::model::Stage>,
+    #[serde(rename = "createdById", skip_serializing_if = "Option::is_none")]
+    pub created_by_id: Option<String>,
+    #[serde(rename = "readyAt", skip_serializing_if = "Option::is_none")]
+    pub ready_at: Option<String>,
     /// The linked worktree this change is being implemented in (local main
     /// checkout only, worktree policy on). Last in the field order and omitted
     /// when absent, so every existing consumer's payload stays byte-identical.
@@ -94,6 +107,36 @@ fn truncate_summary(text: &str, limit: usize) -> String {
     format!("{head}…")
 }
 
+/// First prose line in the first `## Why` section. Later Why sections do not
+/// replace an empty first section.
+pub fn why_excerpt(proposal: &str) -> Option<String> {
+    let mut in_why = false;
+    let mut in_comment = false;
+    for line in proposal.lines() {
+        let line = line.trim();
+        if in_comment {
+            in_comment = !line.contains("-->");
+            continue;
+        }
+        if let Some(heading) = line.strip_prefix("## ") {
+            if in_why {
+                return None;
+            }
+            in_why = heading.trim() == "Why";
+            continue;
+        }
+        if !in_why || line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with("<!--") {
+            in_comment = !line.contains("-->");
+            continue;
+        }
+        return Some(line.to_string());
+    }
+    None
+}
+
 /// The one-line change summary of `list`: first prose line after "## Why"
 /// (fallback: first prose line anywhere), truncated to 30 characters.
 pub fn proposal_summary(store: &dyn Store, change: &Change) -> String {
@@ -144,6 +187,8 @@ pub fn changes_json_with(
         .iter()
         .map(|c| {
             let (complete, total) = task_counts(store, c);
+            let readable = c.meta_error.is_none();
+            let proposal = store.read_artifact(&c.name, "proposal.md").unwrap_or_default();
             ListChangeJson {
                 completed_tasks: complete,
                 name: c.name.clone(),
@@ -158,6 +203,11 @@ pub fn changes_json_with(
                 restale_from: c.meta.restale_from(),
                 meta_error: c.meta_error.clone(),
                 delta_capabilities: store.delta_capabilities(&c.name),
+                fields: c.meta.fields.clone(),
+                why_excerpt: readable.then(|| why_excerpt(&proposal)).flatten(),
+                stage: readable.then(|| crate::model::stage_of(complete, total, c.meta.started_at.is_some())),
+                created_by_id: readable.then(|| c.meta.created_by_id.clone()).flatten(),
+                ready_at: readable.then(|| crate::model::shown_ready_at(c.meta.ready_at.as_deref(), complete, total)).flatten(),
                 worktree: worktrees.get(&c.name).cloned(),
             }
         })
@@ -189,7 +239,7 @@ pub fn specs_json_items(store: &dyn Store) -> serde_json::Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{changes_json, changes_json_with, ListWorktreeJson};
+    use super::{changes_json, changes_json_with, why_excerpt, ListWorktreeJson};
     use crate::teststore::TestStore;
     use std::collections::BTreeMap;
 
@@ -246,9 +296,8 @@ mod tests {
 
     #[test]
     fn list_json_payload_shape_is_unchanged_by_the_lifecycle_fields() {
-        // Parity pin: the CLI `list --json` item must not gain started_*
-        // fields (the desktop overlays them in its own layer), and a
-        // pre-migration meta (no started_*) must serialize identically.
+        // Older metadata remains readable; its lifecycle fields are derived
+        // from the proposal and tasks while absent creator/date values stay out.
         let old_meta = TestStore::with_meta("demo", "schema: spec-driven\ncreated: 2026-07-01\n");
         old_meta.put_artifact("demo", "proposal.md", "## Why\n\nDemo.\n");
         old_meta.put_artifact("demo", "tasks.md", "## 1. Group\n\n- [ ] 1.1 First task\n- [x] 1.2 Second task\n");
@@ -260,13 +309,20 @@ mod tests {
         stamped.put_artifact("demo", "proposal.md", "## Why\n\nDemo.\n");
         stamped.put_artifact("demo", "tasks.md", "## 1. Group\n\n- [ ] 1.1 First task\n- [x] 1.2 Second task\n");
 
-        let expected = r#"{"completedTasks":1,"name":"demo","status":"in-progress","summary":"Demo.","totalTasks":2}"#;
+        let expected = r#"{"completedTasks":1,"name":"demo","status":"in-progress","summary":"Demo.","totalTasks":2,"whyExcerpt":"Demo.","stage":"in-progress"}"#;
         for store in [old_meta, stamped] {
             let changes = crate::model::list_changes(&store);
             let items = changes_json(&store, &changes);
             assert_eq!(items.len(), 1);
             assert_eq!(serde_json::to_string(&items[0]).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn why_excerpt_reads_only_the_first_why_section_and_skips_comments() {
+        assert_eq!(why_excerpt("## Why\n\n<!-- note -->\n\nFirst line\nSecond line\n\n## Scope\nother"), Some("First line".into()));
+        assert_eq!(why_excerpt("## Why\n\n### Detail\n\n## Why\n\nLater"), None);
+        assert_eq!(why_excerpt("## Problem\n\nText"), None);
     }
 
     #[test]

@@ -9,8 +9,12 @@
 //! tools, completion, templates, feedback, demo) and remote connection
 //! management (link, unlink, auth) intentionally do NOT appear in [`Command`].
 
+mod describe;
+pub use describe::COMMAND_NAMES;
+mod fields;
 mod typed;
-pub use typed::WrongOutcome;
+pub use fields::FieldsOutcome;
+pub use typed::{LanguageReplaced, WrongOutcome};
 
 use crate::config::ConfigError;
 use crate::model::Change;
@@ -207,6 +211,7 @@ pub enum DomainEvent {
     /// Only stores that adjudicate ownership reach this — the fs store's
     /// `claim` still refuses, so a local checkout never produces it.
     ChangeClaimed { change: String, occurred_at: chrono::DateTime<chrono::Utc> },
+    ChangeClaimReleased { change: String, occurred_at: chrono::DateTime<chrono::Utc> },
     ChangeMarkedInProgress { change: String, occurred_at: chrono::DateTime<chrono::Utc> },
     ChangeInProgressRemoved { change: String, occurred_at: chrono::DateTime<chrono::Utc> },
     /// `change depends` actually changed the declaration; `depends_on` is the
@@ -218,6 +223,12 @@ pub enum DomainEvent {
     },
     /// `change schema` actually switched the schema; `schema` is the new value.
     ChangeSchemaChanged { change: String, schema: String, occurred_at: chrono::DateTime<chrono::Utc> },
+    ChangeLanded { change: String, commit: String, occurred_at: chrono::DateTime<chrono::Utc> },
+    /// `change field set`／`unset` actually changed the change's free fields.
+    /// `keys` are the keys it changed, in byte order. The values are not
+    /// here: an event goes to every subscriber, and a value can be the
+    /// host's own data.
+    ChangeFieldsChanged { change: String, keys: Vec<String>, occurred_at: chrono::DateTime<chrono::Utc> },
     ChangeArchived { change: String, dated_name: String, occurred_at: chrono::DateTime<chrono::Utc> },
     ChangeDiscarded { change: String, occurred_at: chrono::DateTime<chrono::Utc> },
     ReviewRoundAdded { change: String, round: usize, occurred_at: chrono::DateTime<chrono::Utc> },
@@ -233,9 +244,49 @@ pub enum DomainEvent {
     DiscussionPromoted { slug: String, change: String, occurred_at: chrono::DateTime<chrono::Utc> },
     DiscussionLinked { slug: String, change: String, occurred_at: chrono::DateTime<chrono::Utc> },
     DiscussionSealed { slug: String, change: String, occurred_at: chrono::DateTime<chrono::Utc> },
+    /// The discussion twin of [`DomainEvent::ChangeFieldsChanged`]: keys, no values.
+    DiscussionFieldsChanged { slug: String, keys: Vec<String>, occurred_at: chrono::DateTime<chrono::Utc> },
     DiscussionArchived { slug: String, occurred_at: chrono::DateTime<chrono::Utc> },
+    DiscussionRestored { slug: String, occurred_at: chrono::DateTime<chrono::Utc> },
     DiscussionDiscarded { slug: String, occurred_at: chrono::DateTime<chrono::Utc> },
+    LanguageReplaced { occurred_at: chrono::DateTime<chrono::Utc> },
 }
+
+pub const EVENT_NAMES: &[&str] = &[
+    "change-created",
+    "artifact-created",
+    "task-completed",
+    "task-uncompleted",
+    "task-moved",
+    "change-claimed",
+    "change-claim-released",
+    "change-marked-in-progress",
+    "change-in-progress-removed",
+    "change-depends-changed",
+    "change-schema-changed",
+    "change-landed",
+    "change-fields-changed",
+    "change-archived",
+    "change-discarded",
+    "review-round-added",
+    "review-stamped",
+    "review-discarded",
+    "verify-round-added",
+    "verify-stamped",
+    "verify-discarded",
+    "discussion-created",
+    "discussion-context-set",
+    "discussion-round-added",
+    "discussion-concluded",
+    "discussion-promoted",
+    "discussion-linked",
+    "discussion-sealed",
+    "discussion-fields-changed",
+    "discussion-archived",
+    "discussion-restored",
+    "discussion-discarded",
+    "language-replaced",
+];
 
 impl DomainEvent {
     /// The event's stable kind name (the spec coverage table's wire strings).
@@ -247,10 +298,13 @@ impl DomainEvent {
             DomainEvent::TaskUncompleted { .. } => "task-uncompleted",
             DomainEvent::TaskMoved { .. } => "task-moved",
             DomainEvent::ChangeClaimed { .. } => "change-claimed",
+            DomainEvent::ChangeClaimReleased { .. } => "change-claim-released",
             DomainEvent::ChangeMarkedInProgress { .. } => "change-marked-in-progress",
             DomainEvent::ChangeInProgressRemoved { .. } => "change-in-progress-removed",
             DomainEvent::ChangeDependsChanged { .. } => "change-depends-changed",
             DomainEvent::ChangeSchemaChanged { .. } => "change-schema-changed",
+            DomainEvent::ChangeLanded { .. } => "change-landed",
+            DomainEvent::ChangeFieldsChanged { .. } => "change-fields-changed",
             DomainEvent::ChangeArchived { .. } => "change-archived",
             DomainEvent::ChangeDiscarded { .. } => "change-discarded",
             DomainEvent::ReviewRoundAdded { .. } => "review-round-added",
@@ -266,8 +320,11 @@ impl DomainEvent {
             DomainEvent::DiscussionPromoted { .. } => "discussion-promoted",
             DomainEvent::DiscussionLinked { .. } => "discussion-linked",
             DomainEvent::DiscussionSealed { .. } => "discussion-sealed",
+            DomainEvent::DiscussionFieldsChanged { .. } => "discussion-fields-changed",
             DomainEvent::DiscussionArchived { .. } => "discussion-archived",
+            DomainEvent::DiscussionRestored { .. } => "discussion-restored",
             DomainEvent::DiscussionDiscarded { .. } => "discussion-discarded",
+            DomainEvent::LanguageReplaced { .. } => "language-replaced",
         }
     }
 }
@@ -275,7 +332,8 @@ impl DomainEvent {
 /// The closed verb set of the command runtime, grouped per the 決策二 coverage
 /// table. Inputs mirror the CLI argv vocabulary one-to-one; rendering concerns
 /// (`--json`, color) stay in the entry points.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all_fields = "camelCase")]
 pub enum Command {
     // --- 查詢群 ---
     /// `list [--specs] [--changes] [--sort <key>]`
@@ -320,6 +378,8 @@ pub enum Command {
     Analyze { change: Option<String> },
     /// `trace <capability>`
     Trace { capability: String },
+    /// `evidence show <change>`
+    EvidenceShow { change: String },
     /// `plan [--json]` — the change-level execution order (read-only). `ranks`
     /// is an external rank table for callers whose ranks live outside the
     /// change metas (the server's board resource); `None` reads each meta's
@@ -336,6 +396,8 @@ pub enum Command {
     },
     /// `language show`
     LanguageShow,
+    /// `language replace --stdin`
+    LanguageReplace { content: String },
     /// `discuss list [--archived]`
     DiscussList { archived: bool },
     /// `discuss show <slug>`
@@ -343,8 +405,11 @@ pub enum Command {
     /// `discuss search <keyword>...` — keywords are matched any-of, case-insensitive.
     DiscussSearch { terms: Vec<String> },
     // --- 變更群 ---
-    /// `new change <name> [--description] [--schema] [--agent] [--from-discussion] [--last]`;
+    /// `new change <name> [--description] [--schema] [--agent] [--from-discussion] [--last] [--field <key>=<value>]...`;
     /// `last` only means something with `from_discussion` (the CLI binds the two).
+    /// `fields` are free fields the change starts with: they are in the
+    /// metadata document the change is created with, and a field outside the
+    /// rules fails the creation.
     NewChange {
         name: String,
         description: Option<String>,
@@ -352,6 +417,7 @@ pub enum Command {
         agent: Option<String>,
         from_discussion: Option<String>,
         last: bool,
+        fields: crate::fields::Fields,
     },
     /// `new artifact <type> [capability] [--change <name>] [--force] [--new]`;
     /// `content` is the CLI's `--stdin` payload, `new_capability` the `--new`
@@ -393,6 +459,8 @@ pub enum Command {
     },
     /// `claim <name>` — remote-store only; the plain-store path refuses.
     Claim { name: String },
+    /// `claim <name> --release` — release a claim on a remote-store change.
+    ClaimRelease { name: String },
     /// `in-progress add <name>` — silent and idempotent (unknown names included).
     InProgressAdd { name: String },
     /// `in-progress remove <name>` — the reverse verb, gated on zero work
@@ -404,6 +472,12 @@ pub enum Command {
     /// `change schema <name> <schema>` — switch the change's schema in its meta
     /// (change-schema-verb design D1); every guard refuses with zero writes.
     ChangeSchema { name: String, schema: String },
+    /// `change landed <name> --commit <sha>` — record the landing commit in `.meta.yaml`.
+    ChangeLanded { name: String, commit: String },
+    /// `change field set <name> <key>=<value>...` and `change field unset <name>
+    /// <key>...` — edit the change's free fields: `unset` first, then `set`,
+    /// all in one write of the metadata or none (host-free-fields D3).
+    ChangeFieldsEdit { name: String, set: crate::fields::Fields, unset: Vec<String> },
     /// `archive [change] [--skip-specs] [--no-validate] [--mark-tasks-complete]`
     /// (single change; the CLI's `--all`/bulk loop stays in the entry point).
     Archive {
@@ -416,8 +490,9 @@ pub enum Command {
     },
     /// `discard <change> [--force]`
     Discard { change: String, force: bool },
-    /// `discuss new <topic> [--slug <slug>] [--kind <kind>]`
-    DiscussNew { topic: String, slug: Option<String>, kind: Option<String> },
+    /// `discuss new <topic> [--slug <slug>] [--kind <kind>] [--field <key>=<value>]...`;
+    /// `fields` are in the record the discussion is created with.
+    DiscussNew { topic: String, slug: Option<String>, kind: Option<String>, fields: crate::fields::Fields },
     /// `discuss context <slug>` with stdin content
     DiscussContext { slug: String, content: String },
     /// `discuss add-round <slug> --mode <mode>` with stdin content
@@ -428,16 +503,23 @@ pub enum Command {
     },
     /// `discuss conclude <slug> [--hold]` with stdin content
     DiscussConclude { slug: String, content: String, hold: bool },
-    /// `discuss promote <slug> [--name <change>] [--last]`
-    DiscussPromote { slug: String, name: Option<String>, last: bool },
+    /// `discuss promote <slug> [--name <change>] [--last]`; `fields` are free
+    /// fields of the change it creates (no argv form).
+    DiscussPromote { slug: String, name: Option<String>, last: bool, fields: crate::fields::Fields },
     /// `discuss link <slug> --change <change>`
     DiscussLink { slug: String, change: String },
     /// `discuss seal <slug> <change> [--last]`
     DiscussSeal { slug: String, change: String, last: bool },
     /// `discuss archive <slug>`
     DiscussArchive { slug: String },
+    /// `discuss restore <slug>`
+    DiscussRestore { slug: String },
     /// `discuss discard <slug> [--force]`
     DiscussDiscard { slug: String, force: bool },
+    /// `discuss field set <slug> <key>=<value>...` and `discuss field unset
+    /// <slug> <key>...` — the discussion twin of [`Command::ChangeFieldsEdit`];
+    /// only a live record can change.
+    DiscussFieldsEdit { slug: String, set: crate::fields::Fields, unset: Vec<String> },
     /// `review add-round <change> --stdin`
     ReviewAddRound { change: String, content: String },
     /// `review show <change>`（查詢——不產生事件）
@@ -505,6 +587,15 @@ pub struct ShowChange {
     pub delta_capabilities: Vec<String>,
     pub from_discussions: Vec<String>,
     pub restale_from: Vec<String>,
+    /// The change's free fields (`--json` only, and only when it has some).
+    pub fields: crate::fields::Fields,
+    pub created_by: Option<String>,
+    pub created_by_id: Option<String>,
+    pub started_at: Option<String>,
+    pub ready_at: Option<String>,
+    pub stage: Option<crate::model::Stage>,
+    pub why_excerpt: Option<String>,
+    pub landed_commit: Option<String>,
 }
 
 /// `instructions` outcome: the apply view or one artifact's instructions.
@@ -535,6 +626,7 @@ pub struct NewChangeOutcome {
     pub dir: std::path::PathBuf,
     /// The schema the change was created with (explicit or config default).
     pub schema: String,
+    pub promoted_discussion: Option<String>,
 }
 
 /// `new artifact` outcome.
@@ -671,6 +763,30 @@ pub struct DiscussArchiveOutcome {
     pub archived_file: String,
 }
 
+/// `discuss restore` outcome.
+#[derive(Debug)]
+pub struct DiscussRestoreOutcome {
+    pub slug: String,
+    pub restored_from: String,
+}
+
+/// `change landed` outcome.
+#[derive(Debug)]
+pub struct ChangeLandedOutcome {
+    pub name: String,
+    pub commit: String,
+    pub changed: bool,
+}
+
+/// `evidence show` outcome.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceShowOutcome {
+    pub change: String,
+    pub archived: bool,
+    pub tasks: Vec<crate::trace::EvidenceTask>,
+}
+
 /// `review add-round` outcome.
 #[derive(Debug)]
 pub struct ReviewRoundOutcome {
@@ -706,11 +822,14 @@ pub enum CommandOutcome {
     Validate(ValidateOutcome),
     Analyze(crate::analyzer::AnalyzeReport),
     Trace(crate::trace::TraceReport),
+    EvidenceShow(EvidenceShowOutcome),
     Plan(PlanReport),
     /// Raw artifact content (`artifact cat`).
     ArtifactCat(String),
     /// Raw LANGUAGE document content (`language show`).
     Language(String),
+    /// `language replace` outcome.
+    LanguageReplaced,
     DiscussList(Vec<crate::discuss::DiscussionInfo>),
     DiscussShow(DiscussShowOutcome),
     /// `discuss search` hits, already in the spec's order.
@@ -721,10 +840,13 @@ pub enum CommandOutcome {
     TaskUndone(TaskFlipOutcome),
     TaskMove(TaskMoveOutcome),
     Claim(ClaimOutcome),
+    ClaimRelease(ClaimOutcome),
     InProgressAdd(InProgressOutcome),
     InProgressRemove(InProgressRemoveOutcome),
     ChangeDepends(DependsOutcome),
     ChangeSchema(SchemaOutcome),
+    ChangeLanded(ChangeLandedOutcome),
+    ChangeFieldsEdit(FieldsOutcome),
     Archive(crate::archive::ArchiveOutcome),
     Discard(crate::discard::DiscardOutcome),
     DiscussNew(crate::discuss::DiscussionInfo),
@@ -735,7 +857,9 @@ pub enum CommandOutcome {
     DiscussLink(DiscussBindOutcome),
     DiscussSeal(DiscussBindOutcome),
     DiscussArchive(DiscussArchiveOutcome),
+    DiscussRestore(DiscussRestoreOutcome),
     DiscussDiscard(DiscussSubjectOutcome),
+    DiscussFieldsEdit(FieldsOutcome),
     ReviewAddRound(ReviewRoundOutcome),
     ReviewShow(ReviewShowOutcome),
     ReviewStamp(ReviewSubjectOutcome),
@@ -760,6 +884,8 @@ pub struct ExecutionContext {
     /// anonymous: stamping flows stamp nothing (the current local behavior
     /// when git is absent or user.name is unset).
     pub actor: Option<String>,
+    /// Stable Host identity key. Local execution has no account ID.
+    pub actor_id: Option<String>,
     /// Repo binding key resolved at the Host boundary (local fs mode: the
     /// default binding). Recorded in completion evidence; `None` stays absent.
     pub repo: Option<String>,
@@ -802,6 +928,7 @@ pub fn execute(
         }
         Command::Analyze { change } => run_analyze(store, change.as_deref()),
         Command::Trace { capability } => run_trace(store, &capability),
+        Command::EvidenceShow { change } => run_evidence_show(store, &change),
         // A dependency cycle is a data defect in the change metas, reported
         // with the cycle in the message (`dependency cycle: a -> b -> a`).
         Command::Plan { ranks } => match ranks {
@@ -817,6 +944,7 @@ pub fn execute(
             run_artifact_cat(store, &artifact, change.as_deref())
         }
         Command::LanguageShow => run_language_show(store),
+        Command::LanguageReplace { content } => run_language_replace(store, &content),
         Command::DiscussList { archived } => Ok(CommandOutcome::DiscussList(if archived {
             crate::discuss::list_archived(store)
         } else {
@@ -828,8 +956,8 @@ pub fn execute(
             // The engine's only refusal here is an empty/blank keyword list —
             // an argv defect (the server maps it to 400 invalid_argument).
             .map_err(|e| CommandError::new(ErrorCode::InvalidArgv, e.to_string())),
-        Command::NewChange { name, description, schema, agent, from_discussion, last } => {
-            run_new_change(store, ctx.actor.as_deref(), name, description, schema, agent, from_discussion, last)
+        Command::NewChange { name, description, schema, agent, from_discussion, last, fields } => {
+            run_new_change(store, ctx.actor.as_deref(), ctx.actor_id.as_deref(), name, description, schema, agent, from_discussion, last, &fields)
         }
         Command::NewArtifact { kind, capability, change, content, force, new_capability } => {
             run_new_artifact(store, ws, ctx.user_config_dir.as_deref(), &kind, capability.as_deref(), change.as_deref(), content.as_deref(), force, new_capability)
@@ -851,12 +979,15 @@ pub fn execute(
             run_task_move(store, &change, from, to, before)
         }
         Command::Claim { name } => run_claim(store, ctx.actor.as_deref(), &name),
+        Command::ClaimRelease { name } => run_claim_release(store, ctx.actor.as_deref(), &name),
         Command::InProgressAdd { name } => run_in_progress_add(store, ctx.actor.as_deref(), &name),
         Command::InProgressRemove { name } => run_in_progress_remove(store, &name),
         Command::ChangeDepends { name, on, remove } => run_change_depends(store, &name, &on, remove),
         Command::ChangeSchema { name, schema } => {
             run_change_schema(store, ws, ctx.user_config_dir.as_deref(), &name, &schema)
         }
+        Command::ChangeLanded { name, commit } => run_change_landed(store, &name, &commit),
+        Command::ChangeFieldsEdit { name, set, unset } => fields::run_change(store, name, &set, &unset),
         Command::Archive { change, skip_specs, no_validate, mark_tasks_complete, carry_review, carry_verify } => run_archive(
             store,
             ws,
@@ -865,8 +996,8 @@ pub fn execute(
             crate::archive::ArchiveOptions { skip_specs, no_validate, mark_tasks_complete, carry_review, carry_verify, security_acceptance:ctx.security_acceptance.clone() },
         ),
         Command::Discard { change, force } => run_discard(store, ws, &change, force),
-        Command::DiscussNew { topic, slug, kind } => {
-            run_discuss_new(store, ctx.actor.as_deref(), &topic, slug.as_deref(), kind.as_deref())
+        Command::DiscussNew { topic, slug, kind, fields } => {
+            run_discuss_new(store, ctx.actor.as_deref(), &topic, slug.as_deref(), kind.as_deref(), &fields)
         }
         Command::DiscussContext { slug, content } => {
             crate::discuss::set_context(store, &slug, &content).map_err(classify)?;
@@ -887,8 +1018,8 @@ pub fn execute(
                 held: outcome.held,
             }))
         }
-        Command::DiscussPromote { slug, name, last } => {
-            let o = crate::discuss::promote(store, &slug, name.as_deref(), ctx.actor.as_deref(), last)
+        Command::DiscussPromote { slug, name, last, fields } => {
+            let o = crate::discuss::promote_with_identity(store, &slug, name.as_deref(), ctx.actor.as_deref(), ctx.actor_id.as_deref(), last, &fields)
                 .map_err(classify)?;
             Ok(CommandOutcome::DiscussPromote(DiscussPromoteOutcome {
                 slug,
@@ -915,10 +1046,22 @@ pub fn execute(
                 )),
             }
         }
+        Command::DiscussRestore { slug } => {
+            match crate::discuss::restore_discussion(store, &slug).map_err(classify)? {
+                Some(restored_from) => {
+                    Ok(CommandOutcome::DiscussRestore(DiscussRestoreOutcome { slug, restored_from }))
+                }
+                None => Err(CommandError::new(
+                    ErrorCode::NotFound,
+                    format!("archived discussion '{slug}' not found"),
+                )),
+            }
+        }
         Command::DiscussDiscard { slug, force } => {
             crate::discuss::discard_discussion(store, &slug, force).map_err(classify)?;
             Ok(CommandOutcome::DiscussDiscard(DiscussSubjectOutcome { slug }))
         }
+        Command::DiscussFieldsEdit { slug, set, unset } => fields::run_discussion(store, slug, &set, &unset),
         Command::ReviewAddRound { change, content } => {
             Ok(CommandOutcome::ReviewAddRound(station_add_round(&REVIEW, store, change, &content)?))
         }
@@ -984,6 +1127,7 @@ fn events_of(outcome: &CommandOutcome) -> Vec<DomainEvent> {
         | CommandOutcome::Instructions(_)
         | CommandOutcome::Validate(_)
         | CommandOutcome::Analyze(_)
+        | CommandOutcome::EvidenceShow(_)
         | CommandOutcome::Trace(_)
         | CommandOutcome::Plan(_)
         | CommandOutcome::ArtifactCat(_)
@@ -991,10 +1135,14 @@ fn events_of(outcome: &CommandOutcome) -> Vec<DomainEvent> {
         | CommandOutcome::DiscussList(_)
         | CommandOutcome::DiscussShow(_)
         | CommandOutcome::DiscussSearch(_) => Vec::new(),
-        CommandOutcome::NewChange(o) => vec![DomainEvent::ChangeCreated {
+        CommandOutcome::NewChange(o) => std::iter::once(DomainEvent::ChangeCreated {
             change: o.name.clone(),
             occurred_at: at,
-        }],
+        }).chain(o.promoted_discussion.iter().map(|slug| DomainEvent::DiscussionPromoted {
+            slug: slug.clone(),
+            change: o.name.clone(),
+            occurred_at: at,
+        })).collect(),
         CommandOutcome::NewArtifact(o) => vec![DomainEvent::ArtifactCreated {
             change: o.change.clone(),
             artifact: o.artifact.clone(),
@@ -1022,6 +1170,11 @@ fn events_of(outcome: &CommandOutcome) -> Vec<DomainEvent> {
             change: o.name.clone(),
             occurred_at: at,
         }],
+        CommandOutcome::ClaimRelease(o) if !o.claimed => Vec::new(),
+        CommandOutcome::ClaimRelease(o) => vec![DomainEvent::ChangeClaimReleased {
+            change: o.name.clone(),
+            occurred_at: at,
+        }],
         CommandOutcome::InProgressAdd(o) if !o.stamped => Vec::new(),
         CommandOutcome::InProgressAdd(o) => vec![DomainEvent::ChangeMarkedInProgress {
             change: o.name.clone(),
@@ -1042,6 +1195,24 @@ fn events_of(outcome: &CommandOutcome) -> Vec<DomainEvent> {
         CommandOutcome::ChangeSchema(o) => vec![DomainEvent::ChangeSchemaChanged {
             change: o.change.clone(),
             schema: o.schema.clone(),
+            occurred_at: at,
+        }],
+        CommandOutcome::ChangeLanded(o) if !o.changed => Vec::new(),
+        CommandOutcome::ChangeLanded(o) => vec![DomainEvent::ChangeLanded {
+            change: o.name.clone(),
+            commit: o.commit.clone(),
+            occurred_at: at,
+        }],
+        CommandOutcome::ChangeFieldsEdit(o) if o.changed.is_empty() => Vec::new(),
+        CommandOutcome::ChangeFieldsEdit(o) => vec![DomainEvent::ChangeFieldsChanged {
+            change: o.subject.clone(),
+            keys: o.changed.clone(),
+            occurred_at: at,
+        }],
+        CommandOutcome::DiscussFieldsEdit(o) if o.changed.is_empty() => Vec::new(),
+        CommandOutcome::DiscussFieldsEdit(o) => vec![DomainEvent::DiscussionFieldsChanged {
+            slug: o.subject.clone(),
+            keys: o.changed.clone(),
             occurred_at: at,
         }],
         CommandOutcome::Archive(o) => vec![DomainEvent::ChangeArchived {
@@ -1095,6 +1266,11 @@ fn events_of(outcome: &CommandOutcome) -> Vec<DomainEvent> {
             slug: o.slug.clone(),
             occurred_at: at,
         }],
+        CommandOutcome::DiscussRestore(o) => vec![DomainEvent::DiscussionRestored {
+            slug: o.slug.clone(),
+            occurred_at: at,
+        }],
+        CommandOutcome::LanguageReplaced => vec![DomainEvent::LanguageReplaced { occurred_at: at }],
         CommandOutcome::DiscussDiscard(o) => vec![DomainEvent::DiscussionDiscarded {
             slug: o.slug.clone(),
             occurred_at: at,
@@ -1271,7 +1447,24 @@ fn run_show(
         (Some(s), Some(c)) => (Some(s.clone()), Some(c.clone())),
         _ => (None, None),
     };
+    let metadata_readable = change.meta_error.is_none();
+    let (complete, total) = crate::listing::task_counts(store, &change);
     Ok(CommandOutcome::Show(ShowOutcome::Change(ShowChange {
+        fields: change.meta.fields.clone(),
+        created_by: metadata_readable.then(|| change.meta.created_by.clone()).flatten(),
+        created_by_id: metadata_readable.then(|| change.meta.created_by_id.clone()).flatten(),
+        started_at: metadata_readable.then(|| change.meta.started_at.clone()).flatten(),
+        ready_at: crate::model::shown_ready_at(
+            change.meta.ready_at.as_deref(),
+            complete,
+            total,
+        ),
+        stage: metadata_readable.then(|| crate::model::stage(store, &change)),
+        why_excerpt: metadata_readable.then(|| {
+            crate::listing::why_excerpt(
+                &store.read_artifact(&change.name, "proposal.md").unwrap_or_default(),
+            )
+        }).flatten(),
         schema,
         created,
         proposal: store.read_artifact(&change.name, "proposal.md"),
@@ -1280,6 +1473,7 @@ fn run_show(
         delta_capabilities: store.delta_capabilities(&change.name),
         from_discussions: change.meta.from_discussions(),
         restale_from: change.meta.restale_from(),
+        landed_commit: metadata_readable.then(|| change.meta.landed_commit.clone()).flatten(),
         name: change.name,
     })))
 }
@@ -1330,9 +1524,14 @@ fn run_instructions(
     }
     let payload = crate::instructions::build_artifact(store, env, &change, &schema, artifact)?
         .ok_or_else(|| {
+            let available: Vec<&str> = schema.artifacts.iter().map(|a| a.id.as_str()).collect();
             CommandError::new(
                 ErrorCode::NotFound,
-                format!("Artifact '{artifact}' not found in schema"),
+                format!(
+                    "Artifact '{artifact}' not found in schema '{}'. Available: {}",
+                    schema.name,
+                    available.join(", ")
+                ),
             )
         })?;
     Ok(CommandOutcome::Instructions(InstructionsOutcome::Artifact(payload)))
@@ -1485,12 +1684,14 @@ fn run_discuss_show(store: &dyn Store, slug: &str) -> Result<CommandOutcome, Com
 fn run_new_change(
     store: &dyn Store,
     actor: Option<&str>,
+    actor_id: Option<&str>,
     name: String,
     description: Option<String>,
     schema: Option<String>,
     agent: Option<String>,
     from_discussion: Option<String>,
     last: bool,
+    fields: &crate::fields::Fields,
 ) -> Result<CommandOutcome, CommandError> {
     // Default schema comes from openspec/config.yaml; the name is NOT validated
     // here (downstream commands fail on resolution).
@@ -1519,14 +1720,18 @@ fn run_new_change(
         agent.as_deref(),
         from_discussion.as_deref(),
         actor,
+        actor_id,
+        fields,
     )
     .map_err(classify)?;
     // A change born of a discussion marks that discussion promoted — both
     // entry points already did this inline; it is part of the verb's meaning.
-    if let (Some(slug), Some(out)) = (from_discussion.as_deref(), linked) {
-        store.write_live_discussion(slug, &out).map_err(classify)?;
+    let mut promoted_discussion = None;
+    if let (Some(slug), Some(out)) = (from_discussion, linked) {
+        store.write_live_discussion(&slug, &out).map_err(classify)?;
+        promoted_discussion = Some(slug);
     }
-    Ok(CommandOutcome::NewChange(NewChangeOutcome { name, dir, schema }))
+    Ok(CommandOutcome::NewChange(NewChangeOutcome { name, dir, schema, promoted_discussion }))
 }
 
 fn run_new_artifact(
@@ -1777,6 +1982,126 @@ fn run_claim(
     }))
 }
 
+fn run_claim_release(
+    store: &dyn Store,
+    actor: Option<&str>,
+    name: &str,
+) -> Result<CommandOutcome, CommandError> {
+    if let Some(change) = crate::model::find_change(store, name) {
+        guard_meta(store, &change)?;
+    }
+    if !store.supports_ownership() {
+        return Err(CommandError::new(
+            ErrorCode::Error,
+            "claim requires a remote store — this project uses the local fs store",
+        ));
+    }
+    let released = crate::model::edit_meta(store, name, |m| {
+        let holder = m.get("claimed_by").map(crate::util::yaml_unscalar);
+        if let Some(h) = holder {
+            if actor != Some(h.as_str()) {
+                return Err(Refusal(format!(
+                    "cannot release '{name}': currently claimed by {h}"
+                ))
+                .into());
+            }
+        } else if m.get("claimed_at").is_none() {
+            return Ok(false);
+        }
+        m.remove("claimed_by");
+        m.remove("claimed_at");
+        Ok(true)
+    })
+    .map_err(classify)?;
+    let Some(released) = released else {
+        return Err(CommandError::new(
+            ErrorCode::NotFound,
+            format!("Change '{name}' not found."),
+        ));
+    };
+    Ok(CommandOutcome::ClaimRelease(ClaimOutcome {
+        name: name.to_string(),
+        claimed_by: None,
+        claimed: released,
+    }))
+}
+
+fn run_change_landed(
+    store: &dyn Store,
+    name: &str,
+    commit: &str,
+) -> Result<CommandOutcome, CommandError> {
+    if let Some(change) = crate::model::find_change(store, name) {
+        guard_meta(store, &change)?;
+    }
+    let commit = commit.trim();
+    if commit.is_empty() {
+        return Err(CommandError::new(
+            ErrorCode::InvalidArgv,
+            "commit must not be empty",
+        ));
+    }
+    let changed = crate::model::edit_meta(store, name, |m| {
+        if m.get("landed_commit").map(crate::util::yaml_unscalar).as_deref() == Some(commit) {
+            return Ok(false);
+        }
+        m.set("landed_commit", &crate::util::yaml_scalar(commit))?;
+        Ok(true)
+    })
+    .map_err(classify)?;
+    let Some(changed) = changed else {
+        return Err(CommandError::new(
+            ErrorCode::NotFound,
+            format!("Change '{name}' not found."),
+        ));
+    };
+    Ok(CommandOutcome::ChangeLanded(ChangeLandedOutcome {
+        name: name.to_string(),
+        commit: commit.to_string(),
+        changed,
+    }))
+}
+
+fn run_evidence_show(store: &dyn Store, change: &str) -> Result<CommandOutcome, CommandError> {
+    let (archived, raw) = if store.change_exists(change) {
+        (false, store.read_artifact(change, ".evidence.json"))
+    } else if let Some(dated) = store
+        .list_archived_changes()
+        .into_iter()
+        .rfind(|d| d == change || d.ends_with(&format!("-{change}")))
+    {
+        (true, store.read_archived_artifact(&dated, ".evidence.json"))
+    } else {
+        return Err(CommandError::new(
+            ErrorCode::NotFound,
+            format!("Change '{change}' not found."),
+        ));
+    };
+    let tasks = raw
+        .as_deref()
+        .and_then(crate::trace::parse_evidence)
+        .unwrap_or_default();
+    Ok(CommandOutcome::EvidenceShow(EvidenceShowOutcome {
+        change: change.to_string(),
+        archived,
+        tasks,
+    }))
+}
+
+fn run_language_replace(
+    store: &dyn Store,
+    content: &str,
+) -> Result<CommandOutcome, CommandError> {
+    if content.trim().is_empty() {
+        return Err(CommandError::new(
+            ErrorCode::InvalidArgv,
+            "language content must not be empty",
+        ));
+    }
+    store.write_language(content).map_err(classify)?;
+    Ok(CommandOutcome::LanguageReplaced)
+}
+
 fn run_in_progress_add(
     store: &dyn Store,
     actor: Option<&str>,
@@ -1894,8 +2219,9 @@ fn run_discuss_new(
     topic: &str,
     slug: Option<&str>,
     kind: Option<&str>,
+    fields: &crate::fields::Fields,
 ) -> Result<CommandOutcome, CommandError> {
-    let info = crate::discuss::new_discussion(store, topic, slug, actor, kind).map_err(classify)?;
+    let info = crate::discuss::new_discussion(store, topic, slug, actor, kind, fields).map_err(classify)?;
     Ok(CommandOutcome::DiscussNew(info))
 }
 

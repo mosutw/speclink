@@ -816,6 +816,25 @@ async fn write_workflow_config(
     .map_err(|e| format!("write_workflow_config worker failed: {e}"))?
 }
 
+#[tauri::command]
+async fn write_subagent_model(
+    root: PathBuf,
+    station: String,
+    tool: String,
+    model: Option<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        speclink_desktop_core::settings::write_subagent_model_at(
+            &root,
+            &station,
+            &tool,
+            model.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| format!("write_subagent_model worker failed: {e}"))?
+}
+
 /// 產出流程快照（desktop-schema-panel design D2）：root 有值＝local 三層組裝；
 /// 缺席＝remote 模式，desktop core 以內嵌內建組裝（不打 server、不讀本機層）。
 #[tauri::command]
@@ -940,6 +959,7 @@ struct ConnectionsState {
     managers:
         std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<remote::TokenManager>>>,
     state_observer: std::sync::Arc<dyn Fn(remote::ConnectionStateEvent) + Send + Sync>,
+    streams: remote::DeclaredStreams,
 }
 
 impl ConnectionsState {
@@ -970,6 +990,7 @@ impl ConnectionsState {
         manager.bind_connection_id(connection_id);
         manager
     }
+
 }
 
 /// 條目的 TS 檢視：registry 欄位＋由 Keychain 推導的登入狀態。secret 不出現。
@@ -1073,6 +1094,7 @@ async fn connection_remove(app: tauri::AppHandle, id: String) -> Result<(), Stri
         if let Some(origin) = connections::remove_connection(&path, &id, state.credentials)? {
             state.managers.lock().expect("manager lock").remove(&origin);
         }
+        state.streams.forget_connection(&id);
         Ok(())
     })
     .await
@@ -1296,8 +1318,14 @@ async fn remote_open(
         .clone();
     tauri::async_runtime::spawn_blocking(move || {
         let manager = state.manager_for_connection(&connection_id, &origin);
-        let (_, info) = remote::open_workspace(&origin, &target, &manager, state.credentials)
+        let (workspace, info) = remote::open_workspace(&origin, &target, &manager, state.credentials)
             .map_err(remote::RemoteOpenFailure::from)?;
+        state.streams.remember(
+            &connection_id,
+            &info.project_key,
+            &info.repo_key,
+            workspace.declared_stream().cloned(),
+        );
         serde_json::to_value(&info)
             .map_err(|error| remote::RemoteOpenFailure::unknown(error.to_string()))
     })
@@ -1988,15 +2016,20 @@ async fn remote_watch(
         let manager = state.manager_for_connection(&connection_id, &origin);
         let sub_state = state.clone();
         let sub_manager = manager.clone();
-        let sub_base = base.clone();
         let sub_repo = repo.clone();
         let etag_repo = repo;
         events.register(
             &key,
             move |last| {
-                sub_manager.execute(sub_state.credentials, |token| {
-                    speclink_remote::events::subscribe(&sub_base, token, Some(&sub_repo), last)
-                })
+                remote::subscribe_declared(
+                    &sub_state.streams,
+                    &connection_id,
+                    &project,
+                    &sub_repo,
+                    &sub_manager,
+                    sub_state.credentials,
+                    last,
+                )
             },
             move || {
                 manager.execute(state.credentials, |token| {
@@ -2118,6 +2151,7 @@ pub fn run() {
                 state_observer: std::sync::Arc::new(move |event| {
                     let _ = state_emitter.emit(remote::REMOTE_CONNECTION_STATE_EVENT, event);
                 }),
+                streams: remote::DeclaredStreams::default(),
             }));
             // remote 事件中樞：invalidate → remote-workspace-changed（payload＝
             // locator key），前端 session 據此過濾重讀。
@@ -2238,6 +2272,7 @@ pub fn run() {
             write_app_tools,
             convert_spec_dir_to_speclink,
             write_workflow_config,
+            write_subagent_model,
             write_workflow_content,
             read_schemas,
             write_workflow_schema,

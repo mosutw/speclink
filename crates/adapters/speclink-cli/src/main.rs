@@ -2,47 +2,58 @@ use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use verbs::security::{cmd_security, SecurityArgs};
 use speclink_core as core;
+use speclink_verbs::families::{
+    checks::{ChangeArg, ValidateArgs},
+    discuss::DiscussArgs,
+    documents::{ArtifactArgs, LanguageArgs},
+    evidence::EvidenceArgs,
+    instructions::InstructionsArgs,
+    new::NewArgs,
+    plan::{ChangeVerbArgs, PlanArgs},
+    progress::{InProgressArgs, TaskArgs},
+    query::{ListArgs, ShowArgs, StatusArgs},
+    trace::TraceArgs,
+};
 
 mod color;
 mod common;
 mod remote_base;
+mod terminal_report;
 mod verbs;
 use common::{warn_leftover_remote_file, warn_spec_layout};
 use remote_base::{remote_ctx, RemoteCtx};
 use std::process::ExitCode;
 use verbs::checks::{
-    cmd_analyze, cmd_drift, cmd_validate, remote_analyze, remote_drift, remote_validate, ChangeArg,
-    ValidateArgs,
+    cmd_analyze, cmd_drift, cmd_validate, remote_analyze, remote_drift, remote_validate,
+
 };
 use verbs::config::{cmd_config, cmd_workflow_config, ConfigArgs, WorkflowConfigArgs};
 use verbs::connection::{cmd_auth, cmd_link, cmd_unlink, AuthArgs, LinkArgs};
-use verbs::discuss::{cmd_discuss, remote_discuss, DiscussArgs};
-use verbs::documents::{
-    cmd_artifact, cmd_language, remote_artifact, remote_language, ArtifactArgs, LanguageArgs,
-};
+use verbs::discuss::{cmd_discuss, remote_discuss};
+use verbs::documents::{cmd_artifact, cmd_language, remote_artifact, remote_language};
+use verbs::evidence::cmd_evidence;
 use verbs::init::{cmd_init, cmd_update, InitArgs, UpdateArgs};
 use verbs::instructions::{
-    cmd_instructions, cmd_instructions_skill, remote_instructions, InstructionsArgs,
+    cmd_instructions, cmd_instructions_skill, remote_instructions,
 };
 use verbs::lifecycle::{
     cmd_archive, cmd_discard, remote_archive, remote_claim, remote_discard, ArchiveArgs, ClaimArgs,
     DiscardArgs,
 };
-use verbs::new::{cmd_new, remote_new, NewArgs};
-use verbs::plan::{cmd_change, cmd_plan, remote_change, remote_plan, ChangeVerbArgs, PlanArgs};
+use verbs::new::{cmd_new, remote_new};
+use verbs::plan::{cmd_change, cmd_plan, remote_change, remote_plan};
 use verbs::progress::{
-    cmd_in_progress, cmd_task, remote_in_progress, remote_task, InProgressArgs, TaskArgs,
+    cmd_in_progress, cmd_task, remote_in_progress, remote_task,
 };
 use verbs::query::{
-    cmd_list, cmd_show, cmd_status, remote_list, remote_show, remote_status, ListArgs, ShowArgs,
-    StatusArgs,
+    cmd_list, cmd_show, cmd_status, remote_list, remote_show, remote_status,
 };
 use verbs::station::{cmd_review, cmd_verify, ReviewArgs, VerifyArgs};
 use verbs::toolchain::{
     cmd_completion, cmd_demo, cmd_feedback, cmd_schema, cmd_schemas, cmd_templates, CompletionArgs,
     FeedbackArgs, JsonFlag, SchemaArgs, TemplatesArgs,
 };
-use verbs::trace::{cmd_trace, TraceArgs};
+use verbs::trace::cmd_trace;
 
 /// The frozen architecture suffix, absent on architectures we do not ship.
 const ARCH: Option<&str> = {
@@ -102,6 +113,8 @@ enum Commands {
     Drift(ChangeArg),
     /// Trace a capability's provenance chain (archived changes, discussions, evidence)
     Trace(TraceArgs),
+    /// Read recorded task evidence for a change
+    Evidence(EvidenceArgs),
     /// Show the execution order of active changes (waves, blockers, next)
     Plan(PlanArgs),
     /// Change metadata operations (declared prerequisites)
@@ -160,11 +173,66 @@ enum Commands {
     Verify(VerifyArgs),
 }
 
+fn activity_target(cmd: &Commands) -> Option<terminal_report::ActivityTarget> {
+    use speclink_verbs::families::{
+        discuss::DiscussCommands,
+        new::NewCommands,
+        plan::ChangeCommands,
+        progress::{InProgressCommands, TaskCommands},
+    };
+    use terminal_report::ActivityTarget;
+    match cmd {
+        Commands::Task(a) => match &a.command {
+            TaskCommands::Done { change, .. } | TaskCommands::Undone { change, .. } => {
+                change.clone().map(ActivityTarget::Change)
+            }
+        },
+        Commands::InProgress(a) => match &a.command {
+            InProgressCommands::Add { name } | InProgressCommands::Remove { name } => {
+                Some(ActivityTarget::Change(name.clone()))
+            }
+        },
+        Commands::New(a) => match &a.command {
+            NewCommands::Change(c) => Some(ActivityTarget::Change(c.name.clone())),
+            NewCommands::Artifact(c) => c.change.clone().map(ActivityTarget::Change),
+        },
+        Commands::Change(a) => match &a.command {
+            ChangeCommands::Depends { name, .. }
+            | ChangeCommands::Schema { name, .. }
+            | ChangeCommands::Rank { name, .. }
+            | ChangeCommands::Landed { name, .. } => Some(ActivityTarget::Change(name.clone())),
+            ChangeCommands::Field(f) => Some(ActivityTarget::Change(f.subject().to_string())),
+        },
+        Commands::Discuss(a) => match &a.command {
+            DiscussCommands::New { slug, .. } => slug.clone().map(ActivityTarget::Discussion),
+            DiscussCommands::Context { slug, .. }
+            | DiscussCommands::AddRound { slug, .. }
+            | DiscussCommands::Conclude { slug, .. }
+            | DiscussCommands::Archive { slug, .. }
+            | DiscussCommands::Restore { slug, .. }
+            | DiscussCommands::Discard { slug, .. }
+            | DiscussCommands::Promote { slug, .. }
+            | DiscussCommands::Link { slug, .. }
+            | DiscussCommands::Seal { slug, .. } => Some(ActivityTarget::Discussion(slug.clone())),
+            DiscussCommands::Field(f) => Some(ActivityTarget::Discussion(f.subject().to_string())),
+            DiscussCommands::List { .. }
+            | DiscussCommands::Show { .. }
+            | DiscussCommands::Search { .. } => None,
+        },
+        Commands::Claim(a) => Some(ActivityTarget::Change(a.name.clone())),
+        _ => None,
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     color::init(cli.no_color);
+    let target = activity_target(&cli.command);
     match dispatch(cli) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) => {
+            terminal_report::report_if_active(target);
+            ExitCode::SUCCESS
+        }
         Err(e) => {
             if let Some(status) = verbs::security::exit_status(&e) {
                 return ExitCode::from(status);
@@ -242,6 +310,7 @@ fn dispatch(cli: Cli) -> Result<()> {
         // --- FsOnly：只解析模式、不握手，remote 明寫拒絕 ---
         Commands::Demo => fs_only(DEMO_REMOTE_REFUSAL, cmd_demo),
         Commands::Trace(a) => fs_only(TRACE_REMOTE_REFUSAL, || cmd_trace(a)),
+        Commands::Evidence(a) => fs_only("evidence show is not yet available in remote mode", || cmd_evidence(a)),
         // --- RemoteOnly：fs 明寫拒絕 ---
         Commands::Claim(a) => remote_only(a, CLAIM_FS_REFUSAL, |ctx, a| remote_claim(ctx, &a.name)),
     }

@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 use chrono::{Duration, Utc};
+use speclink_remote::events::{stream_url, StreamUrl};
 use speclink_server::audit::AuditActor;
 use speclink_server::config::{IdentityConfig, ServerConfig, StoreConfig};
 use speclink_server::events::{EventHub, EventSettings};
@@ -14,7 +15,7 @@ use speclink_store::{CommandContext, DocumentId, ProjectId, RepoId, Scope, TeamS
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::{Arc, Mutex, MutexGuard, Once};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 /// harness 使用者的顯示名。server 依 `Actor` 契約把它與 email 組成引擎面的
 /// 身分字串，蓋章比對看的是 [`ACTOR_IDENTITY`] 而不是這一個。
@@ -23,6 +24,10 @@ pub const DISPLAY: &str = "Dev";
 /// harness 使用者在引擎面的身分字串：「顯示名 <email>」。created_by、
 /// started_by、claimed_by 等蓋章都寫這個值。
 pub const ACTOR_IDENTITY: &str = "Dev <dev@example.com>";
+
+pub fn demo_stream(project_url: &str) -> StreamUrl {
+    stream_url(project_url, "/events").expect("the test server declares /events")
+}
 
 /// 同一 test binary 內的 harness 互斥。多個 in-process loopback server 併行
 /// 且 CPU 吃緊時，macOS 核心偶發把回應中的連線整條重置——客端讀到一半收
@@ -603,26 +608,36 @@ fn seed_phase3_user(
         .expect("accept phase3 invitation")
 }
 
-static BUILD_PHASE3_CLI: Once = Once::new();
-
-fn phase3_cli_bin() -> PathBuf {
-    BUILD_PHASE3_CLI.call_once(|| {
+fn phase3_cli_bin() -> &'static Path {
+    static CLI_BIN: OnceLock<PathBuf> = OnceLock::new();
+    CLI_BIN.get_or_init(|| {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-        let status = Command::new(cargo)
-            .args(["build", "-p", "speclink-cli", "--bin", "speclink"])
-            .status()
+        let output = Command::new(cargo)
+            .args([
+                "build",
+                "--locked",
+                "-p",
+                "speclink-cli",
+                "--bin",
+                "speclink",
+                "--message-format=json-render-diagnostics",
+            ])
+            .output()
             .expect("spawn cargo build for phase3 CLI");
-        assert!(status.success(), "building the phase3 CLI failed");
-    });
-    let test_bin = std::env::current_exe().expect("phase3 test executable");
-    let profile_dir = test_bin
-        .parent()
-        .and_then(Path::parent)
-        .expect("target profile directory");
-    profile_dir.join(if cfg!(windows) {
-        "speclink.exe"
-    } else {
-        "speclink"
+        assert!(
+            output.status.success(),
+            "building the phase3 CLI failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout),
+        );
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .filter(|message| {
+                message["reason"] == "compiler-artifact" && message["target"]["name"] == "speclink"
+            })
+            .find_map(|message| message["executable"].as_str().map(PathBuf::from))
+            .expect("cargo did not report the phase3 CLI executable")
     })
 }
 

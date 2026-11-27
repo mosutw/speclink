@@ -1,140 +1,36 @@
 //! Read verbs: list, show, status.
 //!
-//! Each verb renders through exactly one function that eats the core outcome
-//! type; the remote arm converts the wire payload first, so both modes print
-//! the same bytes.
+//! Each verb's output comes from one shared function (speclink-verbs'
+//! `render::query`) that takes the core outcome type; the remote arm converts
+//! the wire payload first, so both modes print the same bytes.
 
 use anyhow::{bail, Result};
-use clap::Args;
 use speclink_core as core;
 use speclink_protocol::query as protocol_query;
 
-use crate::color;
-use crate::common::{info_if_no_changes, open_project, print_json, run, worktree_overlay};
+use crate::common::{
+    emit, engine_command, info_if_no_changes, open_project, plain_command, render_options, run,
+    worktree_overlay,
+};
 use crate::remote_base::{remote_resolve_change, RemoteCtx};
 use core::listing::ListChangeJson;
+use speclink_verbs::families::query::{ListArgs, ShowArgs, StatusArgs};
+use speclink_verbs::render::query as render;
+use speclink_verbs::{ToCommand, VerbInputs};
 
-#[derive(Args)]
-pub(crate) struct ListArgs {
-    /// Show only specs
-    #[arg(long)]
-    specs: bool,
-    /// Show only changes
-    #[arg(long)]
-    changes: bool,
-    /// Sort by: name, modified, created
-    #[arg(long, default_value = "modified")]
-    sort: String,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
-#[derive(Args)]
-pub(crate) struct ShowArgs {
-    /// Item to show (change or spec name)
-    item: Option<String>,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-    /// Item type: change, spec
-    #[arg(long = "item-type", value_name = "type")]
-    item_type: Option<String>,
-    /// Show only delta specs
-    #[arg(long = "deltas-only")]
-    deltas_only: bool,
-    /// Show requirements
-    #[arg(short = 'r', long)]
-    requirements: bool,
-}
-#[derive(Args)]
-pub(crate) struct StatusArgs {
-    /// Change name
-    #[arg(long)]
-    change: Option<String>,
-    /// Schema name
-    #[arg(long)]
-    schema: Option<String>,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
 pub(crate) fn cmd_list(a: ListArgs) -> Result<()> {
     let (ws, fs_store) = open_project()?;
     // Worktree overlay (D3): only a local MAIN checkout with the policy on gets
     // here — everywhere else `facts` is empty, git is never spawned, and both
     // the store and the payload are exactly what they were before this feature.
     let (facts, overlaid) = worktree_overlay(&ws, &fs_store);
-    let list: core::command::ListOutcome = run(
-        if facts.is_empty() { &fs_store } else { &overlaid },
-        Some(&ws),
-        core::command::Command::List {
-            sort: a.sort.clone(),
-            specs: a.specs,
-            changes: a.changes,
-            worktrees: speclink_host::worktree::payload_objects(&facts),
-        },
-    )?;
-    render_list(&list, a.json)
-}
-/// fs 與 remote 共用的 list 渲染：兩模式各自組出同一個 ListOutcome，輸出逐位元
-/// 一致。模式差異只活在上游的資料組裝——remote 恆無 worktree 事實，其餘欄位同形。
-fn render_list(list: &core::command::ListOutcome, json: bool) -> Result<()> {
-    // --specs alone omits the changes section (outcome.changes is None).
-    let Some(items) = &list.changes else {
-        return render_specs_section(list.specs.as_ref().expect("specs requested"), json);
-    };
-    if json {
-        if let Some(specs) = &list.specs {
-            let mut payload = serde_json::Map::new();
-            payload.insert("changes".into(), serde_json::to_value(items)?);
-            payload.insert("specs".into(), specs.clone());
-            return print_json(&serde_json::Value::Object(payload));
-        }
-        return print_json(&serde_json::json!({ "changes": items }));
-    }
-    if items.is_empty() {
-        println!("No active changes.");
-        if let Some(specs) = &list.specs {
-            println!();
-            render_specs_section(specs, false)?;
-        }
-        return Ok(());
-    }
-    println!("{}", color::bold("Changes:"));
-    for c in items {
-        // The progress marker is omitted entirely for changes with zero tasks.
-        let marker = if c.total_tasks > 0 {
-            format!(" [{}/{}]", c.completed_tasks, c.total_tasks)
-        } else {
-            String::new()
-        };
-        // The dim wrapper always prints — an empty summary yields the empty
-        // \x1b[2m\x1b[0m pair in color mode and nothing in plain mode.
-        let suffix = if c.summary.is_empty() {
-            String::new()
-        } else {
-            format!(" — {}", c.summary)
-        };
-        // Fail-closed diagnostic (frozen marker text): only corrupt-metadata
-        // lines gain the trailing marker; valid lines stay byte-identical.
-        let invalid = if c.meta_error.is_some() {
-            format!(" {}", color::red("(invalid .meta.yaml)"))
-        } else {
-            String::new()
-        };
-        // Fixed literal, no color: `--no-color` must read exactly the same.
-        let worktree = if c.worktree.is_some() { " [worktree]" } else { "" };
-        println!(
-            "  {} {}{marker}{}{invalid}{worktree}",
-            color::cyan("•"),
-            c.name,
-            color::dim(&suffix)
-        );
-    }
-    if let Some(specs) = &list.specs {
-        println!();
-        render_specs_section(specs, false)?;
-    }
+    let cmd = engine_command(a.to_command(VerbInputs {
+        worktrees: speclink_host::worktree::payload_objects(&facts),
+        ..Default::default()
+    }))?;
+    let list: core::command::ListOutcome =
+        run(if facts.is_empty() { &fs_store } else { &overlaid }, Some(&ws), cmd)?;
+    emit(render::list(&list, render_options(a.json)));
     Ok(())
 }
 /// The remote list's engine-shaped outcome, assembled from typed wire pieces.
@@ -148,104 +44,13 @@ fn remote_list_outcome(
     let specs = specs.map(serde_json::to_value).transpose()?;
     Ok(core::command::ListOutcome { changes, specs })
 }
-/// Render the specs section from the outcome's `{id, path}` items.
-fn render_specs_section(specs: &serde_json::Value, json: bool) -> Result<()> {
-    if json {
-        return print_json(&serde_json::json!({ "specs": specs }));
-    }
-    let items = specs.as_array().map(Vec::as_slice).unwrap_or_default();
-    if items.is_empty() {
-        println!("No specs.");
-        return Ok(());
-    }
-    println!("{}", color::bold("Specs:"));
-    for s in items {
-        println!("  {} {}", color::cyan("•"), s["id"].as_str().unwrap_or_default());
-    }
-    Ok(())
-}
 pub(crate) fn cmd_show(a: ShowArgs) -> Result<()> {
-    let (ws, store) = open_project()?;
-    let show: core::command::ShowOutcome = run(
-        &store,
-        Some(&ws),
-        core::command::Command::Show {
-            item: a.item.clone(),
-            item_type: a.item_type.clone(),
-        },
-    )?;
-    render_show(show, a.json)
-}
-/// fs 與 remote 共用的 show 渲染：兩模式餵進同一個 ShowOutcome，輸出逐位元一致。
-fn render_show(show: core::command::ShowOutcome, json: bool) -> Result<()> {
-    match show {
-        core::command::ShowOutcome::Spec { name, content } => {
-            if json {
-                return print_json(&serde_json::json!({
-                    "files": [{ "content": content, "name": "spec.md" }],
-                    "name": name,
-                }));
-            }
-            println!("{}: {name}", color::bold("Spec"));
-            println!();
-            println!("{}", color::dim("--- spec.md ---"));
-            print!("{content}");
-            println!(); // A trailing newline is always emitted (an extra blank when content ends with \n)
-        }
-        core::command::ShowOutcome::Change(c) => {
-            let caps: Vec<String> = c
-                .delta_capabilities
-                .iter()
-                .map(|cap| format!("{cap}/spec.md"))
-                .collect();
-            if json {
-                return print_json(&serde_json::json!({
-                    "name": c.name,
-                    "schema": c.schema,
-                    "created": c.created,
-                    "proposal": c.proposal,
-                    "design": c.design,
-                    "tasks": c.tasks,
-                    "deltaSpecs": caps,
-                    "fromDiscussions": c.from_discussions,
-                    "restaleFrom": c.restale_from,
-                }));
-            }
-            println!("{}: {}", color::bold("Change"), c.name);
-            if let Some(schema_name) = &c.schema {
-                println!("{}: {schema_name}", color::bold("Schema"));
-            }
-            if let Some(created) = &c.created {
-                println!("{}: {created}", color::bold("Created"));
-            }
-            // The header's trailing blank line prints only when a section follows.
-            if c.proposal.is_some() || !caps.is_empty() {
-                println!();
-            }
-            // The Proposal section renders whenever the FILE exists (even empty) — frozen behavior.
-            if let Some(proposal) = &c.proposal {
-                println!("{}", color::dim("--- Proposal ---"));
-                print!("{proposal}");
-                if !caps.is_empty() {
-                    // The proposal's own trailing newline determines the blank-line count before the header.
-                    print!("\n\n{}\n", color::dim("--- Delta Specs ---"));
-                    for cap in &caps {
-                        println!("  {cap}");
-                    }
-                } else {
-                    // A newline is always appended after the proposal body (an extra blank
-                    // line when the file already ends with one), same as the spec branch above.
-                    println!();
-                }
-            } else if !caps.is_empty() {
-                // No proposal, but delta specs exist — still render the section.
-                println!("{}", color::dim("--- Delta Specs ---"));
-                for cap in &caps {
-                    println!("  {cap}");
-                }
-            }
-        }
-    }
+    let (ws, fs_store) = open_project()?;
+    let (facts, overlaid) = worktree_overlay(&ws, &fs_store);
+    let cmd = plain_command(&a)?;
+    let show: core::command::ShowOutcome =
+        run(if facts.is_empty() { &fs_store } else { &overlaid }, Some(&ws), cmd)?;
+    emit(render::show(&show, render_options(a.json)));
     Ok(())
 }
 pub(crate) fn cmd_status(a: StatusArgs) -> Result<()> {
@@ -253,45 +58,10 @@ pub(crate) fn cmd_status(a: StatusArgs) -> Result<()> {
     if info_if_no_changes(&store, a.change.as_deref()) {
         return Ok(());
     }
-    let report: core::status::StatusReport = run(
-        &store,
-        Some(&ws),
-        core::command::Command::Status {
-            change: a.change.clone(),
-            schema: a.schema.clone(),
-        },
-    )?;
-    if a.json {
-        return print_json(&report);
-    }
-    render_status_human(&report);
+    let cmd = plain_command(&a)?;
+    let report: core::status::StatusReport = run(&store, Some(&ws), cmd)?;
+    emit(render::status(&report, render_options(a.json)));
     Ok(())
-}
-/// Human status rendering — shared by the fs and remote paths so both modes
-/// stay byte-identical.
-fn render_status_human(report: &core::status::StatusReport) {
-    println!("{}: {}", color::bold("Change"), report.change_name);
-    println!("{}: {}", color::bold("Schema"), report.schema_name);
-    println!();
-    for art in &report.artifacts {
-        let sym = match art.status.as_str() {
-            "done" => color::green("✓"),
-            "ready" => color::yellow("○"),
-            _ => color::red("✗"),
-        };
-        println!(
-            "  {sym} {} ({})",
-            color::bold(&art.id),
-            color::dim(&art.output_path)
-        );
-        if art.status == "blocked" && !art.blocked_by.is_empty() {
-            println!("    blocked by: {}", art.blocked_by.join(", "));
-        }
-    }
-    println!();
-    if report.is_complete {
-        println!("  {} All artifacts complete", color::green("✓"));
-    }
 }
 /// The wire summary reshaped into the core listing item — the same rendering
 /// path then keeps stdout byte-identical to fs mode.
@@ -305,6 +75,11 @@ fn to_list_change_json(c: &protocol_query::ChangeSummary) -> ListChangeJson {
         restale_from: c.restale_from.clone(),
         meta_error: c.meta_error.clone(),
         delta_capabilities: c.delta_capabilities.clone(),
+        fields: c.fields.clone(),
+        why_excerpt: c.why_excerpt.clone(),
+        stage: c.stage.as_deref().and_then(core::model::Stage::parse),
+        created_by_id: c.created_by_id.clone(),
+        ready_at: c.ready_at.clone(),
         // remote 恆缺席：worktree 是本機主 checkout 的觀察面，
         // server 端沒有這回事（spec scenario remote list 恆無 worktree 欄位）。
         worktree: None,
@@ -327,7 +102,8 @@ pub(crate) fn remote_list(ctx: &RemoteCtx, a: &ListArgs) -> Result<()> {
         Some(items)
     };
     let specs = if a.specs { Some(ctx.client.list_specs()?.specs) } else { None };
-    render_list(&remote_list_outcome(changes, specs)?, a.json)
+    emit(render::list(&remote_list_outcome(changes, specs)?, render_options(a.json)));
+    Ok(())
 }
 /// The wire status reshaped into the fs report type — the same rendering
 /// path keeps stdout byte-identical to fs mode; server extras (repo,
@@ -360,14 +136,11 @@ pub(crate) fn remote_status(ctx: &RemoteCtx, a: &StatusArgs) -> Result<()> {
         return Ok(());
     };
     let report = to_status_report(ctx.client.get_change(&name)?);
-    if a.json {
-        return print_json(&report);
-    }
-    render_status_human(&report);
+    emit(render::status(&report, render_options(a.json)));
     Ok(())
 }
 /// remote show 的讀取組合（design D4）：以既有讀 API 組出與 fs 模式相同的
-/// ShowOutcome，交給共用的 render_show 渲染。item 與 --item-type 的判別序
+/// ShowOutcome，交給共用的輸出函式。item 與 --item-type 的判別序
 /// 對齊引擎 run_show：type==spec 直取規格；否則 change 優先、缺席時規格
 /// 遞補（type==change 不遞補）；錯誤訊息沿引擎凍結文本。
 fn remote_show_outcome(
@@ -420,6 +193,22 @@ fn remote_show_outcome(
             Err(e) => Err(e.into()),
         }
     };
+    let proposal = read_artifact("proposal")?;
+    let tasks = read_artifact("tasks")?;
+    let counts = core::tasks::counts(&core::tasks::parse(tasks.as_deref().unwrap_or_default()));
+    let stage = status
+        .stage
+        .as_deref()
+        .and_then(core::model::Stage::parse)
+        .unwrap_or_else(|| core::model::stage_of(counts.complete, counts.total, status.started_at.is_some()));
+    let why_excerpt = status
+        .why_excerpt
+        .or_else(|| proposal.as_deref().and_then(core::listing::why_excerpt));
+    let ready_at = core::model::shown_ready_at(
+        status.ready_at.as_deref(),
+        counts.complete,
+        counts.total,
+    );
     // restaleFrom 走清單摘要（設計上 show 組合的「兩份清單」之一）。
     let restale_from = ctx
         .client
@@ -433,17 +222,27 @@ fn remote_show_outcome(
         name: status.change_name,
         schema,
         created,
-        proposal: read_artifact("proposal")?,
+        proposal,
         design: read_artifact("design")?,
-        tasks: read_artifact("tasks")?,
+        tasks,
         delta_capabilities: status.delta_capabilities,
+        fields: status.fields,
         from_discussions: status.from_discussions,
         restale_from,
+        created_by: status.created_by,
+        created_by_id: status.created_by_id,
+        started_at: status.started_at,
+        ready_at,
+        stage: Some(stage),
+        why_excerpt,
+        landed_commit: status.landed_commit,
     }))
 }
 
-/// show 的 remote 家族臂：wire → ShowOutcome → 與 fs 同一支渲染。臂在族內
-/// 具名，`render_show` 與 `remote_show_outcome` 因此不必離開本檔。
+/// show 的 remote 家族臂：wire → ShowOutcome → 與 fs 同一支輸出函式。臂在族內
+/// 具名，`remote_show_outcome` 因此不必離開本檔。
 pub(crate) fn remote_show(ctx: &RemoteCtx, a: ShowArgs) -> Result<()> {
-    render_show(remote_show_outcome(ctx, a.item.as_deref(), a.item_type.as_deref())?, a.json)
+    let show = remote_show_outcome(ctx, a.item.as_deref(), a.item_type.as_deref())?;
+    emit(render::show(&show, render_options(a.json)));
+    Ok(())
 }

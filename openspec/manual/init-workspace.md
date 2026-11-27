@@ -4,7 +4,7 @@ section: 開始使用
 order: 30
 keywords: [init, update, 工作區, 技能檔, 指令檔, 過期, 降級, skills_dir, init --force, Copilot, Antigravity]
 sources: ["workspace-tools#tools 自訂描述子的接受與驗證", "workspace-tools#描述子的同步與清理生命週期", "workspace-tools#中性渲染目標", "workspace-tools#init 內建 Agent 工具選擇", "workspace-tools#built-in tools 權威收斂", "workspace-tools#工作區補齊入口", "workspace-tools#工具檔生成不寫入 AI 工具的使用者設定檔", "workspace-tools#產物層版本戳同源", "workspace-tools#worktree 技能的政策條件式生成", "workspace-tools#受管檔再生的降級守門", "workspace-tools#引擎版號查詢面", "workspace-tools#技能檔過期探測", "workspace-tools#update 清除孤兒技能目錄", "workspace-tools#Copilot 渲染目標", "workspace-tools#Antigravity 技能生成與獨立清理", "workspace-tools#本機專案明寫預設規格資料夾", "workspace-tools#Codex 與 Antigravity 共用技能內容", "workspace-tools#Antigravity 舊目錄升級", skill-routing, "spec-dir-migration#init 匯入 OpenSpec 專案", "spec-dir-migration#update 自動遷移舊佈局", "spec-dir-migration#規格資料夾的預設位置與舊佈局相容"]
-generated: 2026-11-07T21:34:37+08:00
+generated: 2026-11-27T19:52:25+08:00
 ---
 
 # 建立工作區與指令檔
@@ -50,9 +50,9 @@ speclink init --tools claude,codex,copilot,antigravity
 - `.speclink.yaml`：專案根的設定檔，記錄你選的工具。
 - `openspec/`：規格、變更與討論的資料夾。細節見[認識資料：變更、討論與規格](data-layout.md)。
 - `.gitignore` 的 `.speclink/` 條目：`.speclink/` 是工作資料夾，不進版控。
-- 技能檔：Claude 放在 `.claude/skills/`，Codex 與 Antigravity 共用 `.agents/skills/`，Copilot 放在 `.github/skills/`。每個技能一個資料夾，名稱以 `speclink-` 開頭。
+- 技能檔：Claude 放在 `.claude/skills/`，Codex 與 Antigravity 共用 `.agents/skills/`（不再於 `.agent/skills/` 生成新技能），Copilot 放在 `.github/skills/`。每個技能一個資料夾，名稱以 `speclink-` 開頭。
 
-init 不會產生 `CLAUDE.md`、`AGENTS.md` 或 `.github/copilot-instructions.md`。它也不會碰 AI 工具的使用者設定檔，例如 `.claude/settings.json`。
+init 不會產生 `CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 或 `.github/copilot-instructions.md`。它也不會碰 AI 工具的使用者設定檔，例如 `.claude/settings.json`。
 
 ### 四個內建工具的技能檔差在哪
 
@@ -63,9 +63,9 @@ init 不會產生 `CLAUDE.md`、`AGENTS.md` 或 `.github/copilot-instructions.md
 | Copilot | `.github/skills/` | `/speclink-apply` | 沒有 |
 | Antigravity | `.agents/skills/` | `/speclink-apply` | 沒有 |
 
-Copilot 拿到的技能組合與 Codex 相同：Claude 有的技能，除了 analyze 以外都有（兩個 worktree 技能一樣只在政策開啟時產生）。Codex 與 Antigravity 共用同一份技能內容；各工具使用自己的叫用方式，建立變更或蓋章時也使用自己的工具身分。Copilot 的技能在建立變更與蓋章時，記下的工具名是 copilot。
+Copilot 與 Codex、Antigravity 拿到的技能組合相同：Claude 有的技能，除了 analyze 以外都有（兩個 worktree 技能一樣只在政策開啟時產生）。Codex 與 Antigravity 共用 `.agents/skills/` 下的同一份技能內容（同時含兩工具的呼叫寫法與身分說明）；只取消其中一個而另一個仍選取時會保留共用技能，兩者都取消才會清理。建立變更或蓋章時，各工具使用自己的身分。Copilot 的技能在建立變更與蓋章時，記下的工具名是 copilot。
 
-選取 Codex 與 Antigravity 時，工具清單仍保留兩個名稱，受管技能只在共用目錄生成一份。移除其中一個時，只要另一個仍被選取，共用技能會保留。
+若專案原本有舊版 Antigravity 目錄 `.agent/skills/`，執行 `speclink update` 或桌面工具同步時會先驗證設定並將共用技能完整生成到 `.agents/skills/` 後，才清理 `.agent/skills/` 內的舊受管 `speclink-*` 資料夾，同時保留你自己的技能與規則。
 
 在 `.github/` 底下，選 Copilot 只會動到 `.github/skills/`。Speclink 不建立、不改寫、也不剝除 `.github/copilot-instructions.md`，`.github/` 底下的其他檔案（例如 CI 設定）一律不碰。`.speclink.yaml` 沒有工具清單時，引擎會依資料夾裡的工具痕跡決定產生哪些技能，但不會因為專案裡有 `.github/` 或 `.github/skills/` 就推斷你用 Copilot。
 

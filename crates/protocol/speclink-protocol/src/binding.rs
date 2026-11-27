@@ -47,6 +47,8 @@ pub struct ScopeRef {
 #[serde(rename_all = "camelCase")]
 pub struct Capabilities {
     #[serde(default)]
+    pub fields: bool,
+    #[serde(default)]
     pub security_review_v2:bool,
     #[serde(default)]
     pub check_history:bool,

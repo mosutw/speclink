@@ -20,6 +20,9 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 speclink-core = { path = "../../engine/speclink-core" }
 speclink-fs = { path = "../../engine/speclink-fs" }
+speclink-protocol = { path = "../../protocol/speclink-protocol" }
+speclink-store-port = { path = "../../store/speclink-store-port" }
+speclink-verbs = { path = "../speclink-verbs" }
 speclink-host = { path = "../../host/speclink-host" }
 
 [build-dependencies]

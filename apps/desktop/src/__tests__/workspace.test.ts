@@ -380,8 +380,8 @@ describe("分頁列（spec 需求「專案分頁列存於 app 本機」）", () 
     const s = store.getState();
     expect(keys(s.tabs)).toEqual(["local:A", "local:B"]);
     expect(s.activeKey).toBe("local:A");
-    // 背景分頁 B 探測一次路徑；active 分頁 A 不經 project_stats。分頁不攜帶計數徽章。
-    expect(ws.projectStats).toHaveBeenCalledWith("B");
+    // 背景分頁 B 透過 openProject 探測一次路徑有效性；active 分頁 A 不經 project_stats。分頁不攜帶計數徽章。
+    expect(ws.openProject).toHaveBeenCalledWith("B");
     expect(ws.projectStats).not.toHaveBeenCalledWith("A");
     expect(s.tabs.every((t) => !("badge" in t))).toBe(true);
   });
@@ -393,9 +393,10 @@ describe("分頁列（spec 需求「專案分頁列存於 app 本機」）", () 
       openProject: vi
         .fn()
         .mockImplementation((p: string) =>
-          Promise.resolve({ status: "project", root: p, name: p.toLowerCase() }),
+          p === "B"
+            ? new Promise(() => {})
+            : Promise.resolve({ status: "project", root: p, name: p.toLowerCase() }),
         ),
-      projectStats: vi.fn().mockReturnValue(new Promise(() => {})),
     });
     const store = makeStore(fakeDataSource(), ws);
     const settled = await Promise.race([
@@ -404,7 +405,7 @@ describe("分頁列（spec 需求「專案分頁列存於 app 本機」）", () 
     ]);
     expect(settled).toBe("resolved");
     expect(store.getState().activeKey).toBe("local:A");
-    expect(ws.projectStats).toHaveBeenCalledWith("B");
+    expect(ws.openProject).toHaveBeenCalledWith("B");
   });
 
   it("首啟無持久化分頁：啟動目錄（cwd 探索）為專案時自動記入（決策 4 首啟路徑）", async () => {

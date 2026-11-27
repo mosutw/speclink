@@ -55,7 +55,9 @@ function toDiscussionItem(info: RemoteDiscussionInfo): DiscussionItem {
 interface RemoteStatusPayload extends StatusReport {
   created?: string | null;
   createdBy?: string | null;
+  createdById?: string | null;
   createdWith?: string | null;
+  readyAt?: string | null;
   startedAt?: string | null;
   startedBy?: string | null;
   fromDiscussions?: string[];
@@ -137,7 +139,9 @@ export function createRemoteDataSource(
         schema: s.schemaName,
         created: s.created ?? null,
         createdBy: s.createdBy ?? null,
+        createdById: s.createdById ?? null,
         createdWith: s.createdWith ?? null,
+        readyAt: s.readyAt ?? null,
         fromDiscussions: s.fromDiscussions ?? [],
         startedAt: s.startedAt ?? null,
         startedBy: s.startedBy ?? null,

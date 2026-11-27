@@ -2334,3 +2334,25 @@ fn legacy_stamp_cas_uses_the_metadata_used_to_build_the_stamp() {
         assert!(!store.artifact_exists("demo", "checks/index.json"));
     }
 }
+
+#[test]
+fn add_round_parses_optional_model_line_and_rejects_invalid_forms() {
+    let hex = "a".repeat(64);
+    let round_body = format!(
+        "**Phase**: discovery\n**Patch**: sha256:{hex}\n**Model**: o3\n**Scope**: src/lib.rs\n"
+    );
+    let store = store_with_round(&round_body);
+    let ticket = show(&VERIFY, &store, "demo").expect("ticket");
+    assert_eq!(ticket.last_round().model.as_deref(), Some("o3"));
+    assert_eq!(ticket.last_round().to_json()["model"], "o3");
+
+    let empty_model = format!(
+        "**Phase**: discovery\n**Patch**: sha256:{hex}\n**Model**:   \n**Scope**: src/lib.rs\n"
+    );
+    assert!(add_round(&REVIEW, &store, "demo", &empty_model).is_err());
+
+    let dup_model = format!(
+        "**Phase**: discovery\n**Patch**: sha256:{hex}\n**Model**: o3\n**Model**: sonnet\n**Scope**: src/lib.rs\n"
+    );
+    assert!(add_round(&REVIEW, &store, "demo", &dup_model).is_err());
+}

@@ -284,6 +284,7 @@ fn create_change_posts_the_typed_request_body() {
         r#"{"name":"demo","schema":"spec-driven","repo":"backend","lifecycle":"drafting"}"#,
     );
     let req = CreateChangeRequest {
+        fields: Default::default(),
         name: "demo".into(),
         schema: Some("spec-driven".into()),
         description: None,
@@ -461,6 +462,7 @@ fn discussion_writes_post_typed_bodies() {
     assert_eq!(
         cap.body,
         serde_json::to_string(&CreateDiscussionRequest {
+            fields: Default::default(),
             topic: "Auth scope".into(),
             slug: None,
             kind: None,
@@ -506,7 +508,7 @@ fn discussion_writes_post_typed_bodies() {
     assert_eq!(promoted.change, "add-auth");
     assert_eq!(
         mock5.last().body,
-        serde_json::to_string(&PromoteDiscussionRequest { name: Some("add-auth".into()), last: false })
+        serde_json::to_string(&PromoteDiscussionRequest { name: Some("add-auth".into()), last: false, fields: Default::default() })
             .unwrap()
     );
     let bare = client(&mock5).discussion_promote("auth-scope", None, false).expect("promote ok");
@@ -529,6 +531,7 @@ fn spin_out_verbs_post_last_true_and_link_stays_flagless() {
     let mock = serve(201, r#"{"name":"cut-c","schema":"spec-driven"}"#);
     client(&mock)
         .create_change(CreateChangeRequest {
+            fields: Default::default(),
             name: "cut-c".into(),
             schema: None,
             description: None,
@@ -573,6 +576,7 @@ fn discussion_parity_verbs_post_typed_bodies() {
     assert_eq!(
         cap.body,
         serde_json::to_string(&CreateDiscussionRequest {
+            fields: Default::default(),
             topic: "看板搜尋列".into(),
             slug: Some("board-search-bar".into()),
             kind: None,

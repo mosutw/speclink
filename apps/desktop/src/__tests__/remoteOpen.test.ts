@@ -6,6 +6,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 import { createAppStore } from "../store";
+import { persistTabs } from "../tabs";
 import type { ConnectionsAdapter, ConnectionView } from "../adapter/connections";
 import type { WorkspaceAdapter } from "../adapter/workspace";
 import type { MigrationAdapter } from "../adapter/migration";
@@ -414,6 +415,105 @@ describe("remote marker probe 分流", () => {
     expect(store.getState().activeKey).toBe("local:/work/coexists");
     expect(store.getState().pendingRemoteConflict).toBeNull();
     expect(openRemote).not.toHaveBeenCalled();
+
+    // 切換分頁再切回：沿用本機選擇、不再彈衝突視窗
+    const otherSession = localSession("/work/other");
+    vi.mocked(workspace.openProject).mockResolvedValueOnce({
+      status: "project",
+      root: "/work/other",
+      name: "other",
+    });
+    await store.getState().openProjectAt("/work/other");
+    expect(store.getState().activeKey).toBe("local:/work/other");
+
+    vi.mocked(workspace.openProject).mockResolvedValueOnce({
+      status: "remoteBinding",
+      url: markerUrl,
+      repo: "backend",
+      hasLocalOpenspec: true,
+    });
+    await store.getState().activateTab("local:/work/coexists");
+    expect(store.getState().activeKey).toBe("local:/work/coexists");
+    expect(store.getState().pendingRemoteConflict).toBeNull();
+    expect(store.getState().tabErrors["local:/work/coexists"]).toBeUndefined();
+
+    // 若原路徑失效而只找到上層專案，切回分頁時必須顯示分頁錯誤、不讀上層資料
+    await store.getState().activateTab("local:/work/other");
+    vi.mocked(workspace.openProject).mockResolvedValueOnce({
+      status: "project",
+      root: "/work",
+      name: "parent",
+    });
+    await store.getState().activateTab("local:/work/coexists");
+    expect(store.getState().tabErrors["local:/work/coexists"]).toBeTruthy();
+    expect(store.getState().activeKey).toBe("local:/work/other");
+    void otherSession;
+  });
+
+  it("checkRemoteTabs：未開專案連線失敗反映至 tabErrors／remoteRecovery，已開專案被收回權限時唯讀保留、復權後恢復寫入", async () => {
+    const unopenedKey = "remote:conn-1/proj-a/repo-1";
+    const openKey = "remote:conn-1/proj-b/repo-2";
+    const openSession = fakeRemoteSession(fakeRemoteDs());
+    openSession.id = openKey;
+    openSession.locator = {
+      kind: "remote",
+      connectionId: "conn-1",
+      projectId: "proj-b",
+      repoId: "repo-2",
+    };
+
+    persistTabs(
+      [
+        { locator: { kind: "remote", connectionId: "conn-1", projectId: "proj-a", repoId: "repo-1" }, name: "proj-a" },
+        { locator: openSession.locator, name: "proj-b" },
+      ],
+      openKey,
+    );
+
+    const openRemote = vi.fn(async (_cid: string, target: string) => {
+      if (target === "proj-a/repo-1") {
+        throw { message: "offline", reason: "unavailable", status: null };
+      }
+      return openSession;
+    });
+    const store = createAppStore({
+      createSession: localSession,
+      workspace: fakeWorkspace(),
+      connections: fakeConnections([loggedIn]),
+      openRemote,
+    });
+
+    await store.getState().restoreTabs();
+    await vi.waitFor(() => {
+      expect(store.getState().remoteRecovery[unopenedKey]?.status).toBe("error");
+    });
+    expect(store.getState().tabErrors[unopenedKey]).toBe("offline");
+    expect(store.getState().sessions[openKey]?.capabilities.setTaskDone).toBe(true);
+
+    // 模擬已開專案被收回存取權限（403）
+    openRemote.mockImplementation(async (_cid: string, target: string) => {
+      if (target === "proj-b/repo-2") {
+        throw { message: "denied", reason: "permission_denied", status: 403 };
+      }
+      throw { message: "offline", reason: "unavailable", status: null };
+    });
+    await store.getState().checkRemoteTabs();
+    expect(store.getState().sessions[openKey]).toBeDefined();
+    expect(store.getState().sessions[openKey]?.capabilities.setTaskDone).toBe(false);
+    expect(store.getState().remoteRecovery[openKey]).toMatchObject({
+      status: "error",
+      failure: { kind: "access-denied" },
+    });
+
+    // 復權後自動恢復寫入與正常狀態
+    openRemote.mockImplementation(async (_cid: string, target: string) => {
+      if (target === "proj-b/repo-2") return openSession;
+      throw { message: "offline", reason: "unavailable", status: null };
+    });
+    await store.getState().checkRemoteTabs();
+    expect(store.getState().sessions[openKey]?.capabilities.setTaskDone).toBe(true);
+    expect(store.getState().remoteRecovery[openKey]).toBeUndefined();
+    expect(store.getState().tabErrors[openKey]).toBeUndefined();
   });
 
   it("以 server 為準：先 handshake、再備份本機且不 import，最後開 checkout remote 分頁", async () => {

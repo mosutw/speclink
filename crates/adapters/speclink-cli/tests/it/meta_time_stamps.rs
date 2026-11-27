@@ -92,7 +92,9 @@ fn plain_date_created_keeps_the_existing_outputs() {
             "proposal": "## Why\n\nDemo.\n",
             "restaleFrom": [],
             "schema": "spec-driven",
-            "tasks": "- [ ] 1.1 Do the thing\n"
+            "stage": "proposed",
+            "tasks": "- [ ] 1.1 Do the thing\n",
+            "whyExcerpt": "Demo."
         })
     );
     let list = p.run(&["list", "--json"]);
@@ -102,9 +104,11 @@ fn plain_date_created_keeps_the_existing_outputs() {
         serde_json::json!({ "changes": [{
             "completedTasks": 0,
             "name": "demo",
+            "stage": "proposed",
             "status": "in-progress",
             "summary": "Demo.",
-            "totalTasks": 1
+            "totalTasks": 1,
+            "whyExcerpt": "Demo."
         }] })
     );
 }

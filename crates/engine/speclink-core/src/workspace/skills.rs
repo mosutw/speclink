@@ -20,6 +20,8 @@ pub enum Tool {
     Codex,
     Copilot,
     Antigravity,
+    Pi,
+    Cursor,
 }
 
 impl Tool {
@@ -27,9 +29,16 @@ impl Tool {
     /// walks it for generation, deselection, the reserved descriptor names and
     /// directories, the asset lock and its error messages; the adapters (CLI hint, Node
     /// SDK, desktop) spell the set out in their own wording, pinned by their tests.
-    pub const ALL: [Tool; 4] = [Tool::Claude, Tool::Codex, Tool::Copilot, Tool::Antigravity];
+    pub const ALL: [Tool; 6] = [
+        Tool::Claude,
+        Tool::Codex,
+        Tool::Copilot,
+        Tool::Antigravity,
+        Tool::Pi,
+        Tool::Cursor,
+    ];
 
-    /// The built-in names as error messages list them: `claude, codex, copilot, antigravity`.
+    /// The built-in names as error messages list them: `claude, codex, copilot, antigravity, pi, cursor`.
     pub fn supported_names() -> String {
         Tool::ALL.map(|t| t.name()).join(", ")
     }
@@ -40,6 +49,8 @@ impl Tool {
             "codex" | "agents" => Some(Tool::Codex),
             "copilot" => Some(Tool::Copilot),
             "antigravity" => Some(Tool::Antigravity),
+            "pi" => Some(Tool::Pi),
+            "cursor" => Some(Tool::Cursor),
             _ => None,
         }
     }
@@ -49,6 +60,8 @@ impl Tool {
             Tool::Codex => "codex",
             Tool::Copilot => "copilot",
             Tool::Antigravity => "antigravity",
+            Tool::Pi => "pi",
+            Tool::Cursor => "cursor",
         }
     }
     /// Directory (relative to project root) that holds generated skill files.
@@ -58,19 +71,21 @@ impl Tool {
             Tool::Codex => ".agents/skills",
             Tool::Copilot => ".github/skills",
             Tool::Antigravity => ".agents/skills",
+            Tool::Pi => ".pi/skills",
+            Tool::Cursor => ".cursor/skills",
         }
     }
     /// Where the tool keeps plan-mode files ({{PLAN_DIR}}); empty when the tool has none.
     fn plan_dir(&self) -> &'static str {
         match self {
             Tool::Claude => "~/.claude/plans/",
-            Tool::Codex | Tool::Copilot | Tool::Antigravity => "",
+            Tool::Codex | Tool::Copilot | Tool::Antigravity | Tool::Pi | Tool::Cursor => "",
         }
     }
     /// The prefix that `/speclink:` becomes for this tool.
     fn slash_replacement(&self) -> &'static str {
         match self {
-            Tool::Claude | Tool::Copilot | Tool::Antigravity => "/speclink-",
+            Tool::Claude | Tool::Copilot | Tool::Antigravity | Tool::Pi | Tool::Cursor => "/speclink-",
             Tool::Codex => "$speclink-",
         }
     }
@@ -365,11 +380,101 @@ as argv.\n\n---\n\n"
     }
 }
 
+/// What a harness can do with the code. A harness with git but no checkout cannot be
+/// written down: git history comes with a checkout.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CodeAccess {
+    /// A checkout of the code and its git history.
+    #[default]
+    WithGit,
+    /// A copy of the code to read and search, with no git history and no way to run git.
+    WithoutGit,
+    /// No checkout of the code and no git history.
+    NoCheckout,
+}
+
+/// What the harness a skill is rendered for lacks. The default lacks nothing: every
+/// skill, and a checkout of the code with its git history — the files the CLI generates.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HarnessLimits {
+    /// The skills the harness provides, by registry name (`propose`); `None` is every
+    /// skill. [`render_skill_file_with_limits`] refuses a list it cannot write down.
+    pub skills: Option<Vec<String>>,
+    /// What the harness can do with the code.
+    pub code_access: CodeAccess,
+}
+
+/// A skill list [`render_skill_file_with_limits`] can write down for `rendered`: not empty,
+/// every name a registry skill, and the rendered skill among them. The error says which
+/// rule the list breaks.
+fn check_skill_list(skills: &[String], rendered: &str) -> Result<(), String> {
+    if skills.is_empty() {
+        return Err("skills must not be empty: list the skills the harness provides".to_string());
+    }
+    let registry = registry();
+    if let Some(unknown) = skills.iter().find(|name| !registry.iter().any(|s| s.name == name.as_str())) {
+        return Err(format!(
+            "skills: '{unknown}' is not a skill name: use a name of the skill registry, without the speclink- prefix (for example 'propose')"
+        ));
+    }
+    if !skills.iter().any(|name| name == rendered) {
+        return Err(format!("skills must include '{rendered}', the skill being rendered"));
+    }
+    Ok(())
+}
+
+/// The `## Harness limits` preamble: one item per limit, the skills first; `None` when
+/// `limits` lacks nothing. `skill_prefix` is what this target writes before a skill's name.
+fn harness_limits_note(limits: &HarnessLimits, skill_prefix: &str) -> Option<String> {
+    let mut items = Vec::new();
+    if let Some(names) = &limits.skills {
+        let list = registry()
+            .into_iter()
+            .filter(|s| names.iter().any(|n| n == s.name))
+            .map(|s| format!("`{skill_prefix}{}`", s.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        items.push(format!(
+            "- This harness provides only these skills: {list}. A skill that is not in this list \
+is not available here: do not load it, and do not tell the user to run it. When a step of this \
+document points to such a skill, tell the user that an engineer does that step in a checkout of the code."
+        ));
+    }
+    match limits.code_access {
+        CodeAccess::WithGit => {}
+        CodeAccess::WithoutGit => items.push(
+            "- This harness has a copy of the code that you can read and search, but it has no git \
+history and cannot run git. Skip every step of this document that runs a git command. When a step \
+names another way to get the same fact, use that way. In your answer, say which steps you skipped \
+for this reason."
+                .to_string(),
+        ),
+        CodeAccess::NoCheckout => items.push(
+            "- This harness has no checkout of the code and no git history. Skip every step of \
+this document that reads code files, searches the code, or runs a git command. Check facts only \
+with speclink verbs. In your answer, say which steps you skipped for this reason."
+                .to_string(),
+        ),
+    }
+    (!items.is_empty()).then(|| format!("## Harness limits\n\n{}\n\n---\n\n", items.join("\n")))
+}
+
 /// Render a complete SKILL.md (frontmatter + preamble + conversation-language paragraph +
 /// substituted body) for one target.
 /// The fork/agent and disallowedTools lines are Claude-only; descriptors get the neutral
 /// frontmatter plus an invocation preamble (frozen output shape).
 pub fn render_skill_file_for(target: RenderTarget, skill: &Skill, spec_dir: &str) -> String {
+    render_skill_file_with_limits(target, skill, spec_dir, &HarnessLimits::default())
+        .expect("the default limits have no skill list to refuse")
+}
+
+/// Render the same skill with the host's available skills and code access.
+pub fn render_skill_file_with_limits(
+    target: RenderTarget, skill: &Skill, spec_dir: &str, limits: &HarnessLimits,
+) -> Result<String, String> {
+    if let Some(list) = &limits.skills {
+        check_skill_list(list, skill.name)?;
+    }
     let claude = matches!(target, RenderTarget::Builtin(Tool::Claude));
     let subs = substitutions(target, spec_dir);
     let mut fm = String::from("---\n");
@@ -406,6 +511,13 @@ pub fn render_skill_file_for(target: RenderTarget, skill: &Skill, spec_dir: &str
         }
         RenderTarget::Custom(custom) => fm.push_str(invocation_note(custom.invocation)),
     }
+    let skill_prefix = match target {
+        RenderTarget::Builtin(_) => subs.slash_replacement,
+        RenderTarget::Custom(_) => "speclink-",
+    };
+    if let Some(note) = harness_limits_note(limits, skill_prefix) {
+        fm.push_str(&note);
+    }
     fm.push_str(subs.apply(CONVERSATION_LANGUAGE).trim_end());
     fm.push_str("\n\n");
     fm.push_str(&subs.apply(skill.body));
@@ -416,7 +528,7 @@ pub fn render_skill_file_for(target: RenderTarget, skill: &Skill, spec_dir: &str
     if !fm.ends_with('\n') {
         fm.push('\n');
     }
-    fm
+    Ok(fm)
 }
 
 #[cfg(test)]

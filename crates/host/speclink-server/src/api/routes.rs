@@ -7,6 +7,7 @@ use crate::error::ApiError;
 use crate::events::Subscription;
 use crate::state::AppState;
 use crate::verb;
+use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
 use axum::http::header::ETAG;
 use axum::http::{HeaderMap, StatusCode};
@@ -21,6 +22,7 @@ use speclink_core::instructions as engine;
 use speclink_core::listing::ListChangeJson;
 use speclink_core::status::StatusReport;
 use speclink_host::drift as host_drift;
+use speclink_host::transfer;
 use speclink_protocol::command::{
     AddDiscussionRoundRequest, AddDiscussionRoundResponse, AddReviewRoundRequest,
     AddReviewRoundResponse, ArchiveDiscussionResponse, ArchiveResponse, ArchivedDiscussion,
@@ -31,7 +33,7 @@ use speclink_protocol::command::{
     MoveTaskRequest, MoveTaskResponse, PromoteDiscussionRequest, PromoteDiscussionResponse,
     PutArtifactRequest, PutArtifactResponse, ReviewFindingDto, ReviewRoundDto, ReviewRulesDto,
     ReviewTicketResponse, SetDependsRequest, SetDependsResponse, SetDiscussionContextRequest,
-    SetSchemaRequest, SetSchemaResponse, StampReviewRequest, StampReviewResponse, TaskDoneRequest,
+    SetFieldsRequest, SetFieldsResponse, SetSchemaRequest, SetSchemaResponse, StampReviewRequest, StampReviewResponse, TaskDoneRequest,
     TaskDoneResponse, TaskUndoneResponse, UnlinkedDiscussion,
 };
 use speclink_protocol::drift::SpecDriftResponse;
@@ -42,7 +44,6 @@ use speclink_protocol::query::{
     ChangeEvidenceResponse, ChangeStatus,
     ChangeSummary, ConfigResponse, DependencyEntry, DiscussionCut, DiscussionHit, DiscussionInfo,
     DiscussionMatch,
-    ImportBundle, ImportDocumentId,
     ImportDocumentOutcome, ImportReportResponse, ImportedDocument, LanguageResponse,
     ListChangesResponse, ListDiscussionsResponse, ListSpecsResponse, PlanChangeEntry,
     PlanOverlap, PlanRequirementOverlap, PlanResponse, PlanSkipped, PlanUnpromotedCut, PlanWave,
@@ -199,7 +200,7 @@ pub async fn get_change(
     // （remote-read-parity「單 change 讀取回應攜帶 show 組合欄位」擴充）。
     let store = state.store.clone();
     let scope = verb::scope_of(&binding);
-    let (meta, delta_capabilities) =
+    let (meta, delta_capabilities, proposal, tasks) =
         tokio::task::spawn_blocking(move || -> Result<_, ApiError> {
             let snapshot = store.snapshot(&scope).map_err(ApiError::from)?;
             let meta = snapshot
@@ -211,11 +212,18 @@ pub async fn get_change(
                     speclink_core::model::ChangeMeta::from_text(Some(&doc.content)).ok()
                 });
             let prefix = "specs/";
-            let mut caps: Vec<String> = store
-                .export(&scope)
-                .map_err(ApiError::from)?
-                .documents
-                .iter()
+            let exported = store.export(&scope).map_err(ApiError::from)?;
+            let proposal = exported.documents.iter().find_map(|entry| match &entry.doc {
+                DocumentId::ChangeArtifact { change, artifact }
+                    if *change == name && artifact == "proposal.md" => Some(entry.content.clone()),
+                _ => None,
+            });
+            let tasks = exported.documents.iter().find_map(|entry| match &entry.doc {
+                DocumentId::ChangeArtifact { change, artifact }
+                    if *change == name && artifact == "tasks.md" => Some(entry.content.clone()),
+                _ => None,
+            });
+            let mut caps: Vec<String> = exported.documents.iter()
                 .filter_map(|entry| match &entry.doc {
                     DocumentId::ChangeArtifact { change, artifact } if *change == name => artifact
                         .strip_prefix(prefix)
@@ -226,7 +234,7 @@ pub async fn get_change(
                 })
                 .collect();
             caps.sort();
-            Ok((meta, caps))
+            Ok((meta, caps, proposal, tasks))
         })
         .await
         .map_err(|e| ApiError::internal(format!("blocking task failed: {e}")))??;
@@ -239,7 +247,24 @@ pub async fn get_change(
         dto.created_with = meta.created_with;
         dto.started_at = meta.started_at;
         dto.started_by = meta.started_by;
+        dto.created_by_id = meta.created_by_id;
+        dto.ready_at = meta.ready_at.clone();
         dto.claimed_by = meta.claimed_by;
+        dto.fields = meta.fields;
+        if let Some(tasks) = tasks.as_deref() {
+            let counts = speclink_core::tasks::counts(&speclink_core::tasks::parse(tasks));
+            dto.stage = Some(
+                speclink_core::model::stage_of(counts.complete, counts.total, dto.started_at.is_some())
+                    .as_str()
+                    .to_string(),
+            );
+            dto.ready_at = speclink_core::model::shown_ready_at(
+                dto.ready_at.as_deref(),
+                counts.complete,
+                counts.total,
+            );
+        }
+        dto.why_excerpt = proposal.as_deref().and_then(speclink_core::listing::why_excerpt);
     }
     dto.delta_capabilities = delta_capabilities;
     Ok(ok(dto, &result.etag))
@@ -445,6 +470,39 @@ pub async fn change_schema(
             &result.etag,
         )),
         _ => Err(wrong_outcome("change schema")),
+    }
+}
+
+/// `PUT /changes/{name}/fields`
+pub async fn set_change_fields(
+    State(state): State<AppState>,
+    binding: Binding,
+    Path((_key, name)): Path<(String, String)>,
+    Json(req): Json<SetFieldsRequest>,
+) -> Result<Response, ApiError> {
+    let command = Command::ChangeFieldsEdit { name, set: req.set, unset: req.unset };
+    edit_fields(&state, &binding, command).await
+}
+
+/// `PUT /discussions/{slug}/fields`
+pub async fn set_discussion_fields(
+    State(state): State<AppState>,
+    binding: Binding,
+    Path((_key, slug)): Path<(String, String)>,
+    Json(req): Json<SetFieldsRequest>,
+) -> Result<Response, ApiError> {
+    let command = Command::DiscussFieldsEdit { slug, set: req.set, unset: req.unset };
+    edit_fields(&state, &binding, command).await
+}
+
+async fn edit_fields(state: &AppState, binding: &Binding, command: Command) -> Result<Response, ApiError> {
+    let result = verb::run(state, binding, command).await?;
+    match result.execution.outcome {
+        CommandOutcome::ChangeFieldsEdit(outcome) | CommandOutcome::DiscussFieldsEdit(outcome) => Ok(ok(
+            SetFieldsResponse { fields: outcome.fields, changed: outcome.changed },
+            &result.etag,
+        )),
+        _ => Err(wrong_outcome("field edit")),
     }
 }
 
@@ -902,54 +960,65 @@ pub async fn put_board_order(
     Ok(ok(PutBoardOrderResponse { revision }, &etag))
 }
 
+/// `GET /export` — a format-2 bundle for one bound repository.
+pub async fn export_bundle(State(state): State<AppState>, binding: Binding) -> Result<Response, ApiError> {
+    if !binding.editor {
+        return Err(ApiError::forbidden("export requires the editor role"));
+    }
+    let scope = verb::scope_of(&binding);
+    let store = state.store.clone();
+    let bundle = tokio::task::spawn_blocking(move || store.export(&scope)).await
+        .map_err(|_| ApiError::internal("export worker failed"))??;
+    let version = bundle.project_revision.0;
+    let mut documents = bundle.documents.into_iter().map(|doc| {
+        let key = transfer::key_of_document(&transfer::legacy_document_id(doc.doc))
+            .ok_or_else(|| ApiError::internal("a stored document has no valid export key"))?;
+        Ok::<_, ApiError>(transfer::BundleDocument { key: key.as_str().to_owned(), content: doc.content, digest: doc.digest })
+    }).collect::<Result<Vec<_>, _>>()?;
+    documents.sort_unstable_by(|a, b| a.key.cmp(&b.key));
+    Ok(ok(transfer::ScopeBundle { format_version: transfer::FORMAT_VERSION, scope_version: Some(version), documents }, &format!("\"{version}\"")))
+}
+
 /// `POST /import` — local-to-remote migration into one empty bound scope.
 /// The wire has no operation selector; the handler always invokes CreateNew.
 pub async fn import_bundle(
     State(state): State<AppState>,
     binding: Binding,
-    Json(request): Json<ImportBundle>,
+    body: Bytes,
 ) -> Result<Response, ApiError> {
-    if request.format_version != BUNDLE_FORMAT_VERSION {
-        return Err(ApiError::refused(format!(
-            "unsupported bundle format version {} (supported: {})",
-            request.format_version, BUNDLE_FORMAT_VERSION
-        )));
-    }
-
     let scope = verb::scope_of(&binding);
-    if request.scope.project != scope.project.as_str() || request.scope.repo != scope.repo.as_str()
-    {
-        return Err(ApiError::refused(format!(
-            "bundle scope {}/{} does not match authenticated binding {}/{}",
-            request.scope.project,
-            request.scope.repo,
-            scope.project.as_str(),
-            scope.repo.as_str()
-        )));
-    }
-
-    let mut documents = Vec::with_capacity(request.documents.len());
-    for document in request.documents {
-        let actual_digest = content_digest(&document.content);
-        if actual_digest != document.digest {
-            return Err(ApiError::invalid_argument(format!(
-                "bundle digest mismatch for {:?}",
-                document.document
-            )));
+    let sent = transfer::read_bundle(&body).map_err(|error| match error {
+        transfer::UnreadBundle::NotJson(_) => ApiError::invalid_argument(error.to_string()),
+        transfer::UnreadBundle::UnknownVersion(_) => ApiError::refused(error.to_string()),
+        transfer::UnreadBundle::WrongShape(_) => ApiError::invalid_payload(error.to_string()),
+    })?;
+    let was_keyed = matches!(&sent, transfer::SentBundle::Keyed(_));
+    let (revision, documents) = match sent {
+        transfer::SentBundle::First(request) => {
+            if request.scope.project != scope.project.as_str() || request.scope.repo != scope.repo.as_str() {
+                return Err(ApiError::refused(format!(
+                    "bundle scope {}/{} does not match authenticated binding {}/{}",
+                    request.scope.project, request.scope.repo, scope.project.as_str(), scope.repo.as_str(),
+                )));
+            }
+            let documents = request.documents.into_iter().map(|document| {
+                if content_digest(&document.content) != document.digest {
+                    return Err(ApiError::invalid_argument(format!("bundle digest mismatch for {:?}", document.document)));
+                }
+                Ok(BundleDoc { doc: transfer::team_document_id(document.document), content: document.content, digest: document.digest })
+            }).collect::<Result<Vec<_>, _>>()?;
+            (Revision(request.project_revision), documents)
         }
-        documents.push(BundleDoc {
-            doc: import_document_id(document.document),
-            content: document.content,
-            digest: document.digest,
-        });
-    }
-
-    let bundle = Bundle {
-        format_version: request.format_version,
-        scope: scope.clone(),
-        project_revision: Revision(request.project_revision),
-        documents,
+        transfer::SentBundle::Keyed(bundle) => {
+            let documents = transfer::validate_keyed_bundle(bundle).map_err(|error| ApiError::invalid_argument(error.to_string()))?;
+            let documents = documents.into_iter().map(|(key, content)| {
+                let document = transfer::document_of_key(&key).expect("validated document key");
+                BundleDoc { doc: transfer::team_document_id(document), digest: content_digest(&content), content }
+            }).collect();
+            (Revision(0), documents)
+        }
     };
+    let bundle = Bundle { format_version: BUNDLE_FORMAT_VERSION, scope: scope.clone(), project_revision: revision, documents };
     let store = state.store.clone();
     let report = tokio::task::spawn_blocking(move || {
         store
@@ -960,6 +1029,10 @@ pub async fn import_bundle(
     .map_err(|error| ApiError::internal(format!("blocking task failed: {error}")))??;
 
     let project_revision = report.project_revision.0;
+    if was_keyed {
+        state.events.notify(&scope);
+        return Ok(ok(serde_json::json!({ "scopeVersion": project_revision, "documents": report.documents.len() }), &format!("\"{project_revision}\"")));
+    }
     let documents = report
         .documents
         .into_iter()
@@ -970,7 +1043,7 @@ pub async fn import_bundle(
                 ));
             }
             Ok(ImportedDocument {
-                document: store_document_id(document.doc),
+                document: speclink_host::transfer::legacy_document_id(document.doc),
                 outcome: ImportDocumentOutcome::Created,
             })
         })
@@ -992,46 +1065,6 @@ fn import_store_error(error: StoreError) -> ApiError {
             ApiError::refused(source)
         }
         other => ApiError::from(other),
-    }
-}
-
-fn import_document_id(document: ImportDocumentId) -> DocumentId {
-    match document {
-        ImportDocumentId::ChangeMeta { change } => DocumentId::ChangeMeta { change },
-        ImportDocumentId::ChangeArtifact { change, artifact } => {
-            DocumentId::ChangeArtifact { change, artifact }
-        }
-        ImportDocumentId::ChangeEvidence { change } => DocumentId::ChangeEvidence { change },
-        ImportDocumentId::CanonicalSpec { capability } => DocumentId::CanonicalSpec { capability },
-        ImportDocumentId::Discussion { slug, archived } => {
-            DocumentId::Discussion { slug, archived }
-        }
-        ImportDocumentId::WorkflowConfig => DocumentId::WorkflowConfig,
-        ImportDocumentId::ArchivedChange { change, doc } => {
-            DocumentId::ArchivedChange { change, doc }
-        }
-        ImportDocumentId::Language => DocumentId::Language,
-        ImportDocumentId::BoardOrder => DocumentId::BoardOrder,
-    }
-}
-
-fn store_document_id(document: DocumentId) -> ImportDocumentId {
-    match document {
-        DocumentId::ChangeMeta { change } => ImportDocumentId::ChangeMeta { change },
-        DocumentId::ChangeArtifact { change, artifact } => {
-            ImportDocumentId::ChangeArtifact { change, artifact }
-        }
-        DocumentId::ChangeEvidence { change } => ImportDocumentId::ChangeEvidence { change },
-        DocumentId::CanonicalSpec { capability } => ImportDocumentId::CanonicalSpec { capability },
-        DocumentId::Discussion { slug, archived } => {
-            ImportDocumentId::Discussion { slug, archived }
-        }
-        DocumentId::WorkflowConfig => ImportDocumentId::WorkflowConfig,
-        DocumentId::ArchivedChange { change, doc } => {
-            ImportDocumentId::ArchivedChange { change, doc }
-        }
-        DocumentId::Language => ImportDocumentId::Language,
-        DocumentId::BoardOrder => ImportDocumentId::BoardOrder,
     }
 }
 
@@ -1170,6 +1203,7 @@ pub async fn create_change(
             agent: req.agent,
             from_discussion: req.from_discussion,
             last: req.last,
+            fields: req.fields,
         },
     )
     .await?;
@@ -1216,6 +1250,7 @@ fn review_round_dto(r: &speclink_core::station::Round) -> ReviewRoundDto {
         index: r.index as u64,
         phase: r.phase.map(|p| p.as_str().to_string()),
         patch_hash: r.patch_hash.clone(),
+        model: r.model.clone(),
         rules: r.rules.as_ref().map(|rules| ReviewRulesDto {
             baseline: rules.baseline.as_str().to_string(),
             critical: rules.critical.clone(),
@@ -1663,6 +1698,7 @@ fn discussion_dto(info: EngineDiscussionInfo) -> DiscussionInfo {
         hold: Some(info.head.hold),
         path: info.path,
         archived: info.archived,
+        fields: info.fields,
     }
 }
 
@@ -1757,6 +1793,7 @@ pub async fn create_discussion(
             topic: req.topic,
             slug: req.slug,
             kind: req.kind,
+            fields: req.fields,
         },
     )
     .await
@@ -2012,6 +2049,7 @@ pub async fn promote_discussion(
             slug,
             name: req.name,
             last: req.last,
+            fields: req.fields,
         },
     )
     .await?;
@@ -2046,6 +2084,12 @@ fn change_summary(
         created: meta.and_then(|m| m.created.clone()),
         from_discussions: meta.map(|m| m.from_discussions()).unwrap_or_default(),
         delta_capabilities: change.delta_capabilities,
+        fields: change.fields,
+        why_excerpt: change.why_excerpt,
+        stage: change.stage.map(|stage| stage.as_str().to_string()),
+        created_by_id: change.created_by_id,
+        ready_at: change.ready_at,
+        landed_commit: meta.and_then(|m| m.landed_commit.clone()),
     }
 }
 
@@ -2067,6 +2111,7 @@ fn change_status(report: StatusReport) -> ChangeStatus {
             })
             .collect(),
         status_version: None,
+        fields: Default::default(),
         repo: None,
         lifecycle: None,
         claimed_by: None,
@@ -2077,6 +2122,11 @@ fn change_status(report: StatusReport) -> ChangeStatus {
         created_with: None,
         started_at: None,
         started_by: None,
+        created_by_id: None,
+        ready_at: None,
+        stage: None,
+        why_excerpt: None,
+        landed_commit: None,
     }
 }
 

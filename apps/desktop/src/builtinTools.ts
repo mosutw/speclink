@@ -4,6 +4,8 @@ const TOOL_ROOTS = {
   codex: ".agents",
   copilot: ".github",
   antigravity: ".agents",
+  pi: ".pi",
+  cursor: ".cursor",
 } as const;
 export type BuiltinTool = keyof typeof TOOL_ROOTS;
 export const BUILTIN_TOOLS = Object.keys(TOOL_ROOTS) as BuiltinTool[];

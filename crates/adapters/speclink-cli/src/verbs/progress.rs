@@ -1,176 +1,67 @@
 //! Work-progress verbs: task done/undone and the in-progress marker.
 //!
-//! Both are Dual and share the flip renderer, so the success line and the
-//! `--json` shape are written once and reused by the remote arm.
+//! Both are Dual and share the flip output (speclink-verbs' `render::progress`),
+//! so the success line and the `--json` shape are written once and reused by
+//! the remote arm.
 
 use anyhow::{bail, Result};
-use clap::{Args, Subcommand};
 use speclink_core as core;
 
-use crate::color;
-use crate::common::{open_project, run};
+use crate::common::{emit, open_project, plain_command, render_options, run};
 use crate::remote_base::{remote_resolve_change, RemoteCtx};
+use speclink_verbs::families::progress::{
+    InProgressArgs, InProgressCommands, TaskArgs, TaskCommands,
+};
+use speclink_verbs::render::progress::{self as render, FlippedTask, TaskFlip};
 
-#[derive(Args)]
-pub(crate) struct TaskArgs {
-    #[command(subcommand)]
-    command: TaskCommands,
-}
-#[derive(Subcommand)]
-enum TaskCommands {
-    /// Mark a task as done and record touched files
-    Done {
-        /// Task ID (1-based sequential index)
-        task_id: String,
-        /// Change name
-        #[arg(long)]
-        change: Option<String>,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// Mark a task as not done (pure state flip, no side effects)
-    Undone {
-        /// Task ID (1-based sequential index)
-        task_id: String,
-        /// Change name
-        #[arg(long)]
-        change: Option<String>,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
-    },
-}
-#[derive(Args)]
-pub(crate) struct InProgressArgs {
-    #[command(subcommand)]
-    command: InProgressCommands,
-}
-#[derive(Subcommand)]
-enum InProgressCommands {
-    /// Mark a change as in-progress
-    Add {
-        /// Change name
-        name: String,
-    },
-    /// Remove the in-progress marker — only when the change carries no work
-    /// traces (no checked tasks, no touched records); unknown names error
-    Remove {
-        /// Change name
-        name: String,
-    },
-}
 pub(crate) fn cmd_task(a: TaskArgs) -> Result<()> {
-    match a.command {
-        TaskCommands::Done { task_id, change, json } => {
-            let (ws, store) = open_project()?;
-            let o: core::command::TaskFlipOutcome = run(
-                &store,
-                Some(&ws),
-                core::command::Command::TaskDone { task_id: task_id.clone(), change, touched_files: None, head_commit: None },
-            )?;
-            render_task_flip(
-                TaskFlip::Done,
-                &o.change,
-                TaskIdentity { refused: &o.task_id.to_string(), arg: &o.task_id_arg },
-                &o.description,
-                o.already,
-                json,
-            )?;
-        }
-        TaskCommands::Undone { task_id, change, json } => {
-            let (ws, store) = open_project()?;
-            let o: core::command::TaskFlipOutcome = run(
-                &store,
-                Some(&ws),
-                core::command::Command::TaskUndone { task_id: task_id.clone(), change },
-            )?;
-            render_task_flip(
-                TaskFlip::Undone,
-                &o.change,
-                TaskIdentity { refused: &o.task_id.to_string(), arg: &o.task_id_arg },
-                &o.description,
-                o.already,
-                json,
-            )?;
-        }
-    }
+    let (flip, json) = match a.command {
+        TaskCommands::Done { json, .. } => (TaskFlip::Done, json),
+        TaskCommands::Undone { json, .. } => (TaskFlip::Undone, json),
+    };
+    let (ws, store) = open_project()?;
+    // fs mode gives no touched files: the engine probes this workspace itself.
+    let cmd = plain_command(&a)?;
+    let o: core::command::TaskFlipOutcome = run(&store, Some(&ws), cmd)?;
+    // `already` 維持現行錯誤結束（引擎已保證零檔案效果）：共用函式回傳那一句錯誤。
+    emit(render::task_flipped(flip, &o, render_options(json))?);
     Ok(())
 }
-/// `task done` 與 `task undone` 的輸出只差狀態字與動詞片語，共用一支渲染。
-#[derive(Clone, Copy)]
-enum TaskFlip {
-    Done,
-    Undone,
-}
-/// 同一個任務的兩種識別，具名綁在一起——兩個相鄰同型 `&str` 位置參數
-/// 寫反不會被編譯器擋，具名欄位會。
-struct TaskIdentity<'a> {
-    /// 拒絕訊息用的識別：fs 給引擎解析出的序號，remote 只有 argv。
-    refused: &'a str,
-    /// 原始 argv——stdout 的人眼行與 `--json` 都用它。
-    arg: &'a str,
-}
-impl TaskFlip {
-    /// 一次給齊三段文字：--json 的 status、已是該狀態時的拒絕片語、成功行的
-    /// 動詞片語——單一 match，不重複分派。
-    fn parts(self) -> (&'static str, &'static str, &'static str) {
-        match self {
-            TaskFlip::Done => ("done", "is already done", "marked as done"),
-            TaskFlip::Undone => ("undone", "is already not done", "marked as not done"),
-        }
-    }
-}
-/// `already` 維持現行錯誤結束（引擎已保證零檔案效果）。`--json` 是緊湊單行，
-/// 欄位順序凍結，兩種翻轉對稱。remote 只有 argv 一種識別，兩個欄位都餵它。
-fn render_task_flip(
+/// remote 的任務翻轉：remote 只有 argv 一種識別，拒絕訊息與 stdout 都用它。
+/// `already` 維持現行錯誤結束；其餘印出共用的輸出。
+fn emit_remote_task_flip(
     flip: TaskFlip,
     change: &str,
-    id: TaskIdentity<'_>,
-    description: &str,
+    task: RemoteTask<'_>,
     already: bool,
     json: bool,
 ) -> Result<()> {
-    let (status, already_phrase, verb_phrase) = flip.parts();
     if already {
-        bail!("Task {} {already_phrase}", id.refused);
+        bail!("{}", render::already_message(flip, task.id));
     }
-    if json {
-        let v = serde_json::json!({
-            "change": change,
-            "status": status,
-            "task_desc": description,
-            "task_id": id.arg,
-        });
-        println!("{}", serde_json::to_string(&v)?);
-        return Ok(());
-    }
-    println!("{} Task {} {verb_phrase}: {description}", color::green("✓"), id.arg);
+    emit(render::task_flip(
+        flip,
+        &FlippedTask { change, task_id: task.id, description: task.description },
+        render_options(json),
+    ));
     Ok(())
 }
-/// 實際移除與「本來就沒開工」印不同的行——引擎與 wire 都據實回報，渲染只讀事實。
-fn render_in_progress_remove(name: &str, removed: bool) {
-    if removed {
-        println!(
-            "{} Removed the in-progress marker from '{name}' — back to proposed",
-            color::green("✓")
-        );
-    } else {
-        println!("Change '{name}' has no in-progress marker — already proposed");
-    }
+/// remote 回應裡的一個任務：argv 給的識別與 server 回的描述，具名綁在一起——
+/// 兩個相鄰同型 `&str` 寫反不會被編譯器擋，具名欄位會。
+struct RemoteTask<'a> {
+    id: &'a str,
+    description: &'a str,
 }
 pub(crate) fn cmd_in_progress(a: InProgressArgs) -> Result<()> {
+    let (ws, store) = open_project()?;
+    let cmd = plain_command(&a)?;
     match a.command {
-        InProgressCommands::Add { name } => {
-            let (ws, store) = open_project()?;
-            let _: core::command::InProgressOutcome =
-                run(&store, Some(&ws), core::command::Command::InProgressAdd { name })?;
+        InProgressCommands::Add { .. } => {
+            let _: core::command::InProgressOutcome = run(&store, Some(&ws), cmd)?;
         }
-        InProgressCommands::Remove { name } => {
-            let (ws, store) = open_project()?;
-            let o: core::command::InProgressRemoveOutcome =
-                run(&store, Some(&ws), core::command::Command::InProgressRemove { name })?;
-            render_in_progress_remove(&o.name, o.removed);
+        InProgressCommands::Remove { .. } => {
+            let o: core::command::InProgressRemoveOutcome = run(&store, Some(&ws), cmd)?;
+            emit(render::in_progress_remove(&o.name, o.removed, render_options(false)));
         }
     }
     Ok(())
@@ -191,12 +82,10 @@ fn remote_task_done(
     let touched = core::tasks::git_changed_files(&ctx.ws);
     let head = core::tasks::head_commit(&ctx.ws.root);
     let resp = ctx.client.task_done(&change, task_id, &touched, head.as_deref())?;
-    // remote 只有 argv 一種識別，拒絕訊息與 stdout 兩處都餵它。
-    render_task_flip(
+    emit_remote_task_flip(
         TaskFlip::Done,
         &change,
-        TaskIdentity { refused: task_id, arg: task_id },
-        &resp.task_desc,
+        RemoteTask { id: task_id, description: &resp.task_desc },
         resp.already_done,
         json,
     )
@@ -211,11 +100,10 @@ fn remote_task_undone(
         return Ok(());
     };
     let resp = ctx.client.task_undone(&change, task_id)?;
-    render_task_flip(
+    emit_remote_task_flip(
         TaskFlip::Undone,
         &change,
-        TaskIdentity { refused: task_id, arg: task_id },
-        &resp.task_desc,
+        RemoteTask { id: task_id, description: &resp.task_desc },
         resp.already_undone,
         json,
     )
@@ -248,6 +136,6 @@ fn remote_in_progress_remove(ctx: &RemoteCtx, name: &str) -> Result<()> {
     // 裸 Ack 讀作已移除,即其原本的意思);守門 409 與 404 的 message 為引擎
     // 凍結文字,經 `?` 轉發後 stderr 與 fs 模式逐位元一致。
     let removed = ctx.client.in_progress_remove(name)?.removed;
-    render_in_progress_remove(name, removed);
+    emit(render::in_progress_remove(name, removed, render_options(false)));
     Ok(())
 }

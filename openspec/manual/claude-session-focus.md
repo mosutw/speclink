@@ -4,7 +4,7 @@ section: Claude Code
 order: 380
 keywords: ["Claude Code", "焦點", "對話標題", "clear", "resume", "worktree", "封存"]
 sources: ["claude-code-session-focus"]
-generated: 2026-11-07T21:34:37+08:00
+generated: 2026-11-27T19:52:25+08:00
 ---
 
 # Claude Code：目前工作與對話標題
@@ -18,8 +18,6 @@ generated: 2026-11-07T21:34:37+08:00
 一般聊天、面板開關與其他指令不會換步驟。在句子中問「幫我看 /speclink-apply 怎麼用」也不會。變更名稱以完整詞比對，不把檔名裡相似的片段當作變更。
 
 主代理呼叫技能時也會更新步驟；執行 Speclink 指令辨識出新變更時，技能列立即更新，對話標題等你下次送出訊息才跟上。子代理的操作不改主對話焦點。尚無焦點時，不加焦點文字，也不改標題。
-
-在 Herdr 裡確認目前變更時，Claude Code 會即時回報焦點，供 Herdr 面板與 Agent 清單顯示；切到沒有變更的技能時不沿用舊歸屬。沒有 Herdr 時，技能列與標題照常運作，不會自動安裝 Herdr 或寫入它的設定。
 
 ## 接回、worktree 與清空
 
@@ -37,5 +35,9 @@ generated: 2026-11-07T21:34:37+08:00
 > 重讀清單失敗時，介面也可能顯示 `✓`。這個記號不能單獨證明封存成功；請查看封存指令的結果與 [已封存清單](desktop-browse.md)。焦點介面不會替你重新封存或處理登入。
 
 步驟與變更名稱保留指令原文，不隨專案的產出語言翻譯。其他介面文字的語言規則見 [Claude Code：選擇技能](claude-skill-bar.md)。
+
+## Herdr 內即時回報
+
+在 Herdr 終端環境中，Claude Code 外掛確認當前變更後會即時更新 Herdr 的 `speclink.focus` 標籤，供[Herdr 面板](herdr.md)與 Agents 清單使用；沒有變更或切到非變更技能時不保留舊歸屬。此回報只在有 Herdr 環境時執行，一般 Claude Code 環境不建立外部設定檔也不受影響。
 
 **出處**：`claude-code-session-focus`

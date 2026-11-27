@@ -4,11 +4,12 @@
 //! 轉換失敗回 [`WrongOutcome`] 錯誤值，不 panic（design D2）。
 
 use super::{
-    CommandOutcome, DependsOutcome, DiscussArchiveOutcome, DiscussBindOutcome,
-    DiscussConcludeOutcome, DiscussPromoteOutcome, DiscussRoundOutcome, DiscussShowOutcome,
-    DiscussSubjectOutcome, InProgressOutcome, InProgressRemoveOutcome, InstructionsOutcome,
-    ListOutcome, NewArtifactOutcome, NewChangeOutcome, PlanReport, SchemaOutcome, ShowOutcome,
-    TaskFlipOutcome, ValidateOutcome,
+    ChangeLandedOutcome, CommandOutcome, DependsOutcome, DiscussArchiveOutcome,
+    DiscussBindOutcome, DiscussConcludeOutcome, DiscussPromoteOutcome, DiscussRestoreOutcome,
+    DiscussRoundOutcome, DiscussShowOutcome, DiscussSubjectOutcome, EvidenceShowOutcome,
+    FieldsOutcome, InProgressOutcome, InProgressRemoveOutcome, InstructionsOutcome, ListOutcome,
+    NewArtifactOutcome, NewChangeOutcome, PlanReport, SchemaOutcome, ShowOutcome, TaskFlipOutcome,
+    ValidateOutcome,
 };
 use crate::analyzer::AnalyzeReport;
 use crate::archive::ArchiveOutcome;
@@ -48,9 +49,11 @@ fn variant_name(o: &CommandOutcome) -> &'static str {
         CommandOutcome::Validate(_) => "Validate",
         CommandOutcome::Analyze(_) => "Analyze",
         CommandOutcome::Trace(_) => "Trace",
+        CommandOutcome::EvidenceShow(_) => "EvidenceShow",
         CommandOutcome::Plan(_) => "Plan",
         CommandOutcome::ArtifactCat(_) => "ArtifactCat",
         CommandOutcome::Language(_) => "Language",
+        CommandOutcome::LanguageReplaced => "LanguageReplaced",
         CommandOutcome::DiscussList(_) => "DiscussList",
         CommandOutcome::DiscussShow(_) => "DiscussShow",
         CommandOutcome::DiscussSearch(_) => "DiscussSearch",
@@ -60,10 +63,13 @@ fn variant_name(o: &CommandOutcome) -> &'static str {
         CommandOutcome::TaskUndone(_) => "TaskUndone",
         CommandOutcome::TaskMove(_) => "TaskMove",
         CommandOutcome::Claim(_) => "Claim",
+        CommandOutcome::ClaimRelease(_) => "ClaimRelease",
         CommandOutcome::InProgressAdd(_) => "InProgressAdd",
         CommandOutcome::InProgressRemove(_) => "InProgressRemove",
         CommandOutcome::ChangeDepends(_) => "ChangeDepends",
         CommandOutcome::ChangeSchema(_) => "ChangeSchema",
+        CommandOutcome::ChangeLanded(_) => "ChangeLanded",
+        CommandOutcome::ChangeFieldsEdit(_) => "ChangeFieldsEdit",
         CommandOutcome::Archive(_) => "Archive",
         CommandOutcome::Discard(_) => "Discard",
         CommandOutcome::DiscussNew(_) => "DiscussNew",
@@ -74,7 +80,9 @@ fn variant_name(o: &CommandOutcome) -> &'static str {
         CommandOutcome::DiscussLink(_) => "DiscussLink",
         CommandOutcome::DiscussSeal(_) => "DiscussSeal",
         CommandOutcome::DiscussArchive(_) => "DiscussArchive",
+        CommandOutcome::DiscussRestore(_) => "DiscussRestore",
         CommandOutcome::DiscussDiscard(_) => "DiscussDiscard",
+        CommandOutcome::DiscussFieldsEdit(_) => "DiscussFieldsEdit",
         CommandOutcome::ReviewAddRound(_) => "ReviewAddRound",
         CommandOutcome::ReviewShow(_) => "ReviewShow",
         CommandOutcome::ReviewStamp(_) => "ReviewStamp",
@@ -113,6 +121,7 @@ typed_outcomes! {
     ValidateOutcome => [Validate],
     AnalyzeReport => [Analyze],
     TraceReport => [Trace],
+    EvidenceShowOutcome => [EvidenceShow],
     PlanReport => [Plan],
     String => [ArtifactCat, Language],
     Vec<DiscussionInfo> => [DiscussList],
@@ -125,6 +134,8 @@ typed_outcomes! {
     InProgressRemoveOutcome => [InProgressRemove],
     DependsOutcome => [ChangeDepends],
     SchemaOutcome => [ChangeSchema],
+    ChangeLandedOutcome => [ChangeLanded],
+    FieldsOutcome => [ChangeFieldsEdit, DiscussFieldsEdit],
     ArchiveOutcome => [Archive],
     DiscardOutcome => [Discard],
     DiscussionInfo => [DiscussNew],
@@ -134,6 +145,21 @@ typed_outcomes! {
     DiscussPromoteOutcome => [DiscussPromote],
     DiscussBindOutcome => [DiscussLink, DiscussSeal],
     DiscussArchiveOutcome => [DiscussArchive],
+    DiscussRestoreOutcome => [DiscussRestore],
+}
+
+/// Typed outcome marker for [`CommandOutcome::LanguageReplaced`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LanguageReplaced;
+
+impl TryFrom<CommandOutcome> for LanguageReplaced {
+    type Error = WrongOutcome;
+    fn try_from(outcome: CommandOutcome) -> Result<Self, WrongOutcome> {
+        match outcome {
+            CommandOutcome::LanguageReplaced => Ok(Self),
+            other => Err(WrongOutcome { expected: "LanguageReplaced", actual: variant_name(&other) }),
+        }
+    }
 }
 
 #[cfg(test)]

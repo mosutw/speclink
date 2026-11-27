@@ -135,6 +135,22 @@ enum WorkflowConfigCommands {
         #[command(subcommand)]
         command: ReviewCommands,
     },
+    /// Set or clear subagent_model for a quality station and tool
+    #[command(name = "subagent-model")]
+    SubagentModel {
+        /// Quality station (review or verify)
+        #[arg(long)]
+        station: String,
+        /// Tool name (e.g. codex, claude)
+        #[arg(long)]
+        tool: String,
+        /// Model name (omit or empty to remove)
+        #[arg(long)]
+        model: Option<String>,
+        /// Print the unified diff instead of writing
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+    },
 }
 #[derive(Subcommand)]
 enum ReviewCommands {
@@ -325,6 +341,8 @@ struct WorkflowConfigJson {
     review: core::config::ReviewConfig,
     security_verification: core::security::policy::SecurityPolicy,
     check_records: core::config::CheckRecordsConfig,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    subagent_model: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
 }
 /// A write subcommand once argv and stdin are resolved — the shape both the fs
 /// and the remote branch hand to the shared rewrite.
@@ -336,6 +354,7 @@ enum WorkflowConfigWrite {
     ReviewBaseline(core::config::ReviewBaseline),
     Security(String),
     CheckRecords(String),
+    SubagentModel { station: String, tool: String, model: Option<String> },
 }
 /// The rewrite a write subcommand produces: the complete new document plus the
 /// line printed on a successful write.
@@ -368,6 +387,10 @@ fn workflow_config_fs(plan: WorkflowConfigPlan) -> Result<()> {
     let edit = plan_workflow_config_edit(&write, &original, &label, Some(&ws))?;
     if dry_run {
         print!("{}", unified_diff(&label, &original, &edit.new_text));
+        return Ok(());
+    }
+    if edit.new_text == original {
+        println!("{} {}", color::green("✓"), edit.summary);
         return Ok(());
     }
     // worktree 的寫入牽動技能足跡，故三步有序（design D2）：先擋、再寫、後同步。
@@ -492,6 +515,14 @@ fn workflow_config_write(
             ))
         }
         WorkflowConfigCommands::Review { command } => Some(review_write(command)?),
+        WorkflowConfigCommands::SubagentModel { station, tool, model, dry_run } => Some((
+            WorkflowConfigWrite::SubagentModel {
+                station: station.clone(),
+                tool: tool.clone(),
+                model: model.clone(),
+            },
+            *dry_run,
+        )),
     })
 }
 /// `review <list> --stdin` and `review baseline <mode>` resolved into a write.
@@ -536,6 +567,7 @@ fn print_workflow_config(original: &str, label: &str, json: bool) -> Result<()> 
             review: cfg.review(),
             security_verification: cfg.security(),
             check_records: cfg.check_records(),
+            subagent_model: cfg.subagent_model.clone(),
         });
     }
     println!("{} {label}", color::bold("Workflow config:"));
@@ -615,6 +647,26 @@ fn toggle_display(value: Option<bool>) -> &'static str {
         Some(false) | None => "unset (off)",
     }
 }
+/// Edit `subagent_model.<station>.<tool>` in `openspec/config.yaml` via the core
+/// surgical rewrite, preserving unrelated comments and formatting.
+fn patch_subagent_model(
+    original: &str,
+    station: &str,
+    tool: &str,
+    model: Option<&str>,
+) -> Result<WorkflowConfigEdit> {
+    let station_norm = station.trim();
+    let tool_norm = tool.trim();
+    let next_val = model.map(str::trim).filter(|m| !m.is_empty());
+    let summary = match next_val {
+        Some(m) => format!("subagent_model.{station_norm}.{tool_norm} = {m}"),
+        None => format!("subagent_model.{station_norm}.{tool_norm} removed"),
+    };
+    let new_text = core::config::update_subagent_model_text(original, station_norm, tool_norm, next_val)?
+        .unwrap_or_else(|| original.to_string());
+    Ok(WorkflowConfigEdit { new_text, summary })
+}
+
 /// Apply one write to `original` through the core rewrite seam — the single
 /// place fs and remote share, so their write semantics can never diverge.
 /// Fails closed on an unparseable document: the read-modify-write would
@@ -652,6 +704,9 @@ fn plan_workflow_config_edit(
                 new_text: core::security::policy::patch_workflow_check_records(original, body)?,
                 summary: "check_records updated".into(),
             });
+        }
+        WorkflowConfigWrite::SubagentModel { station, tool, model } => {
+            return patch_subagent_model(original, station, tool, model.as_deref());
         }
         WorkflowConfigWrite::Policy { key, value } => {
             set_policy_field(&mut fields, key, value)?;
