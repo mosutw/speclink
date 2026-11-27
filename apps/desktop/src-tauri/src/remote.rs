@@ -2070,6 +2070,11 @@ mod board_order_tests {
             created: None,
             from_discussions: Vec::new(),
             delta_capabilities: Vec::new(),
+            why_excerpt: None,
+            stage: None,
+            created_by_id: None,
+            ready_at: None,
+            landed_commit: None,
         }
     }
 

@@ -95,6 +95,11 @@ fn change_stage_matrix_follows_the_lifecycle_markers() {
             created: None,
             from_discussions: Vec::new(),
             delta_capabilities: Vec::new(),
+            why_excerpt: None,
+            stage: None,
+            created_by_id: None,
+            ready_at: None,
+            landed_commit: None,
         }
     }
     let cases: [(Option<&str>, usize, usize, u8); 7] = [
