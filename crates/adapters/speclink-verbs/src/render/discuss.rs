@@ -273,6 +273,15 @@ pub fn archive(slug: &str, archived_to: &str, options: RenderOptions) -> Rendere
     })
 }
 
+pub fn restored(o: &speclink_core::command::DiscussRestoreOutcome, options: RenderOptions) -> Rendered {
+    let json = json!({ "slug": o.slug, "restoredFrom": o.restored_from });
+    Rendered::of(options, Some(JsonForm::pretty(&json)), |paint| {
+        let mut t = Text::default();
+        outln!(t, "{} Restored discussion: {} (from {})", paint.green("✓"), o.slug, o.restored_from);
+        t
+    })
+}
+
 /// `discuss archive`, from the engine's result.
 pub fn archived(o: &DiscussArchiveOutcome, options: RenderOptions) -> Rendered {
     archive(&o.slug, &archived_to(&o.archived_file), options)

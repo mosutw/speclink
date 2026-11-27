@@ -2,7 +2,7 @@
 //! `change schema` and `change rank`.
 
 use serde_json::{json, Value};
-use speclink_core::command::{DependsOutcome, PlanReport, SchemaOutcome};
+use speclink_core::command::{ChangeLandedOutcome, DependsOutcome, PlanReport, SchemaOutcome};
 use speclink_core::plan::Side;
 
 use super::{JsonForm, Paint, RenderOptions, Rendered, Text};
@@ -187,6 +187,15 @@ pub fn rank_human(r: &Ranked<'_>, paint: &Paint) -> Text {
 
 pub fn rank(r: &Ranked<'_>, options: RenderOptions) -> Rendered {
     Rendered::of(options, Some(JsonForm::pretty(&rank_json(r))), |paint| rank_human(r, paint))
+}
+
+pub fn landed(o: &ChangeLandedOutcome, options: RenderOptions) -> Rendered {
+    let json = json!({ "change": o.name, "landedCommit": o.commit, "changed": o.changed });
+    Rendered::of(options, Some(JsonForm::pretty(&json)), |paint| {
+        let mut t = Text::default();
+        outln!(t, "{} {} landed at {}", paint.green("✓"), o.name, o.commit);
+        t
+    })
 }
 
 #[cfg(test)]

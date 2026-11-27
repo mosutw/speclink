@@ -49,6 +49,17 @@ pub enum ChangeCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Record the landing commit in a change's metadata
+    Landed {
+        /// Change name
+        name: String,
+        /// Landing commit SHA
+        #[arg(long)]
+        commit: String,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Move a change right before or after another change of its stage by rewriting its board rank
     #[command(group(clap::ArgGroup::new("side").required(true).args(["before", "after"])))]
     Rank {
@@ -93,6 +104,7 @@ impl ChangeVerbArgs {
         match &self.command {
             ChangeCommands::Depends { .. } => "change depends",
             ChangeCommands::Schema { .. } => "change schema",
+            ChangeCommands::Landed { .. } => "change landed",
             ChangeCommands::Rank { .. } => "change rank",
             ChangeCommands::Field(a) => a.name(FieldKind::Change),
         }
@@ -113,6 +125,9 @@ impl ToCommand for ChangeVerbArgs {
             }
             ChangeCommands::Schema { name, schema, .. } => {
                 CommandTarget::Command(Command::ChangeSchema { name: name.clone(), schema: schema.clone() })
+            }
+            ChangeCommands::Landed { name, commit, .. } => {
+                CommandTarget::Command(Command::ChangeLanded { name: name.clone(), commit: commit.clone() })
             }
             ChangeCommands::Rank { .. } => {
                 CommandTarget::LocalOnly { verb: self.name(), reason: LocalOnlyReason::NeedsCheckout }

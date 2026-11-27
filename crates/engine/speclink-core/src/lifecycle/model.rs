@@ -107,6 +107,9 @@ pub struct ChangeMeta {
     /// 歷次蓋章累加的驗證回合數；與 `reviewed_rounds` 同規則。
     #[serde(default)]
     pub verified_rounds: Option<u64>,
+    /// 落地 commit（`change landed` 寫入；upstream 0.20.0 station-status-and-landing）。
+    #[serde(default)]
+    pub landed_commit: Option<String>,
     /// 自由欄位（host-free-fields D2）：`fields` 區塊的內容，寬鬆讀取。不經 serde——
     /// 區塊裡不是純量的項目要略過而不是讓整份文件解析失敗，數字要照字面讀。引擎只存，
     /// 不依它做任何判斷。

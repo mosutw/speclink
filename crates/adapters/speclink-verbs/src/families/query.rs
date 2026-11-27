@@ -36,6 +36,9 @@ pub struct ShowArgs {
     /// Show requirements
     #[arg(short = 'r', long)]
     pub requirements: bool,
+    /// Include extended detail fields in JSON output
+    #[arg(long)]
+    pub detail: bool,
 }
 #[derive(Args, Debug)]
 pub struct StatusArgs {

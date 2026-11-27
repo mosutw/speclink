@@ -156,20 +156,43 @@ const home = process.env.HERDR_APP_HOME ?? path.join(homedir(), '.config/herdr-a
 const file = path.join(home, 'layouts', `${NAME}.json`);
 const herdr = (command, args) => execFileSync('herdr-app', ['do', command, JSON.stringify(args)], { stdio: 'pipe' });
 
-// 先改好再動任何東西：找不到要改的行時，現在的版面還完好。
+// 先完成相容性檢查；任何 clone 都必須完整套用，否則保留 Herdr 內建版。
+// HERDR_SPECLINK_STRICT=1 可恢復 spaces / agents 的嚴格檢查。
 for (const clone of CLONES) {
-  clone.source = readFileSync(path.join(home, 'mods', clone.mod, 'main.js'), 'utf8');
-  for (const [from, to] of clone.edits) {
-    if (clone.source.split(from).length !== 2) {
-      if (!clone.optional) throw new Error(`Herdr 的 ${clone.mod} mod 改了，找不到這一行，這支腳本要跟著改：${from}`);
-      console.warn(`Herdr 的 ${clone.mod} mod 改了，改用內建的。名稱剛好和介面文字相同時會被翻。找不到：${from}`);
-      clone.skip = true;
-      break;
+  try {
+    const original = readFileSync(path.join(home, 'mods', clone.mod, 'main.js'), 'utf8');
+    const crlf = original.includes('\r\n');
+    clone.source = original.replace(/\r\n/g, '\n');
+    for (const [from, to] of clone.edits) {
+      if (clone.source.split(from).length !== 2) {
+        // 容許 Spaces.init 的參數改名及空白差異，保留原本宣告。
+        if (clone.mod === 'spaces' && from.startsWith('export default class Spaces extends View')) {
+          const anchor = /export\s+default\s+class\s+Spaces\s+extends\s+View\s*\{\s*init\s*\(\s*[\w$]+\s*,\s*cx\s*\)\s*\{/g;
+          const matches = [...clone.source.matchAll(anchor)];
+          if (matches.length === 1) {
+            const extra = to.slice(from.length);
+            clone.source = clone.source.replace(anchor, (match) => match + extra);
+            continue;
+          }
+        }
+        throw new Error(`找不到唯一的替換位置：${from}`);
+      }
+      clone.source = clone.source.replace(from, () => to);
     }
-    clone.source = clone.source.replace(from, () => to);
+    for (const from of Object.values(clone.files)) {
+      if (!existsSync(integration(from))) throw new Error(`缺少整合檔案：${integration(from)}`);
+    }
+    if (crlf) clone.source = clone.source.replace(/\n/g, '\r\n');
+  } catch (error) {
+    if (!clone.optional && process.env.HERDR_SPECLINK_STRICT === '1') throw error;
+    clone.skip = true;
+    console.warn(`[SpecLink] ${clone.mod} 改用 Herdr 內建版：${error.message}`);
   }
 }
 const clones = CLONES.filter((clone) => !clone.skip);
+if (!existsSync(path.join(home, 'mods', NAME, 'main.js'))) {
+  throw new Error(`尚未安裝 SpecLink 主 mod：${path.join(home, 'mods', NAME, 'main.js')}。請先完成 SpecLink 主 mod 安裝。`);
+}
 
 // 版面裡指定 id 的區塊。
 function findBlock(node, id) {
@@ -204,7 +227,8 @@ for (const clone of clones) {
   for (const id of clone.blocks) {
     const block = findBlock(layout, id);
     if (block?.content?.mod !== clone.mod) {
-      throw new Error(`main 版面找不到 ${id} 區塊，這支腳本要跟著改`);
+      console.warn(`[SpecLink] main 版面找不到 ${id} 區塊，保留原版。`);
+      continue;
     }
     block.content.mod = clone.as;
   }
@@ -212,4 +236,5 @@ for (const clone of clones) {
 layout.children.push(PANEL);
 layout.floating = [...(layout.floating ?? []), COLUMN_SYNC];
 writeFileSync(file, `${JSON.stringify(layout, null, 2)}\n`);
-console.log(`已停靠：${file}`);
+herdr('layout.switch', { name: NAME });
+console.log(`已停靠並切換版面：${file}`);

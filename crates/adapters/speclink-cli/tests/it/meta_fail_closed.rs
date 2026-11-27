@@ -106,7 +106,7 @@ fn list_json_adds_meta_error_string_only_on_the_broken_item() {
     let keys: Vec<&str> = good.as_object().unwrap().keys().map(String::as_str).collect();
     assert_eq!(
         keys,
-        vec!["completedTasks", "name", "status", "summary", "totalTasks"],
+        vec!["completedTasks", "name", "stage", "status", "summary", "totalTasks", "whyExcerpt"],
         "valid item's field shape is unchanged (no metaError key)"
     );
 }

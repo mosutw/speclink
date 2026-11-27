@@ -4,6 +4,7 @@ mod no_process_env;
 mod render_golden;
 mod skill_authoring;
 mod skill_verbization;
+mod upstream_020_workflow_gap;
 
 /// Each line of `text` (newline included) with its byte offset, skipping fenced code
 /// blocks and their fence lines: the skill-source checks must not read code as prose or

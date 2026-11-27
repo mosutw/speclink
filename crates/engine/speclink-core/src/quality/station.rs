@@ -161,6 +161,7 @@ pub struct Round {
     pub index: usize,
     pub phase: Option<RoundPhase>,
     pub patch_hash: Option<String>,
+    pub model: Option<String>,
     pub rules: Option<ReviewConfig>,
     pub scope: Vec<String>,
     pub findings: Vec<Finding>,
@@ -172,7 +173,7 @@ impl Round {
     /// `phase`／`patchHash` 與沒有規則記錄的 `rules` 為明確 null。server 的
     /// `ReviewRoundDto` 是同形的型別化鏡射。
     pub fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut obj = serde_json::json!({
             "index": self.index,
             "phase": self.phase.map(|p| p.as_str()),
             "patchHash": self.patch_hash,
@@ -187,7 +188,11 @@ impl Round {
                     "text": f.text,
                 }))
                 .collect::<Vec<_>>(),
-        })
+        });
+        if let (Some(map), Some(model)) = (obj.as_object_mut(), &self.model) {
+            map.insert("model".into(), serde_json::Value::String(model.clone()));
+        }
+        obj
     }
 }
 
@@ -898,6 +903,7 @@ struct RoundBody {
     findings: Vec<Finding>,
     phase: Option<RoundPhase>,
     patch_hash: Option<String>,
+    model: Option<String>,
     rules: Option<ReviewConfig>,
 }
 
@@ -913,6 +919,7 @@ fn parse_round_body(st: &Station, content: &str) -> Result<RoundBody> {
     let mut findings = Vec::new();
     let mut phase: Option<RoundPhase> = None;
     let mut patch_hash: Option<String> = None;
+    let mut model: Option<String> = None;
     let mut baseline: Option<ReviewBaseline> = None;
     let mut rule_lines: Vec<(Severity, String)> = Vec::new();
     for line in content.lines() {
@@ -947,6 +954,15 @@ fn parse_round_body(st: &Station, content: &str) -> Result<RoundBody> {
                 bail!("multiple `**Patch**:` lines in one round");
             }
             patch_hash = Some(ensure_patch_hash(rest.trim())?);
+        } else if let Some(rest) = t.strip_prefix("**Model**:") {
+            if model.is_some() {
+                bail!("multiple `**Model**:` lines in one round");
+            }
+            let token = rest.trim();
+            if token.is_empty() {
+                bail!("`**Model**:` must not be empty");
+            }
+            model = Some(token.to_string());
         } else if let Some(rest) = t.strip_prefix("**Rules**:") {
             if baseline.is_some() {
                 bail!("multiple `**Rules**:` lines in one round — one applied-rules record per round");
@@ -975,7 +991,7 @@ fn parse_round_body(st: &Station, content: &str) -> Result<RoundBody> {
             st.meta_prefix
         );
     };
-    Ok(RoundBody { scope, findings, phase, patch_hash, rules })
+    Ok(RoundBody { scope, findings, phase, patch_hash, model, rules })
 }
 
 /// 組出一輪的套用規則記錄：`**Rule**:` 行需要同輪的 `**Rules**:`，帶
@@ -1085,6 +1101,7 @@ fn build_round(st: &Station, index: usize, body: &str) -> Result<Round> {
         index,
         phase: body.phase,
         patch_hash: body.patch_hash,
+        model: body.model,
         rules: body.rules,
         scope: body.scope,
         findings: body.findings,

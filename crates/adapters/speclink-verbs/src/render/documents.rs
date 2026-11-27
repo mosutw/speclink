@@ -14,6 +14,19 @@ pub fn document(content: &str, options: RenderOptions) -> Rendered {
     Rendered::of(options, None, |_| document_human(content))
 }
 
+/// Output of `language replace --stdin`.
+pub fn language_replaced(options: RenderOptions) -> Rendered {
+    Rendered::of(
+        options,
+        Some(super::JsonForm::pretty(&serde_json::json!({ "updated": true }))),
+        |paint| {
+            let mut t = Text::default();
+            outln!(t, "{} LANGUAGE updated.", paint.green("✓"));
+            t
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

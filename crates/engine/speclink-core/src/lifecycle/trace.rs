@@ -193,7 +193,7 @@ fn trace_source(block: &str) -> Option<String> {
 /// `.evidence.json` 的寬容讀取：v2 的 entries 優先、退回 v1 的 touched；
 /// 逐筆抽 (taskId, files)，缺欄的單筆略過而非整份作廢；整檔不可解析視同
 /// 無記錄（單環寬容）。
-fn parse_evidence(text: &str) -> Option<Vec<EvidenceTask>> {
+pub(crate) fn parse_evidence(text: &str) -> Option<Vec<EvidenceTask>> {
     let v: serde_json::Value = serde_json::from_str(text).ok()?;
     let channel = |key: &str, id_key: &str, files_key: &str| -> Vec<EvidenceTask> {
         let Some(arr) = v.get(key).and_then(|a| a.as_array()) else {

@@ -728,6 +728,17 @@ impl Store for BridgeStore {
         self.del(DocumentId::Discussion { slug: slug.to_string(), archived: false });
         Ok(Some(format!("{created}-{slug}.md")))
     }
+    fn restore_discussion(&self, slug: &str) -> anyhow::Result<Option<String>> {
+        let Some(doc) = self.read_discussion(slug) else {
+            return Ok(None);
+        };
+        if !doc.archived {
+            anyhow::bail!("discussion '{slug}' already exists");
+        }
+        self.put(DocumentId::Discussion { slug: slug.to_string(), archived: false }, doc.text);
+        self.del(DocumentId::Discussion { slug: slug.to_string(), archived: true });
+        Ok(Some(format!("{slug}.md")))
+    }
 
     // --- workflow config / shared vocabulary ---
 
@@ -739,6 +750,10 @@ impl Store for BridgeStore {
         // The scope's shared-vocabulary document; a missing LANGUAGE document is
         // a normal state, not an error.
         self.read_doc(&DocumentId::Language)
+    }
+    fn write_language(&self, content: &str) -> anyhow::Result<()> {
+        self.put(DocumentId::Language, content.to_string());
+        Ok(())
     }
 }
 

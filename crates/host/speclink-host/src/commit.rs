@@ -91,6 +91,9 @@ fn event_details(event: &DomainEvent) -> (serde_json::Value, chrono::DateTime<ch
         DomainEvent::ChangeClaimed { change, occurred_at } => {
             (json!({ "change": change }), *occurred_at)
         }
+        DomainEvent::ChangeClaimReleased { change, occurred_at } => {
+            (json!({ "change": change }), *occurred_at)
+        }
         DomainEvent::ChangeMarkedInProgress { change, occurred_at } => {
             (json!({ "change": change }), *occurred_at)
         }
@@ -102,6 +105,9 @@ fn event_details(event: &DomainEvent) -> (serde_json::Value, chrono::DateTime<ch
         }
         DomainEvent::ChangeSchemaChanged { change, schema, occurred_at } => {
             (json!({ "change": change, "schema": schema }), *occurred_at)
+        }
+        DomainEvent::ChangeLanded { change, commit, occurred_at } => {
+            (json!({ "change": change, "commit": commit }), *occurred_at)
         }
         DomainEvent::ChangeFieldsChanged { change, keys, occurred_at } => {
             (json!({ "change": change, "keys": keys }), *occurred_at)
@@ -139,6 +145,10 @@ fn event_details(event: &DomainEvent) -> (serde_json::Value, chrono::DateTime<ch
         DomainEvent::DiscussionArchived { slug, occurred_at } => {
             (json!({ "slug": slug }), *occurred_at)
         }
+        DomainEvent::DiscussionRestored { slug, occurred_at } => {
+            (json!({ "slug": slug }), *occurred_at)
+        }
+        DomainEvent::LanguageReplaced { occurred_at } => (json!({}), *occurred_at),
         DomainEvent::DiscussionDiscarded { slug, occurred_at } => {
             (json!({ "slug": slug }), *occurred_at)
         }

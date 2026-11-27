@@ -67,6 +67,8 @@ export interface SettingsSnapshot {
     context: string | null;
     /** 產出規則現值（依 artifact id 分組；條目順序即檔案順序）。 */
     rules: Record<string, string[]>;
+    /** 品質站模型覆寫現值（config.yaml 的 subagent_model.<station>.<tool>）。 */
+    subagentModel?: Record<string, Record<string, string>>;
     /** 審查規則現值（config.yaml 的 review）。 */
     review: ReviewRules;
     /** 預設清單的 12 個 smell 名稱——引擎單一提供，前端只顯示、不另存。 */
@@ -195,6 +197,8 @@ export function createWorkspaceSettings(
         ...(fields.securityPatch === undefined ? {} : { securityPatch: fields.securityPatch }),
           ...(fields.checkRecordsPatch === undefined ? {} : { checkRecordsPatch: fields.checkRecordsPatch }),
       }),
+    writeSubagentModel: (station, tool, model) =>
+      invoke("write_subagent_model", { root, station, tool, model }),
     writeWorkflowContext: (context) =>
       invoke("write_workflow_content", { root, context, rules: null }),
     writeWorkflowRules: (rules) => invoke("write_workflow_content", { root, context: null, rules }),

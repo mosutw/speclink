@@ -910,6 +910,31 @@ impl Store for PortView<'_> {
         self.del(source);
         Ok(Some(file))
     }
+    fn restore_discussion(&self, slug: &str) -> anyhow::Result<Option<String>> {
+        let target = keys::discussion(slug)?;
+        if self.content(&target).is_some() {
+            anyhow::bail!("discussion '{slug}' already exists");
+        }
+        let Some(archived) = self
+            .list_archived_discussions()
+            .into_iter()
+            .rfind(|d| d.slug == slug)
+        else {
+            return Ok(None);
+        };
+        let file = archived
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let src_key = DocKey::new(&format!("{}{file}", keys::ARCHIVED_DISCUSSIONS))?;
+        let Some(text) = self.content(&src_key) else {
+            return Ok(None);
+        };
+        self.put(target, text);
+        self.del(src_key);
+        Ok(Some(file))
+    }
 
     // --- workflow config / shared vocabulary ---
 
@@ -919,6 +944,10 @@ impl Store for PortView<'_> {
 
     fn read_language(&self) -> Option<String> {
         self.content(&keys::language())
+    }
+    fn write_language(&self, content: &str) -> anyhow::Result<()> {
+        self.put(keys::language(), content.to_string());
+        Ok(())
     }
 }
 
@@ -1549,6 +1578,14 @@ mod tests {
         );
     }
 
+    fn write_language() {
+        let port = fixture();
+        let view = PortView::new(&port, scope());
+        view.write_language("# Vocabulary v2\n").unwrap();
+        assert_eq!(view.read_language().as_deref(), Some("# Vocabulary v2\n"));
+        assert_eq!(staged(view).len(), 1);
+    }
+
     /// The staged operations of a view, one line each.
     fn staged(view: PortView) -> Vec<String> {
         view.into_ops()
@@ -1824,6 +1861,11 @@ mod tests {
             .read_discussion("board-search")
             .expect("the archived record");
         assert_eq!((moved.text.as_str(), moved.archived), ("live text", true));
+        let restored = view.restore_discussion("board-search").unwrap();
+        assert_eq!(restored.as_deref(), Some("2026-11-10-board-search.md"));
+        assert!(view.live_discussion_exists("board-search"));
+        assert!(!view.archived_discussion_exists("board-search"));
+        assert_eq!(view.read_live_discussion("board-search").as_deref(), Some("live text"));
         // A reused slug on the same day gets the next free `-N`.
         view.write_live_discussion("old-talk", "third").unwrap();
         assert_eq!(
@@ -1834,14 +1876,12 @@ mod tests {
         );
         assert!(view
             .archive_discussion("board-search", "not-a-date")
-            .unwrap()
-            .is_none());
+            .is_err());
         assert_eq!(
             staged(view),
             [
                 "put archive/discussions/2026-11-01-old-talk-3.md new \"third\"",
-                "put archive/discussions/2026-11-10-board-search.md new \"live text\"",
-                "delete discussions/board-search.md at 1",
+                "put discussions/board-search.md at 1 \"live text\"",
             ]
         );
     }
@@ -1940,6 +1980,7 @@ mod tests {
         ("write_live_discussion", write_live_discussion),
         ("delete_live_discussion", delete_live_discussion),
         ("archive_discussion", archive_discussion),
+        ("restore_discussion", archive_discussion),
         ("spec_dir_display", spec_dir_display),
         ("change_meta_display", change_meta_display),
         ("list_changes", list_changes),
@@ -1971,6 +2012,7 @@ mod tests {
         ("list_archived_discussions", list_archived_discussions),
         ("read_workflow_config", read_workflow_config),
         ("read_language", read_language),
+        ("write_language", write_language),
     ];
 
     #[test]

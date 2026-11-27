@@ -230,6 +230,67 @@
         "crates/protocol/speclink-protocol/src/events.rs",
         "crates/protocol/speclink-remote/tests/it/events_sse.rs"
       ]
+    },
+    {
+      "task_id": "9",
+      "task_desc": "4.1 建立流程回歸測試。先重現缺少就緒時間與工作樹讀取、自由欄位與追蹤操作、新增工具及遠端技能來源、品質模型與產出語言。範圍 crates/engine/speclink-core/、crates/adapters/speclink-cli/tests/。驗證：cargo test -p speclink-core 和 cargo test -p speclink-cli 可指出新增契約缺口，既有 golden 可辨識預期差異。",
+      "files": [
+        "crates/adapters/speclink-cli/tests/it/main.rs",
+        "crates/engine/speclink-core/tests/it/main.rs",
+        "scripts/herdr/dock-panel.mjs",
+        "crates/adapters/speclink-cli/tests/it/upstream_020_workflow_regression.rs",
+        "crates/engine/speclink-core/tests/it/upstream_020_workflow_gap.rs",
+        "scripts/herdr/dock-panel.mjs.20261127"
+      ]
+    },
+    {
+      "task_id": "10",
+      "task_desc": "4.2 接上生命週期資料。讓本機、遠端與宿主取得相同的詳細查詢、品質狀態、工單全文、已封存證據及時間資訊。寫入自由欄位、落地及就緒時間，補齊認領、討論還原、詞彙與遠端排序。範圍 crates/engine/、crates/host/、crates/protocol/、crates/adapters/。驗證：cargo test -p speclink-cli 的 local／remote 對照及 cargo test -p speclink-core 的 golden，斷言 whyExcerpt、stage、createdById、readyAt、modifiedAt、review、verify、promotedTo、landedCommit 的拼法、型別和缺席條件。",
+      "files": [
+        "crates/adapters/speclink-cli/src/verbs/mod.rs",
+        "crates/engine/speclink-core/src/lifecycle/trace.rs",
+        "crates/engine/speclink-core/src/store.rs",
+        "crates/engine/speclink-core/src/teststore.rs",
+        "crates/engine/speclink-fs/src/lib.rs",
+        "crates/adapters/speclink-cli/src/verbs/evidence.rs",
+        "crates/adapters/speclink-verbs/src/families/evidence.rs",
+        "crates/adapters/speclink-verbs/src/render/evidence.rs"
+      ]
+    },
+    {
+      "task_id": "11",
+      "task_desc": "4.3 接上政策與技能。加入 Pi／Cursor、模型選項、舊 schema 空值相容、spec_locale、遠端技能產物與語言回歸；同步 propose、ingest、quality 等技能並保留 fork 安全政策。範圍 crates/engine/speclink-core/、crates/adapters/speclink-cli/、crates/host/、apps/desktop/。驗證：cargo test -p speclink-core 與 cargo test -p speclink-cli，比對六種工具、tw／ja／en 與未設定、保留正式規格原名、設定重寫及舊語言 fallback。",
+      "files": [
+        "crates/adapters/speclink-cli/src/verbs/config.rs",
+        "crates/adapters/speclink-cli/src/verbs/init.rs",
+        "crates/engine/speclink-core/src/workspace/init.rs",
+        "crates/engine/speclink-core/src/workspace/init/tests.rs",
+        "crates/engine/speclink-core/src/workspace/instructions.rs"
+      ]
+    },
+    {
+      "task_id": "12",
+      "task_desc": "5.1 建立桌面與面板回歸測試。先重現看板日期、建立者與任務摘要、遠端專案狀態同步、工作標籤、分頁與等候原因、可見性、指令面板與詳情連結的缺口。範圍 apps/desktop/、packages/ui/、integrations/herdr/、scripts/herdr/。驗證：桌面和 UI 的 Vitest 及 Herdr 腳本測試能走到午夜、改名、失聯、終端機環境和窗體可見性分支，也涵蓋繼續本機分頁跨重啟。",
+      "files": [
+        "packages/ui/src/__tests__/time.test.ts",
+        "apps/desktop/src/__tests__/upstream020.test.ts",
+        "scripts/herdr/upstream-020-panel.test.mjs"
+      ]
+    },
+    {
+      "task_id": "13",
+      "task_desc": "5.2 接上桌面顯示與設定。看板、詳情和系統匣用共同的時間及狀態，新增 Pi／Cursor、品質模型與三語任務標記，保留 fork 的裝置排序、專案設定與安全歷史。範圍 apps/desktop/、packages/ui/。驗證：cargo test -p speclink-desktop-core、npm test -w @speclink/desktop 與 npm test -w @speclink/ui，涵蓋本地日期、缺欄位、遠端被收回後復原、並存專案分頁啟動及既有更新來源。",
+      "files": [
+        "apps/desktop/src/builtinTools.ts",
+        "packages/ui/src/time.ts"
+      ]
+    },
+    {
+      "task_id": "14",
+      "task_desc": "5.3 接上 Herdr 面板與 CLI 回報。沿用現有面板及工作樹流程，支援 hc run、Pi／Codex 等 agent、等待標籤、路徑開啟、看不見面板時停抓及回報 opt-out。範圍 integrations/herdr/、scripts/herdr/、crates/adapters/speclink-cli/。驗證：cargo test -p speclink-cli 和 node --test scripts/*.test.mjs scripts/*/*.test.mjs，在 fixture 模擬舊版、目前版與非 Herdr 終端，stdout 和退出碼不受回報影響。",
+      "files": [
+        "crates/adapters/speclink-cli/src/terminal_report.rs"
+      ]
     }
   ],
   "entries": [
@@ -485,6 +546,85 @@
         "crates/protocol/speclink-remote/tests/it/events_sse.rs"
       ],
       "recordedAt": "2026-11-26T21:42:36Z"
+    },
+    {
+      "taskId": "tsk_01M8C31J313ZH83TX1V9AFCNTF",
+      "taskDesc": "4.1 建立流程回歸測試。先重現缺少就緒時間與工作樹讀取、自由欄位與追蹤操作、新增工具及遠端技能來源、品質模型與產出語言。範圍 crates/engine/speclink-core/、crates/adapters/speclink-cli/tests/。驗證：cargo test -p speclink-core 和 cargo test -p speclink-cli 可指出新增契約缺口，既有 golden 可辨識預期差異。",
+      "repo": "main",
+      "headCommit": "e9f439be0996ee02c3c7d34cabbe10779fd9c01b",
+      "touchedFiles": [
+        "crates/adapters/speclink-cli/tests/it/main.rs",
+        "crates/engine/speclink-core/tests/it/main.rs",
+        "scripts/herdr/dock-panel.mjs",
+        "crates/adapters/speclink-cli/tests/it/upstream_020_workflow_regression.rs",
+        "crates/engine/speclink-core/tests/it/upstream_020_workflow_gap.rs",
+        "scripts/herdr/dock-panel.mjs.20261127"
+      ],
+      "recordedAt": "2026-11-27T00:30:34Z"
+    },
+    {
+      "taskId": "tsk_01M8C31J31YVF9E79ZY9K4GBF9",
+      "taskDesc": "4.2 接上生命週期資料。讓本機、遠端與宿主取得相同的詳細查詢、品質狀態、工單全文、已封存證據及時間資訊。寫入自由欄位、落地及就緒時間，補齊認領、討論還原、詞彙與遠端排序。範圍 crates/engine/、crates/host/、crates/protocol/、crates/adapters/。驗證：cargo test -p speclink-cli 的 local／remote 對照及 cargo test -p speclink-core 的 golden，斷言 whyExcerpt、stage、createdById、readyAt、modifiedAt、review、verify、promotedTo、landedCommit 的拼法、型別和缺席條件。",
+      "repo": "main",
+      "headCommit": "e9f439be0996ee02c3c7d34cabbe10779fd9c01b",
+      "touchedFiles": [
+        "crates/adapters/speclink-cli/src/verbs/mod.rs",
+        "crates/engine/speclink-core/src/lifecycle/trace.rs",
+        "crates/engine/speclink-core/src/store.rs",
+        "crates/engine/speclink-core/src/teststore.rs",
+        "crates/engine/speclink-fs/src/lib.rs",
+        "crates/adapters/speclink-cli/src/verbs/evidence.rs",
+        "crates/adapters/speclink-verbs/src/families/evidence.rs",
+        "crates/adapters/speclink-verbs/src/render/evidence.rs"
+      ],
+      "recordedAt": "2026-11-27T00:56:33Z"
+    },
+    {
+      "taskId": "tsk_01M8C31J31Y7H217B7QGD2REEB",
+      "taskDesc": "4.3 接上政策與技能。加入 Pi／Cursor、模型選項、舊 schema 空值相容、spec_locale、遠端技能產物與語言回歸；同步 propose、ingest、quality 等技能並保留 fork 安全政策。範圍 crates/engine/speclink-core/、crates/adapters/speclink-cli/、crates/host/、apps/desktop/。驗證：cargo test -p speclink-core 與 cargo test -p speclink-cli，比對六種工具、tw／ja／en 與未設定、保留正式規格原名、設定重寫及舊語言 fallback。",
+      "repo": "main",
+      "headCommit": "e9f439be0996ee02c3c7d34cabbe10779fd9c01b",
+      "touchedFiles": [
+        "crates/adapters/speclink-cli/src/verbs/config.rs",
+        "crates/adapters/speclink-cli/src/verbs/init.rs",
+        "crates/engine/speclink-core/src/workspace/init.rs",
+        "crates/engine/speclink-core/src/workspace/init/tests.rs",
+        "crates/engine/speclink-core/src/workspace/instructions.rs"
+      ],
+      "recordedAt": "2026-11-27T01:26:00Z"
+    },
+    {
+      "taskId": "tsk_01M8C31J3175D18WYXCAZ3QXEA",
+      "taskDesc": "5.1 建立桌面與面板回歸測試。先重現看板日期、建立者與任務摘要、遠端專案狀態同步、工作標籤、分頁與等候原因、可見性、指令面板與詳情連結的缺口。範圍 apps/desktop/、packages/ui/、integrations/herdr/、scripts/herdr/。驗證：桌面和 UI 的 Vitest 及 Herdr 腳本測試能走到午夜、改名、失聯、終端機環境和窗體可見性分支，也涵蓋繼續本機分頁跨重啟。",
+      "repo": "main",
+      "headCommit": "e9f439be0996ee02c3c7d34cabbe10779fd9c01b",
+      "touchedFiles": [
+        "packages/ui/src/__tests__/time.test.ts",
+        "apps/desktop/src/__tests__/upstream020.test.ts",
+        "scripts/herdr/upstream-020-panel.test.mjs"
+      ],
+      "recordedAt": "2026-11-27T01:31:15Z"
+    },
+    {
+      "taskId": "tsk_01M8C31J31CN94Y3TV3PGBCE0P",
+      "taskDesc": "5.2 接上桌面顯示與設定。看板、詳情和系統匣用共同的時間及狀態，新增 Pi／Cursor、品質模型與三語任務標記，保留 fork 的裝置排序、專案設定與安全歷史。範圍 apps/desktop/、packages/ui/。驗證：cargo test -p speclink-desktop-core、npm test -w @speclink/desktop 與 npm test -w @speclink/ui，涵蓋本地日期、缺欄位、遠端被收回後復原、並存專案分頁啟動及既有更新來源。",
+      "repo": "main",
+      "headCommit": "e9f439be0996ee02c3c7d34cabbe10779fd9c01b",
+      "touchedFiles": [
+        "apps/desktop/src/builtinTools.ts",
+        "packages/ui/src/time.ts"
+      ],
+      "recordedAt": "2026-11-27T01:33:30Z"
+    },
+    {
+      "taskId": "tsk_01M8C31J318W8XZZKMCJQQN3WA",
+      "taskDesc": "5.3 接上 Herdr 面板與 CLI 回報。沿用現有面板及工作樹流程，支援 hc run、Pi／Codex 等 agent、等待標籤、路徑開啟、看不見面板時停抓及回報 opt-out。範圍 integrations/herdr/、scripts/herdr/、crates/adapters/speclink-cli/。驗證：cargo test -p speclink-cli 和 node --test scripts/*.test.mjs scripts/*/*.test.mjs，在 fixture 模擬舊版、目前版與非 Herdr 終端，stdout 和退出碼不受回報影響。",
+      "repo": "main",
+      "headCommit": "e9f439be0996ee02c3c7d34cabbe10779fd9c01b",
+      "touchedFiles": [
+        "crates/adapters/speclink-cli/src/terminal_report.rs"
+      ],
+      "recordedAt": "2026-11-27T01:39:37Z"
     }
   ]
 }

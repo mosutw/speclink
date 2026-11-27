@@ -38,6 +38,10 @@ pub(crate) fn remote_ctx() -> Result<Option<RemoteCtx>> {
     let Some(ws) = core::workspace::Workspace::discover_cwd()? else {
         return Ok(None);
     };
+    remote_ctx_for(ws)
+}
+
+pub(crate) fn remote_ctx_for(ws: core::workspace::Workspace) -> Result<Option<RemoteCtx>> {
     let resolution = speclink_host::context::resolve_store_mode(&ws)?;
     let conn = match resolution.mode {
         core::workspace::StoreMode::Fs => return Ok(None),

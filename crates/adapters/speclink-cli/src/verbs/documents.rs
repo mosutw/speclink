@@ -5,7 +5,7 @@
 
 use anyhow::{bail, Result};
 
-use crate::common::{emit, open_project, plain_command, render_options, run};
+use crate::common::{emit, open_project, render_options, run, stdin_for};
 use crate::remote_base::{remote_resolve_change, RemoteCtx};
 use speclink_verbs::families::documents::{
     ArtifactArgs, ArtifactCommands, LanguageArgs, LanguageCommands,
@@ -30,11 +30,35 @@ fn artifact_rel_path(artifact: &str) -> Result<String> {
         },
     }
 }
-/// The fs arm of both verbs: run the read and print the document as-is.
-pub(crate) fn cmd_document(a: impl ToCommand) -> Result<()> {
+/// The fs arm of `artifact cat`: run the verb and emit its rendered output.
+pub(crate) fn cmd_artifact(a: ArtifactArgs) -> Result<()> {
     let (ws, store) = open_project()?;
-    let content: String = run(&store, Some(&ws), plain_command(&a)?)?;
+    let target = a.to_command(speclink_verbs::VerbInputs::default())?;
+    let speclink_verbs::CommandTarget::Command(cmd) = target else {
+        anyhow::bail!("unexpected local-only command");
+    };
+    let content: String = run(&store, Some(&ws), cmd)?;
     emit(render::document(&content, render_options(false)));
+    Ok(())
+}
+
+/// The fs arm of `language`: run the verb and emit its rendered output.
+pub(crate) fn cmd_language(a: LanguageArgs) -> Result<()> {
+    let (ws, store) = open_project()?;
+    let stdin = stdin_for(a.stdin_policy());
+    let json = matches!(a.command, LanguageCommands::Replace { json: true, .. });
+    let is_replace = matches!(a.command, LanguageCommands::Replace { .. });
+    let target = a.to_command(speclink_verbs::VerbInputs { stdin, ..Default::default() })?;
+    let speclink_verbs::CommandTarget::Command(cmd) = target else {
+        anyhow::bail!("unexpected local-only command");
+    };
+    if is_replace {
+        let _: speclink_core::command::LanguageReplaced = run(&store, Some(&ws), cmd)?;
+        emit(render::language_replaced(render_options(json)));
+    } else {
+        let content: String = run(&store, Some(&ws), cmd)?;
+        emit(render::document(&content, render_options(json)));
+    }
     Ok(())
 }
 /// artifact 的 remote 家族臂：子指令 enum 窮盡 match、無 catch-all——新增
@@ -52,6 +76,9 @@ pub(crate) fn remote_language(ctx: &RemoteCtx, a: LanguageArgs) -> Result<()> {
         LanguageCommands::Show => {
             emit(render::document(&ctx.client.language()?.content, render_options(false)));
             Ok(())
+        }
+        LanguageCommands::Replace { .. } => {
+            bail!("language replace is not yet supported in remote mode")
         }
     }
 }

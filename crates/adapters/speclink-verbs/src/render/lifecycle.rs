@@ -73,6 +73,15 @@ pub fn archive_summary(change: &str, capabilities: &[&str], options: RenderOptio
     Rendered::of(options, None, |paint| archive_summary_human(change, capabilities, paint))
 }
 
+pub fn claim_released(change: &str, options: RenderOptions) -> Rendered {
+    let json = json!({ "change": change, "claimed": false });
+    Rendered::of(options, Some(JsonForm::pretty(&json)), |paint| {
+        let mut t = Text::default();
+        outln!(t, "{} Released claim: {change}", paint.green("✓"));
+        t
+    })
+}
+
 /// `discard --json`: the change and the discussions it was unlinked from,
 /// each `(slug, status after the unlink)`.
 pub fn discard_json(change: &str, unlinked: &[(String, String)]) -> Value {

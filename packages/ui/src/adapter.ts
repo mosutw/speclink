@@ -26,6 +26,10 @@ export interface ChangeItem {
   claimedBy?: string | null;
   /** 建立者（"Name <email>"）——卡片首字母圓標頭像的資料源；缺席時省略。 */
   createdBy?: string | null;
+  /** 建立者穩定識別（同人改名不裂分、同名不同人不合併）。 */
+  createdById?: string | null;
+  /** 就緒日期（全數任務完成時寫入，未全勾完時後端隱藏）；缺席時不顯示。 */
+  readyAt?: string | null;
   /** 建立日期（.openspec.yaml 的 created，YYYY-MM-DD）——建立時間篩選的資料源；缺席時省略。 */
   created?: string | null;
   /** 來源討論 slug 清單（由討論轉出／併入的 change，第一個為出身討論）；空/缺席＝非討論而來。 */
@@ -112,6 +116,8 @@ export interface ChangeMetaInfo {
   schema?: string | null;
   created?: string | null;
   createdBy?: string | null;
+  createdById?: string | null;
+  readyAt?: string | null;
   createdWith?: string | null;
   fromDiscussions?: string[];
   startedAt?: string | null;
@@ -216,6 +222,7 @@ export interface DiscussionItem {
   created: string;
   /** 建立者（"Name <email>"）——discuss new 由 git 身分蓋章；缺席時省略。 */
   createdBy?: string | null;
+  createdById?: string | null;
   /** 討論型別（目前唯一值 "improve"）——一般討論缺席；標示隨此欄恆定。 */
   kind?: string | null;
   /** 轉出（扇出）的 change 名累積清單；未轉出為空陣列。 */

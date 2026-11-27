@@ -15,6 +15,7 @@ use std::path::PathBuf;
 #[derive(Default)]
 pub(crate) struct TestStore {
     pub workflow_config: RefCell<Option<String>>,
+    pub language: RefCell<Option<String>>,
     /// Active change name → raw `.meta.yaml` text.
     pub metas: RefCell<HashMap<String, String>>,
     /// (change, artifact rel path) → content.
@@ -404,11 +405,22 @@ impl Store for TestStore {
         self.archived_discussions.borrow_mut().insert(slug.to_string(), text);
         Ok(Some(format!("{created}-{slug}.md")))
     }
+    fn restore_discussion(&self, slug: &str) -> Result<Option<String>> {
+        let Some(text) = self.archived_discussions.borrow_mut().remove(slug) else {
+            return Ok(None);
+        };
+        self.discussions.borrow_mut().insert(slug.to_string(), text);
+        Ok(Some(format!("{slug}.md")))
+    }
     fn read_workflow_config(&self) -> Option<String> {
         self.workflow_config.borrow().clone()
     }
     fn read_language(&self) -> Option<String> {
-        None
+        self.language.borrow().clone()
+    }
+    fn write_language(&self, content: &str) -> Result<()> {
+        *self.language.borrow_mut() = Some(content.to_string());
+        Ok(())
     }
 }
 

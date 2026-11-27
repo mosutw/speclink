@@ -816,6 +816,25 @@ async fn write_workflow_config(
     .map_err(|e| format!("write_workflow_config worker failed: {e}"))?
 }
 
+#[tauri::command]
+async fn write_subagent_model(
+    root: PathBuf,
+    station: String,
+    tool: String,
+    model: Option<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        speclink_desktop_core::settings::write_subagent_model_at(
+            &root,
+            &station,
+            &tool,
+            model.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| format!("write_subagent_model worker failed: {e}"))?
+}
+
 /// 產出流程快照（desktop-schema-panel design D2）：root 有值＝local 三層組裝；
 /// 缺席＝remote 模式，desktop core 以內嵌內建組裝（不打 server、不讀本機層）。
 #[tauri::command]
@@ -2253,6 +2272,7 @@ pub fn run() {
             write_app_tools,
             convert_spec_dir_to_speclink,
             write_workflow_config,
+            write_subagent_model,
             write_workflow_content,
             read_schemas,
             write_workflow_schema,

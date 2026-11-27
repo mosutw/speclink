@@ -323,6 +323,8 @@ pub struct ArchivedItem {
     pub created_by_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ready_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub landed_commit: Option<String>,
 }
 
 /// `GET /search` response.
@@ -392,6 +394,8 @@ pub struct ChangeSummary {
     pub created_by_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ready_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub landed_commit: Option<String>,
 }
 
 /// `GET /changes/{name}` response — the fs `StatusReport` shape plus the
@@ -441,6 +445,8 @@ pub struct ChangeStatus {
     pub stage: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub why_excerpt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub landed_commit: Option<String>,
 }
 
 /// One artifact's status inside [`ChangeStatus`].

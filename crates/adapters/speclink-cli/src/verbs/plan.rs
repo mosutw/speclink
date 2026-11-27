@@ -52,6 +52,13 @@ pub(crate) fn cmd_change(a: ChangeVerbArgs) -> Result<()> {
             let o: core::command::SchemaOutcome = run(&store, Some(&home), cmd)?;
             emit(render::schema(&o, render_options(*json)));
         }
+        ChangeCommands::Landed { name, json, .. } => {
+            let (ws, fs_store) = open_project()?;
+            let home = home_store_for(&ws, &worktree_facts(&ws, &fs_store), name);
+            let cmd = plain_command(&a)?;
+            let o: core::command::ChangeLandedOutcome = run(&home, Some(&ws), cmd)?;
+            emit(render::landed(&o, render_options(*json)));
+        }
         ChangeCommands::Field(field) => {
             let (ws, store) = open_project()?;
             let home = home_store_for(&ws, &worktree_facts(&ws, &store), field.subject());
@@ -122,6 +129,9 @@ pub(crate) fn remote_change(ctx: &RemoteCtx, a: ChangeVerbArgs) -> Result<()> {
                 verify_stamp_cleared: w.verify_stamp_cleared,
             };
             emit(render::schema(&o, render_options(json)));
+        }
+        ChangeCommands::Landed { .. } => {
+            anyhow::bail!("change landed is not yet supported in remote mode")
         }
         ChangeCommands::Field(field) => {
             let edit = field.edit()?;

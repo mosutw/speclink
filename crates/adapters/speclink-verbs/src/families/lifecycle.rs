@@ -63,6 +63,12 @@ pub struct DiscardArgs {
 pub struct ClaimArgs {
     /// Change name
     pub name: String,
+    /// Release the current claim instead of claiming
+    #[arg(long)]
+    pub release: bool,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 impl ArchiveArgs {
@@ -104,7 +110,11 @@ impl ToCommand for DiscardArgs {
 
 impl ToCommand for ClaimArgs {
     fn to_command(&self, _inputs: VerbInputs) -> Result<CommandTarget, CommandError> {
-        Ok(CommandTarget::Command(Command::Claim { name: self.name.clone() }))
+        Ok(CommandTarget::Command(if self.release {
+            Command::ClaimRelease { name: self.name.clone() }
+        } else {
+            Command::Claim { name: self.name.clone() }
+        }))
     }
 }
 

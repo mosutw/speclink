@@ -51,6 +51,7 @@ macro_rules! errln {
 pub mod checks;
 pub mod discuss;
 pub mod documents;
+pub mod evidence;
 pub mod fields;
 pub mod instructions;
 pub mod lifecycle;
@@ -184,8 +185,10 @@ pub fn render(
         O::Validate(o) => checks::validate(&o.results, options),
         O::Analyze(o) => checks::analyze(o, options),
         O::Trace(o) => trace::trace(o, options),
+        O::EvidenceShow(o) => evidence::show(o, options),
         O::Plan(o) => plan::plan(o, options),
         O::ArtifactCat(content) | O::Language(content) => documents::document(content, options),
+        O::LanguageReplaced => documents::language_replaced(options),
         O::DiscussList(items) => {
             let archived =
                 matches!(discuss_command(verb), Some(DiscussCommands::List { archived: true, .. }));
@@ -219,6 +222,7 @@ pub fn render(
         // No verb text reaches a task move, and it has no output.
         O::TaskMove(_) => Rendered::default(),
         O::Claim(o) => lifecycle::claim(&o.name, options),
+        O::ClaimRelease(o) => lifecycle::claim_released(&o.name, options),
         // `in-progress add` prints nothing.
         O::InProgressAdd(_) => Rendered::default(),
         O::InProgressRemove(o) => progress::in_progress_remove(&o.name, o.removed, options),
@@ -230,6 +234,7 @@ pub fn render(
             plan::depends_declared(o, on, remove, options)
         }
         O::ChangeSchema(o) => plan::schema(o, options),
+        O::ChangeLanded(o) => plan::landed(o, options),
         O::ChangeFieldsEdit(o) => fields::edited(fields::FieldKind::Change, o, options),
         O::Archive(o) => lifecycle::archive(o, options),
         O::Discard(o) => lifecycle::discard(&o.change_name, &o.unlinked_discussions, options),
@@ -250,6 +255,7 @@ pub fn render(
         O::DiscussLink(o) => discuss::bind(discuss::DiscussBind::Link, &o.slug, &o.change, options),
         O::DiscussSeal(o) => discuss::bind(discuss::DiscussBind::Seal, &o.slug, &o.change, options),
         O::DiscussArchive(o) => discuss::archived(o, options),
+        O::DiscussRestore(o) => discuss::restored(o, options),
         O::DiscussDiscard(o) => discuss::discard(&o.slug, options),
         O::DiscussFieldsEdit(o) => fields::edited(fields::FieldKind::Discussion, o, options),
         O::ReviewAddRound(o) => {
@@ -350,9 +356,14 @@ mod tests {
             CommandOutcome::VerifyDiscard(_) => 41,
             CommandOutcome::ChangeFieldsEdit(_) => 42,
             CommandOutcome::DiscussFieldsEdit(_) => 43,
+            CommandOutcome::EvidenceShow(_) => 44,
+            CommandOutcome::ClaimRelease(_) => 45,
+            CommandOutcome::ChangeLanded(_) => 46,
+            CommandOutcome::DiscussRestore(_) => 47,
+            CommandOutcome::LanguageReplaced => 48,
         }
     }
-    const RESULT_TYPES: usize = 44;
+    const RESULT_TYPES: usize = 49;
 
     fn s(text: &str) -> String {
         text.to_string()
@@ -686,6 +697,51 @@ mod tests {
                 }),
                 true,
                 "✓ t: unset owner\n",
+            ),
+            (
+                &["evidence", "show", "c"],
+                O::EvidenceShow(cmd::EvidenceShowOutcome {
+                    change: s("c"),
+                    archived: false,
+                    tasks: Vec::new(),
+                }),
+                true,
+                "Evidence: c\n  (none)\n",
+            ),
+            (
+                &["claim", "c", "--release"],
+                O::ClaimRelease(cmd::ClaimOutcome {
+                    name: s("c"),
+                    claimed_by: None,
+                    claimed: true,
+                }),
+                true,
+                "✓ Released claim: c\n",
+            ),
+            (
+                &["change", "landed", "c", "--commit", "abc1234"],
+                O::ChangeLanded(cmd::ChangeLandedOutcome {
+                    name: s("c"),
+                    commit: s("abc1234"),
+                    changed: true,
+                }),
+                true,
+                "✓ c landed at abc1234\n",
+            ),
+            (
+                &["discuss", "restore", "t"],
+                O::DiscussRestore(cmd::DiscussRestoreOutcome {
+                    slug: s("t"),
+                    restored_from: s("2026-01-01-t.md"),
+                }),
+                true,
+                "✓ Restored discussion: t (from 2026-01-01-t.md)\n",
+            ),
+            (
+                &["language", "replace", "--stdin"],
+                O::LanguageReplaced,
+                true,
+                "✓ LANGUAGE updated.\n",
             ),
         ]
     }

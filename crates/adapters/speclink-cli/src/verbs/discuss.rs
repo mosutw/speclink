@@ -61,6 +61,10 @@ pub(crate) fn cmd_discuss(a: DiscussArgs) -> Result<()> {
             let o: core::command::DiscussArchiveOutcome = run(&store, Some(&ws), cmd)?;
             emit(render::archived(&o, render_options(json)));
         }
+        DiscussCommands::Restore { json, .. } => {
+            let o: core::command::DiscussRestoreOutcome = run(&store, Some(&ws), cmd)?;
+            emit(render::restored(&o, render_options(json)));
+        }
         DiscussCommands::Discard { json, .. } => {
             let o: core::command::DiscussSubjectOutcome = run(&store, Some(&ws), cmd)?;
             emit(render::discard(&o.slug, render_options(json)));
@@ -173,6 +177,9 @@ pub(crate) fn remote_discuss(ctx: &RemoteCtx, a: DiscussArgs) -> Result<()> {
         DiscussCommands::Archive { slug, json } => {
             let archived_to = ctx.client.discussion_archive(&slug)?.archived_to;
             emit(render::archive(&slug, &archived_to, render_options(json)));
+        }
+        DiscussCommands::Restore { .. } => {
+            anyhow::bail!("discuss restore is not yet supported in remote mode")
         }
         DiscussCommands::Promote { slug, name, last, json } => {
             let change = ctx.client.discussion_promote(&slug, name.as_deref(), last)?.change;

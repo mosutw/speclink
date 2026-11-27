@@ -1991,3 +1991,38 @@ fn every_block_write_on_a_crlf_document_keeps_crlf_line_endings() {
     let out = update_workflow_config_text(doc, &wf_fields_of(doc), &edit).expect("rewrite ok");
     assert_eq!(wf(&out).context.as_deref(), Some("line one\nline two\n"), "CRLF in a block scalar reads back as LF");
 }
+
+#[test]
+fn update_subagent_model_text_preserves_comments_and_handles_noop_and_removal() {
+    let initial = "# header comment\nschema: spec-driven\nlocale: tw\n";
+    let updated = update_subagent_model_text(initial, "review", "codex", Some("o3"))
+        .expect("set ok")
+        .expect("changed");
+    assert!(updated.contains("# header comment\n"));
+    assert_eq!(
+        wf(&updated).subagent_model.get("review").and_then(|m| m.get("codex")).map(String::as_str),
+        Some("o3")
+    );
+
+    // 相同值應為 no-op（Ok(None)）
+    let noop = update_subagent_model_text(&updated, "review", "codex", Some("o3")).expect("noop ok");
+    assert!(noop.is_none(), "no-op update must return None");
+
+    // 移除不存在的鍵也應為 Ok(None)
+    let noop_rm = update_subagent_model_text(initial, "review", "codex", None).expect("noop rm ok");
+    assert!(noop_rm.is_none());
+
+    // 移除現有鍵並保留其餘內容與註解
+    let removed = update_subagent_model_text(&updated, "review", "codex", None)
+        .expect("remove ok")
+        .expect("removed");
+    assert!(removed.contains("# header comment\n"));
+    assert!(wf(&removed).subagent_model.is_empty());
+
+    // 清除非字串值（例如先前手寫的數字）也應成功移除
+    let numeric = "schema: spec-driven\nsubagent_model:\n  review:\n    codex: 123\n";
+    let removed_num = update_subagent_model_text(numeric, "review", "codex", None)
+        .expect("remove numeric ok")
+        .expect("removed numeric");
+    assert!(wf(&removed_num).subagent_model.is_empty());
+}

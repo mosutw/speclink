@@ -1181,6 +1181,19 @@ pub fn archive_discussion(store: &dyn Store, slug: &str) -> Result<Option<String
     store.archive_discussion(slug, &created)
 }
 
+/// Restore an archived discussion back to live storage. Refuses when a live
+/// discussion with the same slug already exists, and returns `Ok(None)` when
+/// no archived record exists for `slug`.
+pub fn restore_discussion(store: &dyn Store, slug: &str) -> Result<Option<String>> {
+    if store.live_discussion_exists(slug) {
+        return Err(crate::command::Refusal(format!(
+            "discussion '{slug}' already exists as a live discussion"
+        ))
+        .into());
+    }
+    store.restore_discussion(slug)
+}
+
 /// Delete a live discussion outright — the exit for a record that turned out not to be
 /// needed. Refuses once rounds exist (unless `force`): a discussion that examined real
 /// trade-offs should keep its reasoning via `conclude` + `archive` instead.

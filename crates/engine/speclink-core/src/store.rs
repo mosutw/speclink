@@ -224,6 +224,11 @@ pub trait Store {
     /// A name collision (same day, reused slug) must be resolved by the
     /// implementation, never an error.
     fn archive_discussion(&self, slug: &str, created: &str) -> Result<Option<String>>;
+    /// Restore the newest archived discussion for `slug` back to live storage.
+    /// Returns the archived filename/key that was restored, or None when absent.
+    fn restore_discussion(&self, _slug: &str) -> Result<Option<String>> {
+        anyhow::bail!("restore_discussion is not supported on this store")
+    }
 
     // --- workflow config ---
 
@@ -235,4 +240,8 @@ pub trait Store {
     /// The project's LANGUAGE document (shared vocabulary), or None when the
     /// project has none — a missing vocabulary is a normal state, not an error.
     fn read_language(&self) -> Option<String>;
+    /// Write (create or replace) the project's LANGUAGE document.
+    fn write_language(&self, _content: &str) -> Result<()> {
+        anyhow::bail!("write_language is not supported on this store")
+    }
 }

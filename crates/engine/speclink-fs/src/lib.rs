@@ -588,6 +588,29 @@ impl Store for FsStore {
         std::fs::rename(&src, dir.join(&name))?;
         Ok(Some(name))
     }
+    fn restore_discussion(&self, slug: &str) -> Result<Option<String>> {
+        let live = self.layout.live_discussion(slug);
+        if live.exists() {
+            anyhow::bail!("discussion '{slug}' already exists");
+        }
+        let Some(archived) = self
+            .list_archived_discussions()
+            .into_iter()
+            .rfind(|d| d.slug == slug)
+        else {
+            return Ok(None);
+        };
+        if let Some(parent) = live.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let src = archived.path;
+        let name = src
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("{slug}.md"));
+        std::fs::rename(&src, &live)?;
+        Ok(Some(name))
+    }
 
     // --- workflow config ---
 
@@ -599,5 +622,9 @@ impl Store for FsStore {
 
     fn read_language(&self) -> Option<String> {
         util::read_opt(&self.layout.language_doc())
+    }
+    fn write_language(&self, content: &str) -> Result<()> {
+        util::write_file(&self.layout.language_doc(), content)?;
+        Ok(())
     }
 }

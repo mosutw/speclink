@@ -4,7 +4,7 @@ section: 開始使用
 order: 30
 keywords: [init, update, 工作區, 技能檔, 指令檔, 過期, 降級, skills_dir, init --force, Copilot, Antigravity]
 sources: [workspace-tools, skill-routing]
-generated: 2026-10-29T05:54:00+08:00
+generated: 2026-11-27T15:40:30+08:00
 ---
 
 # 建立工作區與指令檔
@@ -50,20 +50,22 @@ speclink init --tools claude,codex,copilot,antigravity
 - `.speclink.yaml`：專案根的設定檔，記錄你選的工具。
 - `openspec/`：規格、變更與討論的資料夾。細節見[認識資料：變更、討論與規格](data-layout.md)。
 - `.gitignore` 的 `.speclink/` 條目：`.speclink/` 是工作資料夾，不進版控。
-- 技能檔：Claude 放在 `.claude/skills/`，Codex 放在 `.agents/skills/`，Copilot 放在 `.github/skills/`，Antigravity 放在 `.agent/skills/`。每個技能一個資料夾，名稱以 `speclink-` 開頭。
+- 技能檔：Claude 放在 `.claude/skills/`，Codex 與 Antigravity 共用 `.agents/skills/`（不再於 `.agent/skills/` 生成新技能），Copilot 放在 `.github/skills/`。每個技能一個資料夾，名稱以 `speclink-` 開頭。
 
-init 不會產生 `CLAUDE.md`、`AGENTS.md` 或 `.github/copilot-instructions.md`。它也不會碰 AI 工具的使用者設定檔，例如 `.claude/settings.json`。
+init 不會產生 `CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 或 `.github/copilot-instructions.md`。它也不會碰 AI 工具的使用者設定檔，例如 `.claude/settings.json`。
 
-### 三個內建工具的技能檔差在哪
+### 四個內建工具的技能檔差在哪
 
 | 工具 | 技能資料夾 | 技能裡互相引用的寫法 | 有沒有 analyze 技能 |
 | --- | --- | --- | --- |
 | Claude | `.claude/skills/` | `/speclink-apply` | 有 |
 | Codex | `.agents/skills/` | `$speclink-apply` | 沒有 |
 | Copilot | `.github/skills/` | `/speclink-apply` | 沒有 |
-| Antigravity | `.agent/skills/` | `/speclink-apply` | 沒有 |
+| Antigravity | `.agents/skills/` | `/speclink-apply` | 沒有 |
 
-Copilot 拿到的技能組合與 Codex 相同：Claude 有的技能，除了 analyze 以外都有（兩個 worktree 技能一樣只在政策開啟時產生）。兩者的技能內容除了叫用前綴與工具名以外逐字相同。Copilot 的技能在建立變更與蓋章時，記下的工具名是 copilot。
+Copilot 與 Codex、Antigravity 拿到的技能組合相同：Claude 有的技能，除了 analyze 以外都有（兩個 worktree 技能一樣只在政策開啟時產生）。Codex 與 Antigravity 共用 `.agents/skills/` 下的同一份技能內容（同時含兩工具的呼叫寫法與身分說明）；只取消其中一個而另一個仍選取時會保留共用技能，兩者都取消才會清理。Copilot 的技能在建立變更與蓋章時，記下的工具名是 copilot。
+
+若專案原本有舊版 Antigravity 目錄 `.agent/skills/`，執行 `speclink update` 或桌面工具同步時會先驗證設定並將共用技能完整生成到 `.agents/skills/` 後，才清理 `.agent/skills/` 內的舊受管 `speclink-*` 資料夾，同時保留你自己的技能與規則。
 
 在 `.github/` 底下，選 Copilot 只會動到 `.github/skills/`。Speclink 不建立、不改寫、也不剝除 `.github/copilot-instructions.md`，`.github/` 底下的其他檔案（例如 CI 設定）一律不碰。`.speclink.yaml` 沒有工具清單時，引擎會依資料夾裡的工具痕跡決定產生哪些技能，但不會因為專案裡有 `.github/` 或 `.github/skills/` 就推斷你用 Copilot。
 
@@ -143,7 +145,7 @@ speclink update --allow-downgrade
 
 ## 自訂 AI 工具
 
-除了三個內建工具，你可以在 `.speclink.yaml` 的 tools 清單裡加自訂描述子，讓其他 AI 工具也拿到技能檔。描述子的欄位：
+除了四個內建工具，你可以在 `.speclink.yaml` 的 tools 清單裡加自訂描述子，讓其他 AI 工具也拿到技能檔。描述子的欄位：
 
 - name（必填）：kebab-case，2 到 50 字，不能與內建工具同名：claude、codex、copilot，以及 codex 的別名 agents 都不行。
 - skills_dir（必填）：專案根相對路徑，不能逸出專案根。結尾的 `/` 會被削掉，之後所有地方（技能生成、足跡記錄、過期探測回報的路徑）都用削掉後的形式。

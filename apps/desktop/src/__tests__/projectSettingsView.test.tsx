@@ -2183,3 +2183,20 @@ it("AI 工具名稱顯示技能目錄，Antigravity 儲存純工具名", async (
  fireEvent.click(screen.getByTestId("save-app"));
  await waitFor(()=>expect(ws.writeAppTools).toHaveBeenCalledWith(["claude","antigravity"]));
 });
+
+it("產出流程頁可顯示、儲存與清除 subagent_model", async () => {
+ const writeSubagentModel = vi.fn().mockResolvedValue(undefined);
+ const ws = {
+  ...fakeSettings(projectSnap({ subagentModel: { review: { codex: "o3" } } })),
+  writeSubagentModel,
+ };
+ render(<Harness settings={ws} initial="workflow" />);
+ expect(await screen.findByText("review.codex = o3")).toBeTruthy();
+
+ fireEvent.change(screen.getByLabelText("模型"), { target: { value: "gpt-5" } });
+ fireEvent.click(screen.getByTestId("save-subagent-model"));
+ await waitFor(() => expect(writeSubagentModel).toHaveBeenCalledWith("review", "codex", "gpt-5"));
+
+ fireEvent.click(screen.getByTestId("clear-subagent-model-review-codex"));
+ await waitFor(() => expect(writeSubagentModel).toHaveBeenCalledWith("review", "codex", null));
+});

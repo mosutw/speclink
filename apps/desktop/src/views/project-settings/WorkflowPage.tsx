@@ -51,6 +51,9 @@ export function WorkflowPage({ ps }: { ps: ProjectSettingsState }) {
   const { t } = useI18n();
   const [data, setData] = useState<StandardDataList | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [modelStation, setModelStation] = useState<"review" | "verify">("review");
+  const [modelTool, setModelTool] = useState<string>("codex");
+  const [modelInput, setModelInput] = useState<string>("");
   useEffect(() => {
     if (!ps.security.enabled || ps.settings.securityReview===false) return;
     let active = true;
@@ -403,6 +406,78 @@ export function WorkflowPage({ ps }: { ps: ProjectSettingsState }) {
           </div>
         </SettingsCard>
       </div>
+
+      {!isRemote && ps.settings.writeSubagentModel && (
+        <div data-testid="subagent-model-card">
+          <SettingsCard title={t("settings.subagentModelCard")} description={t("settings.subagentModelHelp")}>
+            <div className="flex flex-col gap-3 p-4">
+              {Object.entries(snap.workflow.subagentModel ?? {}).map(([st, tools]) =>
+                Object.entries(tools).map(([toolName, modelName]) => (
+                  <div key={`${st}.${toolName}`} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-mono">
+                      {st}.{toolName} = {modelName}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={wfDisabled}
+                      data-testid={`clear-subagent-model-${st}-${toolName}`}
+                      onClick={() => void ps.saveSubagentModel(st, toolName, null)}
+                    >
+                      {t("settings.subagentModelClear")}
+                    </Button>
+                  </div>
+                )),
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={modelStation} onValueChange={(v) => setModelStation(v as "review" | "verify")}>
+                  <SelectTrigger className="w-28" aria-label={t("settings.subagentModelStation")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="review">review</SelectItem>
+                    <SelectItem value="verify">verify</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={modelTool} onValueChange={setModelTool}>
+                  <SelectTrigger className="w-36" aria-label={t("settings.subagentModelTool")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["claude", "codex", "copilot", "antigravity", "pi", "cursor"].map((toolName) => (
+                      <SelectItem key={toolName} value={toolName}>{toolName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  className="min-w-48 flex-1"
+                  aria-label={t("settings.subagentModelValue")}
+                  placeholder={t("settings.subagentModelPlaceholder")}
+                  disabled={wfDisabled}
+                  value={modelInput}
+                  onChange={(e) => setModelInput(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  data-testid="save-subagent-model"
+                  disabled={wfDisabled}
+                  onClick={() => {
+                    const trimmed = modelInput.trim();
+                    void ps.saveSubagentModel(modelStation, modelTool, trimmed === "" ? null : trimmed);
+                  }}
+                >
+                  {t("settings.save")}
+                </Button>
+              </div>
+              {ps.subagentModelMsg && (
+                <p className="text-xs text-muted-foreground" role="status">{ps.subagentModelMsg}</p>
+              )}
+            </div>
+          </SettingsCard>
+        </div>
+      )}
 
       {/* 刪除確認（D7；沿變更刪除的確認框模式） */}
       <ConfirmDialog

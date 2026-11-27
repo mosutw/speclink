@@ -285,7 +285,15 @@ audit checklist (fetch it with `speclink instructions --skill audit`).",
         context: wf.context_text(),
         rules: wf.rules_for(&artifact.id),
         security_verification: Some(security_verification),
-        locale: policy.locale,
+        locale: if artifact.id == "specs" {
+            if let Some(spec_lang) = policy.spec_locale.as_deref() {
+                crate::config::locale_display(Some(spec_lang)).to_string()
+            } else {
+                policy.locale
+            }
+        } else {
+            policy.locale
+        },
         // The payload template is looked up in the BUILT-IN schema matching the yaml display
         // name — never in the custom templates/ file (which only
         // `new artifact` reads). A custom display name therefore yields an empty template.

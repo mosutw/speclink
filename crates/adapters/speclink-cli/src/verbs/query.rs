@@ -45,9 +45,11 @@ fn remote_list_outcome(
     Ok(core::command::ListOutcome { changes, specs })
 }
 pub(crate) fn cmd_show(a: ShowArgs) -> Result<()> {
-    let (ws, store) = open_project()?;
+    let (ws, fs_store) = open_project()?;
+    let (facts, overlaid) = worktree_overlay(&ws, &fs_store);
     let cmd = plain_command(&a)?;
-    let show: core::command::ShowOutcome = run(&store, Some(&ws), cmd)?;
+    let show: core::command::ShowOutcome =
+        run(if facts.is_empty() { &fs_store } else { &overlaid }, Some(&ws), cmd)?;
     emit(render::show(&show, render_options(a.json)));
     Ok(())
 }
@@ -233,6 +235,7 @@ fn remote_show_outcome(
         ready_at,
         stage: Some(stage),
         why_excerpt,
+        landed_commit: status.landed_commit,
     }))
 }
 

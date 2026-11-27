@@ -15,6 +15,7 @@ pub trait ToCommand {
 pub mod checks;
 pub mod discuss;
 pub mod documents;
+pub mod evidence;
 pub mod fields;
 pub mod instructions;
 pub mod lifecycle;
@@ -42,6 +43,8 @@ pub enum SpecVerb {
     Drift(checks::ChangeArg),
     /// Trace a capability's provenance chain (archived changes, discussions, evidence)
     Trace(trace::TraceArgs),
+    /// Read recorded task evidence for a change
+    Evidence(evidence::EvidenceArgs),
     /// Show the execution order of active changes (waves, blockers, next)
     Plan(plan::PlanArgs),
     /// Change metadata operations (declared prerequisites)
@@ -85,6 +88,7 @@ impl SpecVerb {
             SpecVerb::Analyze(_) => "analyze",
             SpecVerb::Drift(_) => "drift",
             SpecVerb::Trace(_) => "trace",
+            SpecVerb::Evidence(a) => a.name(),
             SpecVerb::Plan(_) => "plan",
             SpecVerb::Change(a) => a.name(),
             SpecVerb::Archive(_) => "archive",
@@ -112,17 +116,18 @@ impl SpecVerb {
             | SpecVerb::Analyze(_)
             | SpecVerb::Drift(_)
             | SpecVerb::Trace(_)
+            | SpecVerb::Evidence(_)
             | SpecVerb::Plan(_)
             | SpecVerb::Change(_)
             | SpecVerb::Archive(_)
             | SpecVerb::Discard(_)
             | SpecVerb::Claim(_)
             | SpecVerb::Artifact(_)
-            | SpecVerb::Language(_)
             | SpecVerb::Status(_)
             | SpecVerb::Instructions(_)
             | SpecVerb::Task(_)
             | SpecVerb::InProgress(_) => StdinPolicy::Never,
+            SpecVerb::Language(a) => a.stdin_policy(),
             SpecVerb::New(a) => a.stdin_policy(),
             SpecVerb::Discuss(a) => a.stdin_policy(),
             SpecVerb::Review(a) => a.stdin_policy(),
@@ -145,6 +150,7 @@ impl ToCommand for SpecVerb {
                 Ok(CommandTarget::LocalOnly { verb: self.name(), reason: LocalOnlyReason::NeedsCheckout })
             }
             SpecVerb::Trace(a) => a.to_command(inputs),
+            SpecVerb::Evidence(a) => a.to_command(inputs),
             SpecVerb::Plan(a) => a.to_command(inputs),
             SpecVerb::Change(a) => a.to_command(inputs),
             SpecVerb::Archive(a) => a.to_command(inputs),

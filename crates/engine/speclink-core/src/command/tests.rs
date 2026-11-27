@@ -2080,10 +2080,12 @@ fn command_inputs_carry_no_actor_or_policy_fields() {
         Command::Validate { item: _, all: _, changes: _, specs: _, strict: _ } => {}
         Command::Analyze { change: _ } => {}
         Command::Trace { capability: _ } => {}
+        Command::EvidenceShow { change: _ } => {}
         Command::Plan { ranks: _ } => {}
         Command::PlanStrict => {}
         Command::ArtifactCat { artifact: _, change: _ } => {}
         Command::LanguageShow => {}
+        Command::LanguageReplace { content: _ } => {}
         Command::DiscussList { archived: _ } => {}
         Command::DiscussShow { slug: _ } => {}
         Command::DiscussSearch { terms: _ } => {}
@@ -2101,10 +2103,12 @@ fn command_inputs_carry_no_actor_or_policy_fields() {
         Command::TaskUndone { task_id: _, change: _ } => {}
         Command::TaskMove { change: _, from: _, to: _, before: _ } => {}
         Command::Claim { name: _ } => {}
+        Command::ClaimRelease { name: _ } => {}
         Command::InProgressAdd { name: _ } => {}
         Command::InProgressRemove { name: _ } => {}
         Command::ChangeDepends { name: _, on: _, remove: _ } => {}
         Command::ChangeSchema { name: _, schema: _ } => {}
+        Command::ChangeLanded { name: _, commit: _ } => {}
         Command::ChangeFieldsEdit { name: _, set: _, unset: _ } => {}
         Command::DiscussFieldsEdit { slug: _, set: _, unset: _ } => {}
         Command::Archive { change: _, skip_specs: _, no_validate: _, mark_tasks_complete: _, carry_review: _, carry_verify: _ } => {}
@@ -2117,6 +2121,7 @@ fn command_inputs_carry_no_actor_or_policy_fields() {
         Command::DiscussLink { slug: _, change: _ } => {}
         Command::DiscussSeal { slug: _, change: _, last: _ } => {}
         Command::DiscussArchive { slug: _ } => {}
+        Command::DiscussRestore { slug: _ } => {}
         Command::DiscussDiscard { slug: _, force: _ } => {}
         Command::ReviewAddRound { change: _, content: _ } => {}
         Command::ReviewShow { change: _ } => {}
@@ -2238,4 +2243,29 @@ fn discussion_created_by_follows_context_actor_only() {
         ),
         other => panic!("expected a discuss-new outcome, got {other:?}"),
     }
+}
+
+#[test]
+fn language_replace_writes_document_and_reports_event() {
+    let store = TestStore::default();
+    let content = "# 專案語言規範\n\n統一使用繁體中文。\n";
+    let (outcome, events) = execute(
+        &store,
+        &ExecutionContext::default(),
+        Command::LanguageReplace { content: content.to_string() },
+    )
+    .expect("language replace succeeds");
+    assert!(matches!(outcome, CommandOutcome::LanguageReplaced { .. }));
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].kind(), "language-replaced");
+    assert_eq!(store.read_language().unwrap(), content);
+
+    // 空內容應被拒絕
+    let err = execute(
+        &store,
+        &ExecutionContext::default(),
+        Command::LanguageReplace { content: "   \n".to_string() },
+    )
+    .expect_err("blank language content is refused");
+    assert!(!err.to_string().is_empty());
 }

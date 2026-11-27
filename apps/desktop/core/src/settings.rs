@@ -60,6 +60,8 @@ pub struct WorkflowSettings {
     pub check_records: speclink_core::config::CheckRecordsConfig,
     pub context: Option<String>,
     pub rules: BTreeMap<String, Vec<String>>,
+    /// 品質站模型覆寫現值（config.yaml 的 `subagent_model.<station>.<tool>`）。
+    pub subagent_model: BTreeMap<String, BTreeMap<String, String>>,
     /// 「審查規則」頁的現值；未寫 review 時為預設（extend 與三個空清單）。
     pub review: ReviewConfig,
     /// 審查技能 smell baseline 的 12 個名稱，由引擎單一提供——前端只顯示、不另存。
@@ -169,6 +171,7 @@ fn workflow_settings_from_text(
                 check_records:cfg.check_records(),
                 context: cfg.context.clone(),
                 rules: cfg.rules.clone(),
+                subagent_model: cfg.subagent_model.clone(),
                 review: cfg.review(),
                 review_baseline_smells: review_baseline_smells(),
                 schema_artifacts,
@@ -187,6 +190,7 @@ fn workflow_settings_from_text(
             check_records:Default::default(),
             context: None,
             rules: Default::default(),
+            subagent_model: Default::default(),
             review: ReviewConfig::default(),
             review_baseline_smells: review_baseline_smells(),
             // 壞檔無從得知活躍 schema——不呈現猜測的分節（表單一併停用）。
@@ -499,6 +503,27 @@ pub fn write_workflow_fields_with_checks_at(root:&Path,fields:&WorkflowPolicyFie
             )
         })?;
     }
+    Ok(())
+}
+
+/// 手術式更新 `subagent_model.<station>.<tool>`；無變更時不重寫檔案。
+pub fn write_subagent_model_at(
+    root: &Path,
+    station: &str,
+    tool: &str,
+    model: Option<&str>,
+) -> Result<(), String> {
+    let ws = discover(root)?;
+    let file = format!("{}/config.yaml", ws.spec_dir_name);
+    let path = workflow_config_path(&ws);
+    let original = read_opt(&path).unwrap_or_default();
+    let Some(new_text) = speclink_core::config::update_subagent_model_text(&original, station, tool, model)
+        .map_err(|e| format!("{file}: {}", single_line(&e.to_string())))?
+    else {
+        return Ok(());
+    };
+    speclink_core::util::write_file(&path, &new_text)
+        .map_err(|e| format!("{file}: write failed: {e}"))?;
     Ok(())
 }
 
@@ -998,6 +1023,29 @@ mod tests {
             assert_eq!(after.locale, before.locale);
             assert_eq!(after.rules, before.rules);
         }
+    }
+
+    #[test]
+    fn subagent_model_reads_from_config_and_writes_without_touching_on_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("speclink")).unwrap();
+        let cfg_path = dir.path().join("speclink/config.yaml");
+        std::fs::write(&cfg_path, "# keep comment\nschema: spec-driven\n").unwrap();
+
+        write_subagent_model_at(dir.path(), "review", "codex", Some("o3")).unwrap();
+        let snap = read_settings_at(dir.path()).unwrap();
+        assert_eq!(
+            snap.workflow.subagent_model.get("review").and_then(|m| m.get("codex")).map(String::as_str),
+            Some("o3")
+        );
+        let text = std::fs::read_to_string(&cfg_path).unwrap();
+        assert!(text.contains("# keep comment"));
+
+        // 相同值再寫一次不重寫檔案
+        write_subagent_model_at(dir.path(), "review", "codex", Some("o3")).unwrap();
+        write_subagent_model_at(dir.path(), "review", "codex", None).unwrap();
+        let snap2 = read_settings_at(dir.path()).unwrap();
+        assert!(snap2.workflow.subagent_model.is_empty());
     }
 
     #[test]

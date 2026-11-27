@@ -46,6 +46,7 @@ mod task_undone;
 mod tools_descriptor;
 mod trace;
 mod update_downgrade_guard;
+mod upstream_020_workflow_regression;
 mod validate_specs;
 mod verify_verbs;
 mod workflow_config;

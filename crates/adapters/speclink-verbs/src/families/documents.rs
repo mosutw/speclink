@@ -3,7 +3,7 @@
 use clap::{Args, Subcommand};
 use speclink_core::command::{Command, CommandError};
 
-use crate::{CommandTarget, ToCommand, VerbInputs};
+use crate::{CommandTarget, StdinPolicy, ToCommand, VerbInputs};
 
 #[derive(Args, Debug)]
 pub struct ArtifactArgs {
@@ -30,6 +30,15 @@ pub struct LanguageArgs {
 pub enum LanguageCommands {
     /// Print the project's shared vocabulary (LANGUAGE document)
     Show,
+    /// Replace the project's shared vocabulary (LANGUAGE document) from stdin
+    Replace {
+        /// Read the new LANGUAGE document from stdin
+        #[arg(long)]
+        stdin: bool,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 impl ArtifactArgs {
@@ -57,14 +66,25 @@ impl LanguageArgs {
     pub fn name(&self) -> &'static str {
         match self.command {
             LanguageCommands::Show => "language show",
+            LanguageCommands::Replace { .. } => "language replace",
+        }
+    }
+
+    pub fn stdin_policy(&self) -> StdinPolicy {
+        match self.command {
+            LanguageCommands::Show => StdinPolicy::Never,
+            LanguageCommands::Replace { stdin, .. } => StdinPolicy::FlagOrPiped { flagged: stdin },
         }
     }
 }
 
 impl ToCommand for LanguageArgs {
-    fn to_command(&self, _inputs: VerbInputs) -> Result<CommandTarget, CommandError> {
+    fn to_command(&self, inputs: VerbInputs) -> Result<CommandTarget, CommandError> {
         match self.command {
             LanguageCommands::Show => Ok(CommandTarget::Command(Command::LanguageShow)),
+            LanguageCommands::Replace { .. } => Ok(CommandTarget::Command(Command::LanguageReplace {
+                content: inputs.stdin.unwrap_or_default(),
+            })),
         }
     }
 }

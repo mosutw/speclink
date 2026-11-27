@@ -20,6 +20,8 @@ pub enum Tool {
     Codex,
     Copilot,
     Antigravity,
+    Pi,
+    Cursor,
 }
 
 impl Tool {
@@ -27,9 +29,16 @@ impl Tool {
     /// walks it for generation, deselection, the reserved descriptor names and
     /// directories, the asset lock and its error messages; the adapters (CLI hint, Node
     /// SDK, desktop) spell the set out in their own wording, pinned by their tests.
-    pub const ALL: [Tool; 4] = [Tool::Claude, Tool::Codex, Tool::Copilot, Tool::Antigravity];
+    pub const ALL: [Tool; 6] = [
+        Tool::Claude,
+        Tool::Codex,
+        Tool::Copilot,
+        Tool::Antigravity,
+        Tool::Pi,
+        Tool::Cursor,
+    ];
 
-    /// The built-in names as error messages list them: `claude, codex, copilot, antigravity`.
+    /// The built-in names as error messages list them: `claude, codex, copilot, antigravity, pi, cursor`.
     pub fn supported_names() -> String {
         Tool::ALL.map(|t| t.name()).join(", ")
     }
@@ -40,6 +49,8 @@ impl Tool {
             "codex" | "agents" => Some(Tool::Codex),
             "copilot" => Some(Tool::Copilot),
             "antigravity" => Some(Tool::Antigravity),
+            "pi" => Some(Tool::Pi),
+            "cursor" => Some(Tool::Cursor),
             _ => None,
         }
     }
@@ -49,6 +60,8 @@ impl Tool {
             Tool::Codex => "codex",
             Tool::Copilot => "copilot",
             Tool::Antigravity => "antigravity",
+            Tool::Pi => "pi",
+            Tool::Cursor => "cursor",
         }
     }
     /// Directory (relative to project root) that holds generated skill files.
@@ -58,19 +71,21 @@ impl Tool {
             Tool::Codex => ".agents/skills",
             Tool::Copilot => ".github/skills",
             Tool::Antigravity => ".agents/skills",
+            Tool::Pi => ".pi/skills",
+            Tool::Cursor => ".cursor/skills",
         }
     }
     /// Where the tool keeps plan-mode files ({{PLAN_DIR}}); empty when the tool has none.
     fn plan_dir(&self) -> &'static str {
         match self {
             Tool::Claude => "~/.claude/plans/",
-            Tool::Codex | Tool::Copilot | Tool::Antigravity => "",
+            Tool::Codex | Tool::Copilot | Tool::Antigravity | Tool::Pi | Tool::Cursor => "",
         }
     }
     /// The prefix that `/speclink:` becomes for this tool.
     fn slash_replacement(&self) -> &'static str {
         match self {
-            Tool::Claude | Tool::Copilot | Tool::Antigravity => "/speclink-",
+            Tool::Claude | Tool::Copilot | Tool::Antigravity | Tool::Pi | Tool::Cursor => "/speclink-",
             Tool::Codex => "$speclink-",
         }
     }

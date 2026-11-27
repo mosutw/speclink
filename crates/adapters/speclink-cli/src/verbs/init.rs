@@ -141,6 +141,8 @@ fn prompt_for_tools(
             (Tool::Codex, "Codex"),
             (Tool::Copilot, "Copilot"),
             (Tool::Antigravity, "Antigravity"),
+            (Tool::Pi, "Pi"),
+            (Tool::Cursor, "Cursor"),
         ] {
             if ask_yes_no(input, out, label)? {
                 picked.push(tool);
@@ -183,6 +185,12 @@ pub(crate) fn cmd_update(a: UpdateArgs) -> Result<()> {
     };
     if !core::workspace::is_project_root(&root) {
         bail!("Not initialized. Run 'speclink init' to initialize.");
+    }
+    if let Some(ws) = core::workspace::Workspace::discover(&root)? {
+        if let Some(ctx) = crate::remote_base::remote_ctx_for(ws)? {
+            // 遠端模式下先驗證連線與專案綁定；失敗時直接中止，不覆寫既有技能。
+            let _ = ctx.client.list_specs()?;
+        }
     }
     let _ = a.force;
     // 降級守門在引擎的 update 本體（唯一實作落點）；--allow-downgrade 是唯一越過。
@@ -372,8 +380,8 @@ mod init_tools_tests {
 
     #[test]
     fn interactive_yes_yes_selects_both() {
-        // Scenario「互動終端選擇 Claude 與 Codex」：四題依 Claude、Codex、Copilot、Antigravity 順序問。
-        let (got, prompts) = with_answers(None, true, "y\ny\nn\nn\n");
+        // Scenario「互動終端選擇 Claude 與 Codex」：依 Claude、Codex、Copilot、Antigravity、Pi、Cursor 順序問。
+        let (got, prompts) = with_answers(None, true, "y\ny\nn\nn\nn\nn\n");
         assert_eq!(got.expect("selection"), vec![Tool::Claude, Tool::Codex]);
         let at = |label: &str| {
             prompts
@@ -381,44 +389,48 @@ mod init_tools_tests {
                 .unwrap_or_else(|| panic!("{label}: {prompts}"))
         };
         assert!(
-            at("Claude") < at("Codex") && at("Codex") < at("Copilot") && at("Copilot") < at("Antigravity"),
+            at("Claude") < at("Codex")
+                && at("Codex") < at("Copilot")
+                && at("Copilot") < at("Antigravity")
+                && at("Antigravity") < at("Pi")
+                && at("Pi") < at("Cursor"),
             "{prompts}"
         );
     }
 
     #[test]
     fn interactive_antigravity_only() {
-        let (got,prompts)=with_answers(None,true,"n\nn\nn\ny\n");
-        assert_eq!(got.unwrap(),vec![Tool::Antigravity]);
+        let (got, prompts) = with_answers(None, true, "n\nn\nn\ny\nn\nn\n");
+        assert_eq!(got.unwrap(), vec![Tool::Antigravity]);
         assert!(prompts.contains("Antigravity"));
     }
 
     #[test]
     fn interactive_copilot_only() {
-        let (got, _) = with_answers(None, true, "n\nn\ny\nn\n");
+        let (got, _) = with_answers(None, true, "n\nn\ny\nn\nn\nn\n");
         assert_eq!(got.expect("selection"), vec![Tool::Copilot]);
     }
 
     #[test]
     fn interactive_yes_no_selects_claude_only() {
-        let (got, _) = with_answers(None, true, "y\nn\nn\nn\n");
+        let (got, _) = with_answers(None, true, "y\nn\nn\nn\nn\nn\n");
         assert_eq!(got.expect("selection"), vec![Tool::Claude]);
     }
 
     #[test]
     fn interactive_no_yes_selects_codex_only() {
-        let (got, _) = with_answers(None, true, "n\ny\nn\nn\n");
+        let (got, _) = with_answers(None, true, "n\ny\nn\nn\nn\nn\n");
         assert_eq!(got.expect("selection"), vec![Tool::Codex]);
     }
 
     #[test]
     fn interactive_all_no_reasks_until_a_tool_is_picked() {
-        // Scenario「互動終端不得提交空選集」：四題皆否就印一行提示、從 Claude 重問。
-        let (got, prompts) = with_answers(None, true, "n\nn\nn\nn\nn\ny\nn\nn\n");
+        // Scenario「互動終端不得提交空選集」：全否就印一行提示、從 Claude 重問。
+        let (got, prompts) = with_answers(None, true, "n\nn\nn\nn\nn\nn\nn\ny\nn\nn\nn\nn\n");
         assert_eq!(got.expect("selection"), vec![Tool::Codex]);
         assert!(
             prompts.matches("Claude").count() >= 2,
-            "四題皆否必須重新詢問: {prompts}"
+            "全否必須重新詢問: {prompts}"
         );
         assert!(
             prompts.contains("Pick at least one tool: claude, codex, copilot, antigravity, or any combination."),
@@ -428,7 +440,7 @@ mod init_tools_tests {
 
     #[test]
     fn interactive_invalid_answer_reasks_the_same_question() {
-        let (got, prompts) = with_answers(None, true, "maybe\ny\nn\nn\nn\n");
+        let (got, prompts) = with_answers(None, true, "maybe\ny\nn\nn\nn\nn\nn\n");
         assert_eq!(got.expect("selection"), vec![Tool::Claude]);
         assert!(
             prompts.matches("Claude").count() >= 2,

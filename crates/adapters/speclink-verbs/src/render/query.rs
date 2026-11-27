@@ -126,6 +126,7 @@ pub fn show_json(show: &ShowOutcome) -> Value {
                 ("createdById", &c.created_by_id),
                 ("startedAt", &c.started_at),
                 ("readyAt", &c.ready_at),
+                ("landedCommit", &c.landed_commit),
             ] {
                 if let Some(value) = value {
                     shown[key] = json!(value);
@@ -341,6 +342,7 @@ mod tests {
             ready_at: None,
             stage: None,
             why_excerpt: None,
+            landed_commit: None,
         })
     }
 
@@ -372,6 +374,7 @@ mod tests {
                 ready_at: None,
                 stage: None,
                 why_excerpt: None,
+                landed_commit: None,
             })
         };
         assert_eq!(show_human(&bare(Vec::new()), &PLAIN).stdout, "Change: empty\n");

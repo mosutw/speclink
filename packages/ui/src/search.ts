@@ -59,6 +59,16 @@ export function matchesCreatedRange(
   return days > 30;
 }
 
+/** 建立者篩選鍵：優先以穩定 createdById 分組，無 ID 時回退為名稱。 */
+export function creatorFilterKey(card: {
+  createdById?: string | null;
+  createdBy?: string | null;
+}): string | null {
+  if (card.createdById) return `id:${card.createdById}`;
+  if (card.createdBy) return `name:${card.createdBy}`;
+  return null;
+}
+
 /**
  * 篩選 chips 的 AND 交集比對（design D5）：卡片（變更或討論）須同時滿足所有
  * 啟用中的維度。變更卡以 fromDiscussions 命中來源討論；討論卡以自身 slug 命中
@@ -68,13 +78,20 @@ export function matchesFilters(
   filters: BoardFilters,
   card: {
     createdBy?: string | null;
+    createdById?: string | null;
     created?: string | null;
     fromDiscussions?: string[];
     slug?: string;
   },
   today: string,
 ): boolean {
-  if (filters.createdBy && card.createdBy !== filters.createdBy) return false;
+  if (filters.createdBy) {
+    if (filters.createdBy.startsWith("id:") || filters.createdBy.startsWith("name:")) {
+      if (creatorFilterKey(card) !== filters.createdBy) return false;
+    } else if (card.createdBy !== filters.createdBy) {
+      return false;
+    }
+  }
   if (!matchesCreatedRange(card.created, filters.createdWithin, today)) return false;
   if (filters.fromDiscussion) {
     const hit =

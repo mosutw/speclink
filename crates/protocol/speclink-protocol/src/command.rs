@@ -446,6 +446,9 @@ pub struct ReviewRoundDto {
     /// 結構化輪次綁定的 frozen patch identity（`sha256:<hex>`）；legacy 為 null。
     #[serde(default)]
     pub patch_hash: Option<String>,
+    /// 本輪品質檢查使用的 subagent 模型；未指定或舊輪次缺席時省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// discovery 輪記錄的套用規則；沒有記錄時為 null，舊 server 缺席同樣讀作 null。
     #[serde(default)]
     pub rules: Option<ReviewRulesDto>,
@@ -804,6 +807,7 @@ mod tests {
             index: 1,
             phase: None,
             patch_hash: None,
+            model: None,
             rules: None,
             scope: vec![],
             findings: vec![],
@@ -943,6 +947,7 @@ mod tests {
             index: 2,
             phase: Some("validation".into()),
             patch_hash: Some(format!("sha256:{}", "a".repeat(64))),
+            model: None,
             rules: None,
             scope: vec!["src/lib.rs".into()],
             findings: vec![ReviewFindingDto {

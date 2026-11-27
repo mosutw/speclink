@@ -532,6 +532,8 @@ export interface AppState {
    * 檢查（自動或手動皆計）滿 1 小時才走自動檢查；now 未給時取現在時刻。
    */
   recheckOnFocus: (now?: number) => Promise<void>;
+  /** 檢查所有遠端分頁（含尚未開啟者）的連線與權限狀態，同步更新分頁與系統匣。 */
+  checkRemoteTabs: () => Promise<void>;
   /** 使用者同意：下載並套用；簽章驗證失敗轉錯誤態、既有安裝不受影響。 */
   acceptUpdate: () => Promise<void>;
   /** 使用者稍後：回閒置、不下載。 */
@@ -2120,6 +2122,67 @@ export function createAppStore(deps: AppStoreDeps): UseBoundStore<StoreApi<AppSt
       if (!focusRecheckDue(lastCheckedAt, now ?? Date.now())) return;
       await get().checkForUpdates(false);
     },
+    async checkRemoteTabs() {
+      if (!openRemote) return;
+      const remoteTabs = get().tabs.filter(
+        (t): t is ProjectTab & { locator: Extract<ProjectTab["locator"], { kind: "remote" }> } =>
+          t.locator.kind === "remote",
+      );
+      await Promise.all(
+        remoteTabs.map(async (tab) => {
+          const key = locatorKey(tab.locator);
+          const { connectionId, projectId, repoId, checkoutRoot } = tab.locator;
+          const target = `${projectId}/${repoId}`;
+          try {
+            const session = checkoutRoot
+              ? await openRemote(connectionId, target, checkoutRoot)
+              : await openRemote(connectionId, target);
+            if (!get().tabs.some((candidate) => locatorKey(candidate.locator) === key)) return;
+            if (session.id !== key) throw new Error("重新連線後專案身分不一致");
+            const onlineSession = applyRemoteConnectionState(session, {
+              connectionId,
+              state: "online",
+              message: null,
+            });
+            set((state) => {
+              const tabErrors = { ...state.tabErrors };
+              delete tabErrors[key];
+              const remoteRecovery = { ...state.remoteRecovery };
+              delete remoteRecovery[key];
+              return {
+                sessions: { ...state.sessions, [key]: onlineSession },
+                tabErrors,
+                remoteRecovery,
+              };
+            });
+          } catch (error) {
+            if (!get().tabs.some((candidate) => locatorKey(candidate.locator) === key)) return;
+            const failure = normalizeRemoteOpenFailure(error);
+            set((state) => {
+              const existing = state.sessions[key];
+              const nextSessions = existing
+                ? {
+                    ...state.sessions,
+                    [key]: applyRemoteConnectionState(existing, {
+                      connectionId,
+                      state: failure.kind === "needs-reauth" ? "needs-reauth" : "offline",
+                      message: failure.message,
+                    }),
+                  }
+                : state.sessions;
+              return {
+                sessions: nextSessions,
+                tabErrors: { ...state.tabErrors, [key]: failure.message },
+                remoteRecovery: {
+                  ...state.remoteRecovery,
+                  [key]: { status: "error", failure },
+                },
+              };
+            });
+          }
+        }),
+      );
+    },
     async acceptUpdate() {
       const pending = pendingUpdate;
       if (!pending) return;
@@ -2568,10 +2631,14 @@ export function createAppStore(deps: AppStoreDeps): UseBoundStore<StoreApi<AppSt
       }
       if (!probe || intent !== activationGeneration) return;
       try {
-        if (probe.status === "project") {
+        if (probe.status === "project" && probe.root === tab.locator.root) {
           await enterProject(probe.root, probe.name);
+        } else if (probe.status === "remoteBinding" && probe.hasLocalOpenspec) {
+          // 並存設定下已選「繼續本機」的分頁：確認登記路徑仍是實際專案根後沿用本機選擇。
+          await workspace.projectStats(tab.locator.root);
+          await enterProject(tab.locator.root, pathName(tab.locator.root));
         } else {
-          // openspec/ 已刪但目錄還在：分頁轉錯誤態，不開初始化對話框。
+          // openspec/ 已刪或原路徑已失效（僅找到上層專案）：分頁轉錯誤態，不讀上層資料。
           set({ tabErrors: { ...get().tabErrors, [key]: appT("store.tabInvalid") } });
         }
       } catch (e) {
@@ -2820,7 +2887,7 @@ export function createAppStore(deps: AppStoreDeps): UseBoundStore<StoreApi<AppSt
         }
       }
       // 背景 local 分頁啟動時各探測一次路徑有效性；失效轉錯誤態（design D11）。
-      // 不等它們完成：restoreTabs 是 speclink 網址的就緒訊號，卡住的背景分頁不得拖住它。
+      // 遠端分頁亦於啟動時檢查狀態（含尚未開啟者），與圖示列及系統匣同步。
       const active = get().activeKey;
       void Promise.all(
         get()
@@ -2829,12 +2896,19 @@ export function createAppStore(deps: AppStoreDeps): UseBoundStore<StoreApi<AppSt
             const key = locatorKey(t.locator);
             if (t.locator.kind !== "local") return;
             try {
-              await workspace.projectStats(t.locator.root);
+              const probe = await workspace.openProject(t.locator.root);
+              if (probe.status === "project" && probe.root === t.locator.root) return;
+              if (probe.status === "remoteBinding" && probe.hasLocalOpenspec) {
+                await workspace.projectStats(t.locator.root);
+                return;
+              }
+              set({ tabErrors: { ...get().tabErrors, [key]: appT("store.tabInvalid") } });
             } catch (e) {
               set({ tabErrors: { ...get().tabErrors, [key]: String(e) } });
             }
           }),
       );
+      void get().checkRemoteTabs();
     },
     };
   });

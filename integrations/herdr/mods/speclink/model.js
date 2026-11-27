@@ -182,6 +182,72 @@ export function speclinkUrl(kind, project, name) {
   return `speclink://${kind}${path}?project=${encodeURIComponent(project)}`;
 }
 
+// 指令面板入口（Herdr 0.1.18 command palette）。
+export const PALETTE_COMMANDS = [
+  { id: "mod.open:speclink", title: "Speclink: 開啟面板" },
+  { id: "mod.open:speclink-new", title: "Speclink: 技能跳窗" },
+];
+
+// 等候原因（Herdr agent waiting reason）：允許、回答、登入。
+export function waitingReason(agent) {
+  const raw = agent?.waitingReason ?? agent?.waiting_reason ?? agent?.blockedReason ?? agent?.reason ?? null;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+// 透過終端機檔案路徑開啟詳情（0.1.17+）：worktree 路徑會回到主專案 root。
+export function detailUrlForPath(filePath, { root, board }) {
+  if (!root || typeof filePath !== "string" || !filePath.trim()) return null;
+  const norm = (p) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const target = norm(filePath.trim());
+  const mainRoot = norm(root);
+  const rows = Object.values(board?.stages ?? {}).flat();
+  for (const row of rows) {
+    const wt = row.worktree?.path ? norm(row.worktree.path) : null;
+    if (wt && (target === wt || target.startsWith(`${wt}/`))) {
+      return speclinkUrl("change", mainRoot, row.name);
+    }
+  }
+  const changeMatch = target.match(/\/(?:openspec|speclink)\/changes\/([^/]+)(?:\/|$)/);
+  if (changeMatch) return speclinkUrl("change", mainRoot, changeMatch[1]);
+  const discMatch = target.match(/\/(?:openspec|speclink)\/discussions\/([^/.]+)(?:\.md)?$/);
+  if (discMatch) return speclinkUrl("discussion", mainRoot, discMatch[1]);
+  if (target === mainRoot || target.startsWith(`${mainRoot}/`)) {
+    return speclinkUrl("project", mainRoot);
+  }
+  return null;
+}
+
+// 視窗可見性拉取控制（Herdr 0.1.18）：不可見時暫停輪詢，恢復可見時補抓一次。
+export function createVisibilityTracker(isVisible, onResume) {
+  let paused = false;
+  return {
+    tick(onPoll) {
+      if (!isVisible()) {
+        paused = true;
+        return false;
+      }
+      if (paused) {
+        paused = false;
+        onResume();
+        return true;
+      }
+      onPoll();
+      return true;
+    },
+    sync() {
+      if (paused && isVisible()) {
+        paused = false;
+        onResume();
+        return true;
+      }
+      return false;
+    },
+    isPaused: () => paused,
+  };
+}
+
 // 桌面 app 的 bundle id。
 export const APP_ID = "app.speclink.desktop";
 

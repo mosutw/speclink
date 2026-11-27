@@ -24,7 +24,9 @@ import {
   canOpenProject,
   changeActions,
   changeAgents,
+  createVisibilityTracker,
   deliveryHint,
+  detailUrlForPath,
   discussionActions,
   discussionAgents,
   isUninitialized,
@@ -35,6 +37,7 @@ import {
   speclinkUrl,
   startChoices,
   stationViews,
+  waitingReason,
   waveToStart,
 } from "./model.js";
 import ColumnSync from "./column-sync.js";
@@ -108,11 +111,27 @@ export default class SpeclinkPanel extends View {
     this.promotedOpen = localStorage.getItem("promotedOpen") === "true";
     this.reload(cx);
     this.loadKnown(cx);
-    // worktree 裡的任務進度不在主資料夾的監看範圍內，要靠計時重抓。
+    this.visibility = createVisibilityTracker(
+      () => this.isWindowVisible(cx),
+      () => {
+        this.follow(cx);
+        this.reload(cx);
+      },
+    );
+    // worktree 裡的任務進度不在主資料夾的監看範圍內，要靠計時重抓；視窗不可見時暫停，恢復可見時補抓一次。
     cx.timer.every(10000, (cx) => {
-      this.follow(cx);
-      this.reload(cx);
+      this.visibility.tick(() => {
+        this.follow(cx);
+        this.reload(cx);
+      });
     });
+  }
+
+  isWindowVisible(cx) {
+    if (typeof cx?.isVisible === "function") return cx.isVisible();
+    if (typeof cx?.is_visible === "function") return cx.is_visible();
+    if (typeof document !== "undefined" && typeof document.hidden === "boolean") return !document.hidden;
+    return true;
   }
 
   // 焦點或資料夾變了就改跟新的專案。render 會隨 Herdr 的即時資料重跑，所以平常立刻跟上；
@@ -273,6 +292,12 @@ export default class SpeclinkPanel extends View {
         this.labelNew(before, delivery, cx, tries - 1);
       }
     });
+  }
+
+  // 叫 Speclink 桌面 app 開啟檔案路徑對應的詳情（worktree 路徑會回到主專案）。
+  openPathInApp(filePath, cx) {
+    const url = detailUrlForPath(filePath, { root: this.root, board: this.board });
+    if (url) this.openInApp([url], cx);
   }
 
   // 叫 Speclink 桌面 app。open 只有 macOS 有；沒裝 app 時 open 也會失敗。
@@ -516,9 +541,10 @@ export default class SpeclinkPanel extends View {
   }
 
   // 和 Herdr 內建的 Agents 清單同一套：做事中是轉動的圓弧，閒置是空心圈，做完是實心點，等回答是膠囊。
-  agentStatus(view, t) {
+  agentStatus(view, t, reason = null) {
     if (view === "working") return icon("spinner", 12, t.working).mx(1).spin(900);
     if (view === "blocked") {
+      const label = reason ? tr("{0} · {1}", tr(AGENT_STATE.blocked), reason) : tr(AGENT_STATE.blocked);
       return div()
         .flex()
         .flex_none()
@@ -530,13 +556,15 @@ export default class SpeclinkPanel extends View {
         .text_size(10.5)
         .font_semibold()
         .text_color(t.blocked)
-        .child(tr(AGENT_STATE.blocked));
+        .child(label);
     }
     if (view === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1.5).border_color(t.idle);
     return div().size(7).mx(3).flex_none().rounded(4).bg(t[view] ?? t.dim);
   }
 
   agentChip(id, a, t) {
+    const reason = waitingReason(a);
+    const stateLabel = reason && a.view === "blocked" ? tr("{0}（{1}）", tr(AGENT_STATE.blocked), reason) : tr(AGENT_STATE[a.view] ?? a.view);
     return h_flex()
       .id(`agent-${id}-${a.address}`)
       .gap(5)
@@ -547,14 +575,14 @@ export default class SpeclinkPanel extends View {
       .text_size(11)
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
-      .tooltip(tr("切到這個 agent（{0}）", tr(AGENT_STATE[a.view] ?? a.view)))
+      .tooltip(tr("切到這個 agent（{0}）", stateLabel))
       .on_click((_e, cx) => {
         cx.stop_propagation();
         run("agent.focus", { terminal: a.address });
       })
       .child(programIcon(a.program, 12, t.muted))
       .child(div().flex_1().min_w_0().truncate().text_color(t.muted).child(`${a.space_name} / ${a.tab_name}`))
-      .child(this.agentStatus(a.view, t));
+      .child(this.agentStatus(a.view, t, reason));
   }
 
   // 點列本身叫 Speclink 開詳情。列上的鈕都會擋下點擊。別台機器的專案路徑在這台開不了。
@@ -898,6 +926,7 @@ export default class SpeclinkPanel extends View {
 
   render(cx) {
     if (this.other) return this.other.render(cx);
+    this.visibility?.sync();
     const t = theme();
     this.follow(cx);
     const ctx = this.context();

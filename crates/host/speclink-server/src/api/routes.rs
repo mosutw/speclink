@@ -1250,6 +1250,7 @@ fn review_round_dto(r: &speclink_core::station::Round) -> ReviewRoundDto {
         index: r.index as u64,
         phase: r.phase.map(|p| p.as_str().to_string()),
         patch_hash: r.patch_hash.clone(),
+        model: r.model.clone(),
         rules: r.rules.as_ref().map(|rules| ReviewRulesDto {
             baseline: rules.baseline.as_str().to_string(),
             critical: rules.critical.clone(),
@@ -2088,6 +2089,7 @@ fn change_summary(
         stage: change.stage.map(|stage| stage.as_str().to_string()),
         created_by_id: change.created_by_id,
         ready_at: change.ready_at,
+        landed_commit: meta.and_then(|m| m.landed_commit.clone()),
     }
 }
 
@@ -2124,6 +2126,7 @@ fn change_status(report: StatusReport) -> ChangeStatus {
         ready_at: None,
         stage: None,
         why_excerpt: None,
+        landed_commit: None,
     }
 }
 
