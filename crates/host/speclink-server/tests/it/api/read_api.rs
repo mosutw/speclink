@@ -189,7 +189,7 @@ impl ReadFixture {
                     DocumentId::ChangeMeta {
                         change: "old-feature".to_string(),
                     },
-                    "schema: spec-driven\ncreated: 2026-07-18\ncreated_by: Original Creator <creator@example.com>\nfrom_discussion: source-one, source-two\n"
+                    "schema: spec-driven\ncreated: 2026-07-18\ncreated_by: Original Creator <creator@example.com>\nfrom_discussion: source-one, source-two\nlanded_commit: abc1234\n"
                         .to_string(),
                 ),
                 (
@@ -393,6 +393,7 @@ fn an_archived_list_derives_truth_after_the_archive_verb() {
         Some("Original Creator <creator@example.com>")
     );
     assert_eq!(item.from_discussions, ["source-one", "source-two"]);
+    assert_eq!(item.landed_commit.as_deref(), Some("abc1234"));
     // spec store-abstraction「新封存寫新鍵」：封存動詞只寫 `.meta.yaml` 鍵。
     let snapshot = read
         .fixture
@@ -452,6 +453,7 @@ fn a_legacy_archived_data_key_still_yields_creator_and_source_discussions() {
         .expect("the legacy archived change is listed");
     assert_eq!(item.created_by.as_deref(), Some("Legacy Creator <legacy@example.com>"));
     assert_eq!(item.from_discussions, ["old-talk"]);
+    assert_eq!(item.landed_commit, None);
 }
 
 #[test]

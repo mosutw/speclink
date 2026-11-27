@@ -290,6 +290,7 @@ fn archived_item(documents: &BTreeMap<DocumentId, String>, dated_name: String) -
         why_excerpt,
         stage: progress.as_ref().map(|(stage, _)| stage.clone()),
         ready_at: progress.and_then(|(_, ready_at)| ready_at),
+        landed_commit: parsed_meta.landed_commit,
         fields: parsed_meta.fields,
         from_discussions,
     }
