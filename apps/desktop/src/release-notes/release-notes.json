@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.20.1",
+    "date": "2026-11-27",
+    "sections": [
+      {
+        "kind": "features",
+        "items": [
+          {
+            "en": "The upstream Speclink 0.20.0 integration adds Pi and Cursor support, improves the desktop board and Herdr panel, and expands remote sign-in and the Node SDK.",
+            "zh-TW": "整合上游 Speclink 0.20.0，新增 Pi 與 Cursor 支援，改善桌面看板和 Herdr 面板，並擴充遠端登入與 Node SDK。"
+          }
+        ]
+      },
+      {
+        "kind": "improvements",
+        "items": [
+          {
+            "en": "To upgrade an existing Server, back up its data with the old version and restore it into empty storage with the new version.",
+            "zh-TW": "升級既有 Server 時，請先用舊版備份資料，再用新版還原到空的儲存位置。"
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.12.2",
     "date": "2026-11-07",
     "sections": [
