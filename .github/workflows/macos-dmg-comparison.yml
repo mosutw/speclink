@@ -1,0 +1,83 @@
+name: macOS DMG comparison
+
+on:
+  push:
+    branches: [diagnose/macos-dmg-launch]
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/v0.20.1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Record build environment
+        run: |
+          git rev-parse HEAD
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          rustc -Vv
+
+      - name: Build the shared frontend
+        run: |
+          npm ci
+          npm run build -w apps/desktop
+          node scripts/release/desktop-bundle-config.mjs desktop-build > "$RUNNER_TEMP/macos-bundle-config.json"
+
+      - name: Build both installers
+        run: |
+          for target in aarch64-apple-darwin universal-apple-darwin; do
+            node scripts/desktop/desktop-sidecar.mjs --target "$target"
+            npm run -w apps/desktop tauri -- build \
+              --target "$target" --bundles app,dmg \
+              --config "$RUNNER_TEMP/macos-bundle-config.json"
+            bundle="target/$target/release/bundle"
+            dmgs=("$bundle"/dmg/*.dmg)
+            test "${#dmgs[@]}" -eq 1
+            test -f "${dmgs[0]}"
+            if [[ "$target" == universal-apple-darwin ]]; then
+              node scripts/release/macos-artifact-verify.mjs \
+                --app "$bundle/macos/Speclink.app" --dmg "${dmgs[0]}" \
+                --mode none --channel desktop-build
+            else
+              app="$bundle/macos/Speclink.app"
+              codesign --verify --deep --strict --all-architectures "$app"
+              for executable in speclink-desktop speclink; do
+                test "$(lipo -archs "$app/Contents/MacOS/$executable")" = arm64
+              done
+              hdiutil verify "${dmgs[0]}"
+            fi
+            shasum -a 256 "${dmgs[0]}"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: speclink-0.20.1-macos-arm64
+          path: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: speclink-0.20.1-macos-universal
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
