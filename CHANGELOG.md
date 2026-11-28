@@ -1,6 +1,16 @@
 # Changelog
 **English** · [繁體中文](CHANGELOG.zh-TW.md)
 
+## 0.20.1 (2026-11-27)
+
+### New features
+
+- The upstream Speclink 0.20.0 integration adds Pi and Cursor support, improves the desktop board and Herdr panel, and expands remote sign-in and the Node SDK.
+
+### Improvements
+
+- To upgrade an existing Server, back up its data with the old version and restore it into empty storage with the new version.
+
 ## 0.12.2 (2026-11-07)
 
 ### Fixes
