@@ -1,4 +1,4 @@
-name: macOS DMG with Xcode 27.2
+name: macOS downloaded DMG startup
 
 on:
   push:
@@ -6,68 +6,93 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  build:
+  launch:
     runs-on: xcode-27
-    timeout-minutes: 60
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    timeout-minutes: 8
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
         with:
-          ref: refs/tags/v0.20.1
-          persist-credentials: false
+          github-token: ${{ github.token }}
+          run-id: 46154440262
+          artifact-ids: 15267112937
+          path: ${{ runner.temp }}/speclink-validation
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 20
-
-      - name: Install the local build's Rust version
+      - name: Verify and copy the app from the exact DMG
+        id: prepare
         run: |
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup override set 1.99.0
-
-      - name: Record build environment
-        run: |
-          git rev-parse HEAD
           sw_vers
-          xcodebuild -version
-          xcrun --sdk macosx --show-sdk-version
-          test "$(xcrun --sdk macosx --show-sdk-version)" = 27.2
-          rustc -Vv
+          cd "$RUNNER_TEMP/speclink-validation"
+          dmg=Speclink_0.20.1_aarch64.dmg
+          printf '%s  %s\n' 651cad7edf0e559de0022eb05d7491e29f31c453674d51edba0bcc4c50e4d4de "$dmg" | shasum -a 256 --check
+          mountpoint="$(mktemp -d "$RUNNER_TEMP/speclink-dmg.XXXXXX")"
+          hdiutil attach -readonly -nobrowse -noautoopen -mountpoint "$mountpoint" "$dmg"
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          ditto "$mountpoint/Speclink.app" Speclink.app
+          codesign --verify --deep --strict --all-architectures Speclink.app
+          if xattr -p com.apple.quarantine Speclink.app >/dev/null 2>&1; then
+            echo "App has download quarantine"
+          else
+            echo "App has no download quarantine"
+          fi
 
-      - name: Build the shared frontend
+      - name: Run the bundled CLI
         run: |
-          npm ci
-          npm run build -w apps/desktop
-          node scripts/release/desktop-bundle-config.mjs desktop-build > "$RUNNER_TEMP/macos-bundle-config.json"
+          cli="$RUNNER_TEMP/speclink-validation/Speclink.app/Contents/MacOS/speclink"
+          result="$(perl -e 'alarm shift; exec @ARGV or die "$!\n"' 30 "$cli" --version)"
+          printf '%s\n' "$result"
+          grep -F '0.20.1' <<< "$result"
 
-      - name: Build and verify the ARM64 installer
+      - name: Confirm the app owns a visible window
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
-          target=aarch64-apple-darwin
-          node scripts/desktop/desktop-sidecar.mjs --target "$target"
-          npm run -w apps/desktop tauri -- build \
-            --target "$target" --bundles app,dmg \
-            --config "$RUNNER_TEMP/macos-bundle-config.json"
-          bundle="target/$target/release/bundle"
-          dmgs=("$bundle"/dmg/*.dmg)
-          test "${#dmgs[@]}" -eq 1
-          test -f "${dmgs[0]}"
-          app="$bundle/macos/Speclink.app"
-          codesign --verify --deep --strict --all-architectures "$app"
-          for executable in speclink-desktop speclink; do
-            test "$(lipo -archs "$app/Contents/MacOS/$executable")" = arm64
-          done
-          hdiutil verify "${dmgs[0]}"
-          shasum -a 256 "${dmgs[0]}"
+          cd "$RUNNER_TEMP/speclink-validation"
+          cat > wait-for-window.swift <<'SWIFT'
+          import AppKit
+          import CoreGraphics
+          import Foundation
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: speclink-0.20.1-macos-arm64-xcode-27.2
-          path: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-          retention-days: 14
+          let expected = URL(fileURLWithPath: CommandLine.arguments[1]).resolvingSymlinksInPath()
+          let deadline = Date().addingTimeInterval(45)
+          repeat {
+              guard let windows = CGWindowListCopyWindowInfo(
+                  [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+              ) as? [[String: Any]] else {
+                  print("No GUI window session is available")
+                  exit(2)
+              }
+
+              let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "app.speclink.desktop")
+              for app in apps where app.isFinishedLaunching
+                  && app.bundleURL?.resolvingSymlinksInPath() == expected {
+                  for window in windows {
+                      guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == app.processIdentifier,
+                            (window[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+                            let bounds = window[kCGWindowBounds as String] as? [String: NSNumber],
+                            let width = bounds["Width"]?.doubleValue, width >= 600,
+                            let height = bounds["Height"]?.doubleValue, height >= 400
+                      else { continue }
+                      print("Speclink has a visible window \(Int(width))x\(Int(height)) (PID \(app.processIdentifier))")
+                      exit(0)
+                  }
+              }
+
+              Thread.sleep(forTimeInterval: 1)
+          } while Date() < deadline
+
+          print("Speclink did not show a visible window within 45 seconds")
+          exit(1)
+          SWIFT
+          xcrun swiftc wait-for-window.swift -o wait-for-window
+          perl -e 'alarm shift; exec @ARGV or die "$!\n"' 30 open -n "$PWD/Speclink.app"
+          ./wait-for-window "$PWD/Speclink.app"
+
+      - name: Read launch diagnostics on failure
+        if: ${{ failure() && steps.prepare.outcome == 'success' }}
+        run: |
+          log show --last 4m --style compact --predicate 'process == "speclink-desktop" OR (process == "syspolicyd" AND eventMessage CONTAINS[c] "app.speclink.desktop")' | tail -60
